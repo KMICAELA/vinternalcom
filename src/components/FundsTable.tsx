@@ -4,24 +4,6 @@ import { cn } from "@/lib/utils";
 const parseMultiplier = (v: string) => parseFloat(v.replace("x", ""));
 const parsePercent = (v: string) => parseFloat(v.replace("%", ""));
 
-const MultiplierCell = ({ value }: { value: string }) => {
-  const n = parseMultiplier(value);
-  return (
-    <span className={cn("font-mono text-sm", n >= 1 ? "text-positive" : "text-negative")}>
-      {value}
-    </span>
-  );
-};
-
-const IRRCell = ({ value }: { value: string }) => {
-  const n = parsePercent(value);
-  return (
-    <span className={cn("font-mono text-sm", n >= 0 ? "text-positive" : "text-negative")}>
-      {value}
-    </span>
-  );
-};
-
 const FundsTable = () => {
   const totalCommitment = fundHoldings.reduce((s, f) => s + f.twhCommitment, 0);
   const totalContributions = fundHoldings.reduce((s, f) => s + f.twhContributions, 0);
@@ -52,10 +34,18 @@ const FundsTable = () => {
               <td className="p-3 text-right font-mono text-sm text-foreground">{formatCurrency(fund.twhCommitment, true)}</td>
               <td className="p-3 text-right font-mono text-sm text-foreground">{formatCurrency(fund.twhContributions, true)}</td>
               <td className="p-3 text-right font-mono text-sm text-foreground">{formatCurrency(fund.twhNAV, true)}</td>
-              <td className="p-3 text-right"><MultiplierCell value={fund.pic} /></td>
-              <td className="p-3 text-right"><MultiplierCell value={fund.tvpi} /></td>
-              <td className="p-3 text-right"><MultiplierCell value={fund.moic} /></td>
-              <td className="p-3 text-right"><IRRCell value={fund.irr} /></td>
+              <td className="p-3 text-right">
+                <span className={cn("font-mono text-sm", parseMultiplier(fund.pic) >= 1 ? "text-positive" : "text-muted-foreground")}>{fund.pic}</span>
+              </td>
+              <td className="p-3 text-right">
+                <span className={cn("font-mono text-sm", parseMultiplier(fund.tvpi) >= 1 ? "text-positive" : "text-negative")}>{fund.tvpi}</span>
+              </td>
+              <td className="p-3 text-right">
+                <span className={cn("font-mono text-sm", parseMultiplier(fund.moic) >= 1 ? "text-positive" : "text-negative")}>{fund.moic}</span>
+              </td>
+              <td className="p-3 text-right">
+                <span className={cn("font-mono text-sm", parsePercent(fund.irr) >= 0 ? "text-positive" : "text-negative")}>{fund.irr}</span>
+              </td>
             </tr>
           ))}
         </tbody>
