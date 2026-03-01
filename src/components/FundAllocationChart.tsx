@@ -2,21 +2,21 @@ import { fundHoldings, formatCurrency } from "@/data/portfolioData";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 const COLORS = [
-  "hsl(160, 60%, 45%)",
-  "hsl(210, 80%, 55%)",
-  "hsl(38, 92%, 55%)",
-  "hsl(280, 60%, 55%)",
-  "hsl(340, 65%, 55%)",
-  "hsl(160, 40%, 65%)",
-  "hsl(200, 50%, 45%)",
-  "hsl(20, 70%, 55%)",
-  "hsl(120, 40%, 50%)",
+  "hsl(45, 90%, 55%)",
+  "hsl(45, 60%, 40%)",
+  "hsl(0, 0%, 60%)",
+  "hsl(0, 0%, 45%)",
+  "hsl(0, 0%, 35%)",
+  "hsl(145, 60%, 45%)",
+  "hsl(210, 70%, 55%)",
+  "hsl(38, 80%, 50%)",
+  "hsl(0, 0%, 25%)",
 ];
 
 const data = fundHoldings
   .filter(f => f.twhNAV > 0)
   .map((f, i) => ({
-    name: f.name.split(",")[0].split(" LP")[0],
+    name: f.name.split(",")[0].split(" LP")[0].trim(),
     value: f.twhNAV,
     color: COLORS[i % COLORS.length],
   }))
@@ -36,7 +36,8 @@ const CustomTooltip = ({ active, payload }: any) => {
 const FundAllocationChart = () => {
   return (
     <div className="rounded-lg border border-border bg-card p-5">
-      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">NAV Allocation by Fund</h3>
+      <h3 className="text-sm font-semibold text-foreground mb-1">NAV Allocation</h3>
+      <p className="text-xs text-muted-foreground mb-4">Distribution across funds</p>
       <div className="flex items-center gap-6">
         <ResponsiveContainer width={200} height={200}>
           <PieChart>
