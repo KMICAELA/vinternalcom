@@ -184,6 +184,14 @@ export const underlyingPortfolio: UnderlyingHolding[] = [
   { company: "General Biological Corporation", fund: "Lowercarbon", status: "Active", date: "23-Sep-24", instrument: "Pref. Equity", round: "Seed", investmentCost: 7500000, fmv: 30240340, proceeds: 0, moic: "4.03x", twhPercent: "0.31%", twhCost: 23118.10, twhFMV: 93273.80 },
   { company: "Impulse Space, Inc.", fund: "Tamarack", status: "Active", date: "5-Dec-23", instrument: "Pref. Equity", round: "A", investmentCost: 5500003, fmv: 17095210, proceeds: 0, moic: "3.11x", twhPercent: "2.77%", twhCost: 152534.02, twhFMV: 473902.78 },
   { company: "Rainmaker Technology Corp.", fund: "Tamarack", status: "Active", date: "12-Jan-24", instrument: "Pref. Equity", round: "A", investmentCost: 4361458, fmv: 5790790, proceeds: 0, moic: "1.33x", twhPercent: "2.77%", twhCost: 120971.48, twhFMV: 160611.91 },
+  { company: "Fiado", fund: "Leap", status: "Active", date: "15-Mar-24", instrument: "Pref. Equity", round: "Seed", investmentCost: 1500000, fmv: 1500000, proceeds: 0, moic: "1.00x", twhPercent: "1.93%", twhCost: 28985.51, twhFMV: 28985.51 },
+  { company: "Finix", fund: "Leap", status: "Active", date: "10-Feb-23", instrument: "Pref. Equity", round: "B", investmentCost: 3000000, fmv: 3000000, proceeds: 0, moic: "1.00x", twhPercent: "1.93%", twhCost: 57971.01, twhFMV: 57971.01 },
+  { company: "Hedral, Inc.", fund: "Lowercarbon", status: "Active", date: "15-Aug-24", instrument: "Pref. Equity", round: "Seed", investmentCost: 5000000, fmv: 5000000, proceeds: 0, moic: "1.00x", twhPercent: "0.31%", twhCost: 15420.87, twhFMV: 15420.87 },
+  { company: "Holoclara", fund: "Generational", status: "Active", date: "5-Mar-25", instrument: "Pref. Equity", round: "Pre-Seed", investmentCost: 200000, fmv: 200000, proceeds: 0, moic: "1.00x", twhPercent: "17.38%", twhCost: 34750.69, twhFMV: 34750.69 },
+  { company: "Mammoth Climate PBC", fund: "Lowercarbon", status: "Active", date: "10-Jun-23", instrument: "Pref. Equity", round: "A", investmentCost: 7500000, fmv: 7500000, proceeds: 0, moic: "1.00x", twhPercent: "0.31%", twhCost: 23131.30, twhFMV: 23131.30 },
+  { company: "Shellworks, Inc.", fund: "Lowercarbon", status: "Active", date: "20-Nov-23", instrument: "Pref. Equity", round: "Seed", investmentCost: 4000000, fmv: 4000000, proceeds: 0, moic: "1.00x", twhPercent: "0.31%", twhCost: 12334.21, twhFMV: 12334.21 },
+  { company: "Titan Dynamics", fund: "Cantos", status: "Active", date: "1-Jul-25", instrument: "Pref. Equity", round: "Seed", investmentCost: 1500000, fmv: 1500000, proceeds: 0, moic: "1.00x", twhPercent: "5.71%", twhCost: 85714.29, twhFMV: 85714.29 },
+  { company: "Emerald AI, Inc.", fund: "Cantos", status: "Active", date: "15-Aug-25", instrument: "SAFE", round: "Seed", investmentCost: 500000, fmv: 500000, proceeds: 0, moic: "1.00x", twhPercent: "5.71%", twhCost: 28571.43, twhFMV: 28571.43 },
 ];
 
 // Portfolio commentary (from "Portfolio Comments" tab)
