@@ -1,64 +1,70 @@
-import { fundHoldings, formatCurrency } from "@/data/portfolioData";
 import { cn } from "@/lib/utils";
 
-const parseMultiplier = (v: string) => parseFloat(v.replace("x", ""));
-const parsePercent = (v: string) => parseFloat(v.replace("%", ""));
+const fmt = (n: number) => {
+  if (Math.abs(n) >= 1e6) return `$${(n / 1e6).toFixed(1)}M`;
+  if (Math.abs(n) >= 1e3) return `$${(n / 1e3).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+};
 
-const FundsTable = () => {
-  const totalCommitment = fundHoldings.reduce((s, f) => s + f.twhCommitment, 0);
-  const totalContributions = fundHoldings.reduce((s, f) => s + f.twhContributions, 0);
-  const totalNAV = fundHoldings.reduce((s, f) => s + f.twhNAV, 0);
+interface FundsTableProps {
+  data: any[];
+}
+
+const FundsTable = ({ data }: FundsTableProps) => {
+  const totalNAV = data.reduce((s, r) => s + Number(r.reported_nav || 0), 0);
+  const totalCalled = data.reduce((s, r) => s + Number(r.capital_called_to_date || 0), 0);
+  const totalDist = data.reduce((s, r) => s + Number(r.distributions_to_date || 0), 0);
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border">
       <table className="w-full text-sm">
         <thead>
-          <tr className="bg-surface-2 border-b border-border">
+          <tr className="bg-muted border-b border-border">
             <th className="text-left p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Fund</th>
             <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Commitment</th>
-            <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Contributed</th>
+            <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Called</th>
+            <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">Distributed</th>
             <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">NAV</th>
-            <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">PIC</th>
             <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">TVPI</th>
-            <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">MOIC</th>
             <th className="text-right p-3 font-medium text-muted-foreground text-xs uppercase tracking-wider">IRR</th>
           </tr>
         </thead>
         <tbody>
-          {fundHoldings.map((fund, i) => (
-            <tr key={i} className="table-row-hover border-b border-border/50">
-              <td className="p-3">
-                <div className="font-medium text-foreground text-sm">{fund.name}</div>
-                <div className="text-xs text-muted-foreground">{fund.twhPercent} ownership · {fund.startDate}</div>
-              </td>
-              <td className="p-3 text-right font-mono text-sm text-foreground">{formatCurrency(fund.twhCommitment, true)}</td>
-              <td className="p-3 text-right font-mono text-sm text-foreground">{formatCurrency(fund.twhContributions, true)}</td>
-              <td className="p-3 text-right font-mono text-sm text-foreground">{formatCurrency(fund.twhNAV, true)}</td>
-              <td className="p-3 text-right">
-                <span className={cn("font-mono text-sm", parseMultiplier(fund.pic) >= 1 ? "text-positive" : "text-muted-foreground")}>{fund.pic}</span>
-              </td>
-              <td className="p-3 text-right">
-                <span className={cn("font-mono text-sm", parseMultiplier(fund.tvpi) >= 1 ? "text-positive" : "text-negative")}>{fund.tvpi}</span>
-              </td>
-              <td className="p-3 text-right">
-                <span className={cn("font-mono text-sm", parseMultiplier(fund.moic) >= 1 ? "text-positive" : "text-negative")}>{fund.moic}</span>
-              </td>
-              <td className="p-3 text-right">
-                <span className={cn("font-mono text-sm", parsePercent(fund.irr) >= 0 ? "text-positive" : "text-negative")}>{fund.irr}</span>
-              </td>
-            </tr>
-          ))}
+          {data.map((r: any, i: number) => {
+            const fund = r.fund || {};
+            const called = Number(r.capital_called_to_date || 0);
+            const dist = Number(r.distributions_to_date || 0);
+            const nav = Number(r.reported_nav || 0);
+            const tvpi = called > 0 ? (dist + nav) / called : 0;
+            const irr = r.reported_gross_irr;
+            return (
+              <tr key={i} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+                <td className="p-3">
+                  <div className="font-medium text-foreground">{fund.fund_name || "—"}</div>
+                  <div className="text-xs text-muted-foreground">{fund.strategy || ""} · {fund.vintage_year || ""}</div>
+                </td>
+                <td className="p-3 text-right font-mono text-foreground">{fmt(Number(fund.commitment_amount || 0))}</td>
+                <td className="p-3 text-right font-mono text-foreground">{fmt(called)}</td>
+                <td className="p-3 text-right font-mono text-foreground">{fmt(dist)}</td>
+                <td className="p-3 text-right font-mono text-foreground">{fmt(nav)}</td>
+                <td className={cn("p-3 text-right font-mono font-medium", tvpi >= 1 ? "text-green-600" : "text-red-500")}>
+                  {tvpi.toFixed(2)}x
+                </td>
+                <td className="p-3 text-right font-mono text-muted-foreground">
+                  {irr != null ? `${(irr * 100).toFixed(1)}%` : "—"}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
         <tfoot>
-          <tr className="bg-surface-2 border-t border-border">
-            <td className="p-3 font-semibold text-foreground">Total ({fundHoldings.length} funds)</td>
-            <td className="p-3 text-right font-mono font-semibold text-foreground">{formatCurrency(totalCommitment, true)}</td>
-            <td className="p-3 text-right font-mono font-semibold text-foreground">{formatCurrency(totalContributions, true)}</td>
-            <td className="p-3 text-right font-mono font-semibold text-foreground">{formatCurrency(totalNAV, true)}</td>
-            <td className="p-3 text-right font-mono font-semibold text-muted-foreground">0.51x</td>
-            <td className="p-3 text-right font-mono font-semibold text-positive">1.42x</td>
+          <tr className="bg-muted border-t border-border">
+            <td className="p-3 font-semibold text-foreground">Total ({data.length} funds)</td>
             <td className="p-3" />
-            <td className="p-3" />
+            <td className="p-3 text-right font-mono font-semibold text-foreground">{fmt(totalCalled)}</td>
+            <td className="p-3 text-right font-mono font-semibold text-foreground">{fmt(totalDist)}</td>
+            <td className="p-3 text-right font-mono font-semibold text-foreground">{fmt(totalNAV)}</td>
+            <td className="p-3" colSpan={2} />
           </tr>
         </tfoot>
       </table>
