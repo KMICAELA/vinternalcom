@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { underlyingPortfolio as initialPortfolio, formatCurrency, UnderlyingHolding } from "@/data/portfolioData";
+import { underlyingPortfolio as initialPortfolio, formatCurrency, UnderlyingHolding, fundHoldings } from "@/data/portfolioData";
 import { cn } from "@/lib/utils";
 import SectionHeader from "@/components/SectionHeader";
 import { Input } from "@/components/ui/input";
@@ -57,6 +57,40 @@ const EditableCell = ({
   />
 );
 
+// Fund name to TWH ownership % mapping from fund holdings
+const fundTwhPercentMap: Record<string, number> = {};
+fundHoldings.forEach((f) => {
+  // Extract short fund name from the underlying portfolio data
+  const pctVal = parseFloat(f.twhPercent.replace("%", ""));
+  fundTwhPercentMap[f.name] = pctVal;
+});
+
+// Short fund names used in underlying portfolio mapped to their TWH %
+const FUND_TWH_PERCENT: Record<string, number> = {
+  "Lowercarbon": 0.31,
+  "Third Sphere": 4.80,
+  "Tamarack": 2.77,
+  "Generational": 17.38,
+  "Leap": 1.93,
+  "SVLC": 6.67,
+  "Cantos": 5.71,
+  "Quantonation": 0.69,
+  "ONEVC": 4.48,
+};
+
+const ROUND_OPTIONS = ["Pre-Seed", "Seed", "Series A", "Series B"];
+
+const FUND_NAMES = Object.keys(FUND_TWH_PERCENT);
+
+const calcTwhFields = (holding: UnderlyingHolding, fundName?: string): UnderlyingHolding => {
+  const fund = fundName || holding.fund;
+  const pct = FUND_TWH_PERCENT[fund] ?? 0;
+  const twhPercent = `${pct.toFixed(2)}%`;
+  const twhCost = Math.round((holding.investmentCost * pct / 100) * 100) / 100;
+  const twhFMV = Math.round((holding.fmv * pct / 100) * 100) / 100;
+  return { ...holding, fund, twhPercent, twhCost, twhFMV };
+};
+
 const UnderlyingPortfolioTab = () => {
   const [portfolio, setPortfolio] = useState<UnderlyingHolding[]>([...initialPortfolio]);
   const [search, setSearch] = useState("");
@@ -108,12 +142,26 @@ const UnderlyingPortfolioTab = () => {
 
   const updateField = (field: keyof UnderlyingHolding, value: string) => {
     if (!editData) return;
-    const numFields: (keyof UnderlyingHolding)[] = ["investmentCost", "fmv", "proceeds", "twhCost", "twhFMV"];
+    const numFields: (keyof UnderlyingHolding)[] = ["investmentCost", "fmv", "proceeds"];
+    let updated = { ...editData };
     if (numFields.includes(field)) {
-      setEditData({ ...editData, [field]: parseFloat(value) || 0 });
+      updated = { ...updated, [field]: parseFloat(value) || 0 };
     } else {
-      setEditData({ ...editData, [field]: value });
+      updated = { ...updated, [field]: value };
     }
+    // Recalculate TWH fields when fund, cost, or fmv changes
+    if (field === "fund" || field === "investmentCost" || field === "fmv") {
+      updated = calcTwhFields(updated);
+    }
+    setEditData(updated);
+  };
+
+  const updateNewHoldingField = (field: keyof UnderlyingHolding, value: string | number) => {
+    let updated = { ...newHolding, [field]: value };
+    if (field === "fund" || field === "investmentCost" || field === "fmv") {
+      updated = calcTwhFields(updated);
+    }
+    setNewHolding(updated);
   };
 
   const addHolding = () => {
@@ -121,7 +169,8 @@ const UnderlyingPortfolioTab = () => {
       toast.error("Company and Fund are required");
       return;
     }
-    setPortfolio([...portfolio, { ...newHolding }]);
+    const finalHolding = calcTwhFields(newHolding);
+    setPortfolio([...portfolio, finalHolding]);
     setNewHolding({ ...emptyHolding });
     setAddDialogOpen(false);
     toast.success("Holding added successfully");
@@ -151,15 +200,22 @@ const UnderlyingPortfolioTab = () => {
             <div className="grid grid-cols-2 gap-3 mt-2">
               <div className="space-y-1.5">
                 <Label className="text-xs">Company *</Label>
-                <Input value={newHolding.company} onChange={(e) => setNewHolding({ ...newHolding, company: e.target.value })} placeholder="Company name" />
+                <Input value={newHolding.company} onChange={(e) => updateNewHoldingField("company", e.target.value)} placeholder="Company name" />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Fund *</Label>
-                <Input value={newHolding.fund} onChange={(e) => setNewHolding({ ...newHolding, fund: e.target.value })} placeholder="Fund name" />
+                <Select value={newHolding.fund} onValueChange={(v) => updateNewHoldingField("fund", v)}>
+                  <SelectTrigger><SelectValue placeholder="Select fund" /></SelectTrigger>
+                  <SelectContent>
+                    {FUND_NAMES.map((f) => (
+                      <SelectItem key={f} value={f}>{f}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Status</Label>
-                <Select value={newHolding.status} onValueChange={(v) => setNewHolding({ ...newHolding, status: v })}>
+                <Select value={newHolding.status} onValueChange={(v) => updateNewHoldingField("status", v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Active">Active</SelectItem>
@@ -169,31 +225,40 @@ const UnderlyingPortfolioTab = () => {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Round</Label>
-                <Input value={newHolding.round} onChange={(e) => setNewHolding({ ...newHolding, round: e.target.value })} placeholder="e.g. Seed" />
+                <Select value={newHolding.round} onValueChange={(v) => updateNewHoldingField("round", v)}>
+                  <SelectTrigger><SelectValue placeholder="Select round" /></SelectTrigger>
+                  <SelectContent>
+                    {ROUND_OPTIONS.map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Fund Cost ($)</Label>
-                <Input type="number" value={newHolding.investmentCost || ""} onChange={(e) => setNewHolding({ ...newHolding, investmentCost: parseFloat(e.target.value) || 0 })} />
+                <Input type="number" value={newHolding.investmentCost || ""} onChange={(e) => updateNewHoldingField("investmentCost", parseFloat(e.target.value) || 0)} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">Fund FMV ($)</Label>
-                <Input type="number" value={newHolding.fmv || ""} onChange={(e) => setNewHolding({ ...newHolding, fmv: parseFloat(e.target.value) || 0 })} />
+                <Input type="number" value={newHolding.fmv || ""} onChange={(e) => updateNewHoldingField("fmv", parseFloat(e.target.value) || 0)} />
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs">MOIC</Label>
-                <Input value={newHolding.moic} onChange={(e) => setNewHolding({ ...newHolding, moic: e.target.value })} placeholder="1.00x" />
+                <Input value={newHolding.moic} onChange={(e) => updateNewHoldingField("moic", e.target.value)} placeholder="1.00x" />
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">TWH %</Label>
-                <Input value={newHolding.twhPercent} onChange={(e) => setNewHolding({ ...newHolding, twhPercent: e.target.value })} placeholder="0.00%" />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">TWH Cost ($)</Label>
-                <Input type="number" value={newHolding.twhCost || ""} onChange={(e) => setNewHolding({ ...newHolding, twhCost: parseFloat(e.target.value) || 0 })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">TWH FMV ($)</Label>
-                <Input type="number" value={newHolding.twhFMV || ""} onChange={(e) => setNewHolding({ ...newHolding, twhFMV: parseFloat(e.target.value) || 0 })} />
+              <div className="space-y-1.5 col-span-2 grid grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">TWH % (auto)</Label>
+                  <Input value={newHolding.twhPercent} disabled className="bg-muted" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">TWH Cost (auto)</Label>
+                  <Input value={newHolding.twhCost ? formatCurrency(newHolding.twhCost, true) : "$0"} disabled className="bg-muted" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">TWH FMV (auto)</Label>
+                  <Input value={newHolding.twhFMV ? formatCurrency(newHolding.twhFMV, true) : "$0"} disabled className="bg-muted" />
+                </div>
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
@@ -320,7 +385,14 @@ const UnderlyingPortfolioTab = () => {
                   </td>
                   <td className="p-3">
                     {isEditing ? (
-                      <EditableCell value={row.fund} onChange={(v) => updateField("fund", v)} />
+                      <Select value={row.fund} onValueChange={(v) => updateField("fund", v)}>
+                        <SelectTrigger className="h-7 text-xs px-1.5"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {FUND_NAMES.map((f) => (
+                            <SelectItem key={f} value={f}>{f}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <span className="text-muted-foreground">{row.fund}</span>
                     )}
@@ -345,7 +417,14 @@ const UnderlyingPortfolioTab = () => {
                   </td>
                   <td className="p-3">
                     {isEditing ? (
-                      <EditableCell value={row.round} onChange={(v) => updateField("round", v)} />
+                      <Select value={row.round} onValueChange={(v) => updateField("round", v)}>
+                        <SelectTrigger className="h-7 text-xs px-1.5"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {ROUND_OPTIONS.map((r) => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <span className="inline-block rounded-md bg-surface-3 px-2 py-0.5 text-xs font-medium text-secondary-foreground">
                         {row.round}
@@ -376,25 +455,13 @@ const UnderlyingPortfolioTab = () => {
                     )}
                   </td>
                   <td className="p-3 text-right">
-                    {isEditing ? (
-                      <EditableCell value={row.twhPercent} onChange={(v) => updateField("twhPercent", v)} className="text-right" />
-                    ) : (
-                      <span className="font-mono text-muted-foreground">{row.twhPercent}</span>
-                    )}
+                    <span className="font-mono text-muted-foreground">{row.twhPercent}</span>
                   </td>
                   <td className="p-3 text-right">
-                    {isEditing ? (
-                      <EditableCell value={row.twhCost} onChange={(v) => updateField("twhCost", v)} type="number" className="text-right" />
-                    ) : (
-                      <span className="font-mono text-muted-foreground">{formatCurrency(row.twhCost, true)}</span>
-                    )}
+                    <span className="font-mono text-muted-foreground">{formatCurrency(row.twhCost, true)}</span>
                   </td>
                   <td className="p-3 text-right">
-                    {isEditing ? (
-                      <EditableCell value={row.twhFMV} onChange={(v) => updateField("twhFMV", v)} type="number" className="text-right" />
-                    ) : (
-                      <span className="font-mono text-foreground">{formatCurrency(row.twhFMV, true)}</span>
-                    )}
+                    <span className="font-mono text-foreground">{formatCurrency(row.twhFMV, true)}</span>
                   </td>
                 </tr>
               );
