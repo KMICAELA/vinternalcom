@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Upload, X, CheckCircle2, Loader2 } from "lucide-react";
+import { ArrowLeft, Upload, X, CheckCircle2, Loader2, AlertTriangle } from "lucide-react";
 import { useQuarters, useCreateNextQuarter, useFundReportStatuses, useUpdateReportStatus, getNextQuarterLabel, FUND_NAMES } from "@/hooks/useQuarters";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
@@ -21,6 +21,10 @@ const AddReports = () => {
   const currentQuarter = quarters.find((q) => q.is_current) || quarters[0];
   const nextQuarterLabel = currentQuarter ? getNextQuarterLabel(currentQuarter.label) : "Q4 2025";
   const existingNextQuarter = quarters.find((q) => q.label === nextQuarterLabel);
+
+  // Check if current quarter is complete
+  const { data: currentStatuses = [] } = useFundReportStatuses(currentQuarter?.id);
+  const currentQuarterComplete = currentStatuses.length > 0 && currentStatuses.every((s) => s.status === "uploaded");
 
   // If the next quarter already exists, use its statuses
   const { data: existingStatuses = [] } = useFundReportStatuses(existingNextQuarter?.id);
@@ -110,6 +114,44 @@ const AddReports = () => {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // Block if current quarter is not complete
+  if (!currentQuarterComplete) {
+    const pendingFunds = currentStatuses.filter((s) => s.status === "pending").map((s) => s.fund_name);
+    return (
+      <div className="min-h-screen bg-background">
+        <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+          <div className="max-w-[800px] mx-auto px-6 py-4 flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">Add Reports — {nextQuarterLabel}</h1>
+              <p className="text-xs text-muted-foreground">Upload fund reports for the new quarter</p>
+            </div>
+          </div>
+        </header>
+        <main className="max-w-[800px] mx-auto px-6 py-12">
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-6 text-center space-y-4">
+            <AlertTriangle className="h-8 w-8 text-warning mx-auto" />
+            <h2 className="text-lg font-semibold text-foreground">Complete {currentQuarter?.label} first</h2>
+            <p className="text-sm text-muted-foreground max-w-md mx-auto">
+              All reports for {currentQuarter?.label} must be uploaded before you can add reports for {nextQuarterLabel}.
+            </p>
+            <div className="space-y-1 mt-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pending reports</p>
+              {pendingFunds.map((name) => (
+                <p key={name} className="text-sm text-warning">{name}</p>
+              ))}
+            </div>
+            <Button variant="outline" onClick={() => navigate("/")} className="mt-4">
+              Back to Dashboard
+            </Button>
+          </div>
+        </main>
       </div>
     );
   }
