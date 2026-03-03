@@ -82,7 +82,7 @@ If you don't know something or the data doesn't cover it, say so honestly.
 - RVPI (Residual Value to Paid-In): NAV / contributions. Unrealized value remaining.
 - PIC (Paid-In Capital): Capital called / committed.
 
-Format currency values clearly. Use tables when comparing multiple items. Be concise but thorough.
+Format responses in a clean, readable way. Use bullet points and numbered lists rather than markdown tables. Use **bold** for emphasis on key numbers. Keep responses concise and conversational. Never use pipe characters for tables.
 `;
 
     const response = await fetch(
