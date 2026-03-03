@@ -86,6 +86,23 @@ export function useLPCashflows(quarterDate?: string | null) {
   });
 }
 
+export function useUnderlyingPortfolio(quarterDate: string | null) {
+  return useQuery({
+    queryKey: ["underlying-portfolio", quarterDate],
+    queryFn: async () => {
+      if (!quarterDate) return [];
+      const { data, error } = await supabase
+        .from("underlying_portfolio_holdings")
+        .select("*")
+        .eq("quarter_date", quarterDate)
+        .order("twh_fmv", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!quarterDate,
+  });
+}
+
 export function usePortfolioSnapshot(quarterDate: string | null) {
   return useQuery({
     queryKey: ["portfolio-snapshot", quarterDate],

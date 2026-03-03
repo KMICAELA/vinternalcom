@@ -278,6 +278,53 @@ export type Database = {
         }
         Relationships: []
       }
+      underlying_portfolio_holdings: {
+        Row: {
+          company_name: string
+          created_at: string
+          fund_id: string | null
+          id: string
+          quarter_date: string
+          region: string | null
+          sector: string | null
+          twh_cost: number
+          twh_fmv: number
+          type: string | null
+        }
+        Insert: {
+          company_name: string
+          created_at?: string
+          fund_id?: string | null
+          id?: string
+          quarter_date: string
+          region?: string | null
+          sector?: string | null
+          twh_cost?: number
+          twh_fmv?: number
+          type?: string | null
+        }
+        Update: {
+          company_name?: string
+          created_at?: string
+          fund_id?: string | null
+          id?: string
+          quarter_date?: string
+          region?: string | null
+          sector?: string | null
+          twh_cost?: number
+          twh_fmv?: number
+          type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "underlying_portfolio_holdings_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

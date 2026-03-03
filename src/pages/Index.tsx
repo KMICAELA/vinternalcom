@@ -7,9 +7,10 @@ import { Plus } from "lucide-react";
 import PortfolioMetrics from "@/components/PortfolioMetrics";
 import FundsTable from "@/components/FundsTable";
 import DirectsTable from "@/components/DirectsTable";
+import UnderlyingPortfolioTable from "@/components/UnderlyingPortfolioTable";
 import CashflowsTable from "@/components/CashflowsTable";
 import ChatWidget from "@/components/ChatWidget";
-import { useAvailableQuarters, useFunds, useFundReports, useDirectValuations, useLPCashflows, usePortfolioSnapshot } from "@/hooks/usePortfolioData";
+import { useAvailableQuarters, useFunds, useFundReports, useDirectValuations, useLPCashflows, usePortfolioSnapshot, useUnderlyingPortfolio } from "@/hooks/usePortfolioData";
 import { computeMetrics } from "@/lib/calcEngine";
 
 const formatQuarterLabel = (dateStr: string) => {
@@ -34,6 +35,7 @@ const Index = () => {
   const { data: directValuations = [] } = useDirectValuations(selectedQuarter);
   const { data: lpCashflows = [] } = useLPCashflows(selectedQuarter);
   const { data: snapshot } = usePortfolioSnapshot(selectedQuarter);
+  const { data: underlyingPortfolio = [] } = useUnderlyingPortfolio(selectedQuarter);
 
   const directCosts = directValuations.map((dv: any) => Number(dv.company?.cost_basis || 0));
   const totalCommitment = funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
@@ -97,6 +99,9 @@ const Index = () => {
             <TabsTrigger value="cashflows" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               LP Cashflows ({lpCashflows.length})
             </TabsTrigger>
+            <TabsTrigger value="underlying" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Underl. Port ({underlyingPortfolio.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="funds">
@@ -107,6 +112,9 @@ const Index = () => {
           </TabsContent>
           <TabsContent value="cashflows">
             <CashflowsTable data={lpCashflows} />
+          </TabsContent>
+          <TabsContent value="underlying">
+            <UnderlyingPortfolioTable data={underlyingPortfolio} />
           </TabsContent>
         </Tabs>
 
