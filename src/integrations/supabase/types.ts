@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      fund_metrics: {
+        Row: {
+          contribution: number
+          created_at: string
+          distribution: number
+          id: string
+          nav: number
+          quarter_id: string
+          updated_at: string
+        }
+        Insert: {
+          contribution?: number
+          created_at?: string
+          distribution?: number
+          id?: string
+          nav?: number
+          quarter_id: string
+          updated_at?: string
+        }
+        Update: {
+          contribution?: number
+          created_at?: string
+          distribution?: number
+          id?: string
+          nav?: number
+          quarter_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_metrics_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: true
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_report_statuses: {
         Row: {
           created_at: string

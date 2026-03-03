@@ -4,6 +4,7 @@ import DashboardHeader from "@/components/DashboardHeader";
 import SummaryTab from "@/components/SummaryTab";
 import UnderlyingPortfolioTab from "@/components/UnderlyingPortfolioTab";
 import PortfolioCommentsTab from "@/components/PortfolioCommentsTab";
+import FundMetricsTab from "@/components/FundMetricsTab";
 import IncompleteDataWarning from "@/components/IncompleteDataWarning";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { fundSummary } from "@/data/portfolioData";
@@ -75,6 +76,9 @@ const Index = () => {
             <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Portfolio Comments
             </TabsTrigger>
+            <TabsTrigger value="fund-metrics" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Fund Metrics
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="summary">
@@ -94,6 +98,9 @@ const Index = () => {
               <IncompleteDataWarning statuses={reportStatuses} quarterLabel={selectedQuarter?.label || ""} />
               <PortfolioCommentsTab />
             </div>
+          </TabsContent>
+          <TabsContent value="fund-metrics">
+            <FundMetricsTab quarters={quarters} selectedQuarterId={selectedQuarterId} />
           </TabsContent>
         </Tabs>
 
