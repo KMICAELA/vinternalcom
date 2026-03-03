@@ -14,100 +14,229 @@ export type Database = {
   }
   public: {
     Tables: {
-      fund_metrics: {
+      direct_investments: {
         Row: {
-          contribution: number
+          co_investors: string | null
+          company_name: string
+          cost_basis: number
           created_at: string
-          distribution: number
+          geography: string | null
           id: string
-          nav: number
-          quarter_id: string
+          instrument: string | null
+          investment_date: string | null
+          ownership_percentage: number | null
+          round: string | null
+          strategy: string | null
           updated_at: string
         }
         Insert: {
-          contribution?: number
+          co_investors?: string | null
+          company_name: string
+          cost_basis?: number
           created_at?: string
-          distribution?: number
+          geography?: string | null
           id?: string
-          nav?: number
-          quarter_id: string
+          instrument?: string | null
+          investment_date?: string | null
+          ownership_percentage?: number | null
+          round?: string | null
+          strategy?: string | null
           updated_at?: string
         }
         Update: {
-          contribution?: number
+          co_investors?: string | null
+          company_name?: string
+          cost_basis?: number
           created_at?: string
-          distribution?: number
+          geography?: string | null
           id?: string
-          nav?: number
-          quarter_id?: string
+          instrument?: string | null
+          investment_date?: string | null
+          ownership_percentage?: number | null
+          round?: string | null
+          strategy?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      direct_quarterly_valuations: {
+        Row: {
+          company_id: string
+          created_at: string
+          current_valuation: number
+          id: string
+          quarter_date: string
+          realized_proceeds_this_quarter: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          current_valuation?: number
+          id?: string
+          quarter_date: string
+          realized_proceeds_this_quarter?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          current_valuation?: number
+          id?: string
+          quarter_date?: string
+          realized_proceeds_this_quarter?: number
         }
         Relationships: [
           {
-            foreignKeyName: "fund_metrics_quarter_id_fkey"
-            columns: ["quarter_id"]
-            isOneToOne: true
-            referencedRelation: "quarters"
+            foreignKeyName: "direct_quarterly_valuations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "direct_investments"
             referencedColumns: ["id"]
           },
         ]
       }
-      fund_report_statuses: {
+      fund_level_cashflows: {
         Row: {
+          amount: number
+          cashflow_date: string
           created_at: string
-          fund_name: string
+          description: string | null
           id: string
-          quarter_id: string
-          status: string
-          uploaded_at: string | null
+          portfolio_name: string | null
+          type: string
         }
         Insert: {
+          amount: number
+          cashflow_date: string
           created_at?: string
-          fund_name: string
+          description?: string | null
           id?: string
-          quarter_id: string
-          status?: string
-          uploaded_at?: string | null
+          portfolio_name?: string | null
+          type: string
         }
         Update: {
+          amount?: number
+          cashflow_date?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          portfolio_name?: string | null
+          type?: string
+        }
+        Relationships: []
+      }
+      fund_quarterly_reports: {
+        Row: {
+          capital_called_to_date: number
+          created_at: string
+          distributions_to_date: number
+          fund_id: string
+          id: string
+          quarter_date: string
+          reported_gross_irr: number | null
+          reported_gross_tvpi: number | null
+          reported_nav: number
+          updated_at: string
+        }
+        Insert: {
+          capital_called_to_date?: number
+          created_at?: string
+          distributions_to_date?: number
+          fund_id: string
+          id?: string
+          quarter_date: string
+          reported_gross_irr?: number | null
+          reported_gross_tvpi?: number | null
+          reported_nav?: number
+          updated_at?: string
+        }
+        Update: {
+          capital_called_to_date?: number
+          created_at?: string
+          distributions_to_date?: number
+          fund_id?: string
+          id?: string
+          quarter_date?: string
+          reported_gross_irr?: number | null
+          reported_gross_tvpi?: number | null
+          reported_nav?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_quarterly_reports_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      funds: {
+        Row: {
+          carry_percentage: number
+          commitment_amount: number
+          created_at: string
+          fund_name: string
+          geography: string | null
+          hurdle_rate: number
+          id: string
+          management_fee_rate: number
+          ownership_percentage: number
+          strategy: string | null
+          updated_at: string
+          vintage_year: number | null
+        }
+        Insert: {
+          carry_percentage?: number
+          commitment_amount?: number
+          created_at?: string
+          fund_name: string
+          geography?: string | null
+          hurdle_rate?: number
+          id?: string
+          management_fee_rate?: number
+          ownership_percentage?: number
+          strategy?: string | null
+          updated_at?: string
+          vintage_year?: number | null
+        }
+        Update: {
+          carry_percentage?: number
+          commitment_amount?: number
           created_at?: string
           fund_name?: string
+          geography?: string | null
+          hurdle_rate?: number
           id?: string
-          quarter_id?: string
-          status?: string
-          uploaded_at?: string | null
+          management_fee_rate?: number
+          ownership_percentage?: number
+          strategy?: string | null
+          updated_at?: string
+          vintage_year?: number | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "fund_report_statuses_quarter_id_fkey"
-            columns: ["quarter_id"]
-            isOneToOne: false
-            referencedRelation: "quarters"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
-      quarters: {
+      portfolio_snapshots: {
         Row: {
           created_at: string
           id: string
-          is_current: boolean
-          label: string
-          sort_order: number
+          lp_nav: number
+          notes: string | null
+          quarter_date: string
         }
         Insert: {
           created_at?: string
           id?: string
-          is_current?: boolean
-          label: string
-          sort_order: number
+          lp_nav?: number
+          notes?: string | null
+          quarter_date: string
         }
         Update: {
           created_at?: string
           id?: string
-          is_current?: boolean
-          label?: string
-          sort_order?: number
+          lp_nav?: number
+          notes?: string | null
+          quarter_date?: string
         }
         Relationships: []
       }
