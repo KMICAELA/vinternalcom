@@ -94,6 +94,44 @@ export type Database = {
           },
         ]
       }
+      fund_cashflows: {
+        Row: {
+          capital_deployed: number
+          cashflow_date: string
+          created_at: string
+          description: string | null
+          distribution_received: number
+          fund_id: string
+          id: string
+        }
+        Insert: {
+          capital_deployed?: number
+          cashflow_date: string
+          created_at?: string
+          description?: string | null
+          distribution_received?: number
+          fund_id: string
+          id?: string
+        }
+        Update: {
+          capital_deployed?: number
+          cashflow_date?: string
+          created_at?: string
+          description?: string | null
+          distribution_received?: number
+          fund_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_cashflows_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_level_cashflows: {
         Row: {
           amount: number

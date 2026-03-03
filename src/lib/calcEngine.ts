@@ -1,16 +1,18 @@
 export interface PortfolioMetrics {
   grossNav: number;
-  grossPaidIn: number;
+  grossPaidIn: number;       // sum of fund capital_called + direct cost bases
   grossDistributions: number;
-  grossTvpi: number;
-  dpi: number;
-  rvpi: number;
-  netPaidIn: number;
-  netDistributions: number;
-  netNav: number;
-  netTvpi: number;
+  grossTvpi: number;         // (grossDistributions + grossNav) / grossPaidIn
+  grossDpi: number;          // grossDistributions / grossPaidIn
+  grossRvpi: number;         // grossNav / grossPaidIn
+  lpPaidIn: number;          // sum of LP capital_call cashflows
+  lpDistributions: number;   // sum of LP distribution cashflows
+  netNav: number;            // from portfolio snapshot
+  netTvpi: number;           // (lpDistributions + netNav) / lpPaidIn
+  netDpi: number;            // lpDistributions / lpPaidIn
+  netRvpi: number;           // netNav / lpPaidIn
   totalCommitment: number;
-  pctCalled: number;
+  pctCalled: number;         // grossPaidIn / totalCommitment
 }
 
 export function computeMetrics(params: {
@@ -23,6 +25,7 @@ export function computeMetrics(params: {
 }): PortfolioMetrics {
   const { fundReports, directValuations, directCosts, lpCashflows, lpNav, totalCommitment } = params;
 
+  // --- Gross layer (underlying funds + directs) ---
   const fundNav = fundReports.reduce((s, r) => s + Number(r.reported_nav), 0);
   const directNav = directValuations.reduce((s, v) => s + Number(v.current_valuation), 0);
   const grossNav = fundNav + directNav;
@@ -36,16 +39,34 @@ export function computeMetrics(params: {
   const grossDistributions = fundDist + directProceeds;
 
   const grossTvpi = grossPaidIn > 0 ? (grossDistributions + grossNav) / grossPaidIn : 0;
-  const dpi = grossPaidIn > 0 ? grossDistributions / grossPaidIn : 0;
-  const rvpi = grossPaidIn > 0 ? grossNav / grossPaidIn : 0;
+  const grossDpi = grossPaidIn > 0 ? grossDistributions / grossPaidIn : 0;
+  const grossRvpi = grossPaidIn > 0 ? grossNav / grossPaidIn : 0;
 
-  const netPaidIn = lpCashflows.filter(c => c.type === 'capital_call').reduce((s, c) => s + Number(c.amount), 0);
-  const netDistributions = lpCashflows.filter(c => c.type === 'distribution').reduce((s, c) => s + Number(c.amount), 0);
+  // Validation: TVPI must equal DPI + RVPI (within rounding tolerance)
+  if (grossPaidIn > 0 && Math.abs(grossTvpi - (grossDpi + grossRvpi)) > 0.0001) {
+    console.warn('[calcEngine] Gross TVPI validation failed: TVPI !== DPI + RVPI', { grossTvpi, grossDpi, grossRvpi });
+  }
+
+  // --- LP / Net layer ---
+  const lpPaidIn = lpCashflows.filter(c => c.type === 'capital_call').reduce((s, c) => s + Number(c.amount), 0);
+  const lpDistributions = lpCashflows.filter(c => c.type === 'distribution').reduce((s, c) => s + Number(c.amount), 0);
   const netNav = lpNav;
-  const netTvpi = netPaidIn > 0 ? (netDistributions + netNav) / netPaidIn : 0;
+  // Net TVPI = (LP Distributions + Net NAV) / LP Paid-In
+  const netTvpi = lpPaidIn > 0 ? (lpDistributions + netNav) / lpPaidIn : 0;
+  const netDpi = lpPaidIn > 0 ? lpDistributions / lpPaidIn : 0;
+  const netRvpi = lpPaidIn > 0 ? netNav / lpPaidIn : 0;
+
+  if (lpPaidIn > 0 && Math.abs(netTvpi - (netDpi + netRvpi)) > 0.0001) {
+    console.warn('[calcEngine] Net TVPI validation failed: TVPI !== DPI + RVPI', { netTvpi, netDpi, netRvpi });
+  }
+
   const pctCalled = totalCommitment > 0 ? grossPaidIn / totalCommitment : 0;
 
-  return { grossNav, grossPaidIn, grossDistributions, grossTvpi, dpi, rvpi, netPaidIn, netDistributions, netNav, netTvpi, totalCommitment, pctCalled };
+  return {
+    grossNav, grossPaidIn, grossDistributions, grossTvpi, grossDpi, grossRvpi,
+    lpPaidIn, lpDistributions, netNav, netTvpi, netDpi, netRvpi,
+    totalCommitment, pctCalled,
+  };
 }
 
 export function formatCurrency(value: number): string {
