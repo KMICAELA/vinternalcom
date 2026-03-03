@@ -1,7 +1,9 @@
+import { useNavigate } from "react-router-dom";
 import { fundSummary } from "@/data/portfolioData";
 import QuarterSelector from "@/components/QuarterSelector";
-import AddReportsDialog from "@/components/AddReportsDialog";
 import { Quarter, FundReportStatus } from "@/hooks/useQuarters";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 
 interface DashboardHeaderProps {
   quarters: Quarter[];
@@ -20,6 +22,8 @@ const DashboardHeader = ({
   selectedQuarterLabel,
   selectedQuarterSortOrder,
 }: DashboardHeaderProps) => {
+  const navigate = useNavigate();
+
   return (
     <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
@@ -44,12 +48,15 @@ const DashboardHeader = ({
             selectedId={selectedQuarterId}
             onSelect={onSelectQuarter}
           />
-          <AddReportsDialog
-            statuses={reportStatuses}
-            currentQuarterLabel={selectedQuarterLabel}
-            currentQuarterSortOrder={selectedQuarterSortOrder}
-            quarters={quarters}
-          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2 border-border text-foreground hover:border-primary/50"
+            onClick={() => navigate("/reports/add")}
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Add Reports
+          </Button>
         </div>
       </div>
     </header>
