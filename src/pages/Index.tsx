@@ -1,51 +1,53 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import DashboardHeader from "@/components/DashboardHeader";
-import SummaryTab from "@/components/SummaryTab";
-import UnderlyingPortfolioTab from "@/components/UnderlyingPortfolioTab";
-import PortfolioCommentsTab from "@/components/PortfolioCommentsTab";
-import FundMetricsTab from "@/components/FundMetricsTab";
-import IncompleteDataWarning from "@/components/IncompleteDataWarning";
+import { useNavigate } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { fundSummary } from "@/data/portfolioData";
-import { useQuarters, useFundReportStatuses } from "@/hooks/useQuarters";
+import { Plus } from "lucide-react";
+import PortfolioMetrics from "@/components/PortfolioMetrics";
+import FundsTable from "@/components/FundsTable";
+import DirectsTable from "@/components/DirectsTable";
+import CashflowsTable from "@/components/CashflowsTable";
 import ChatWidget from "@/components/ChatWidget";
+import { useAvailableQuarters, useFunds, useFundReports, useDirectValuations, useLPCashflows, usePortfolioSnapshot } from "@/hooks/usePortfolioData";
+import { computeMetrics } from "@/lib/calcEngine";
+
+const formatQuarterLabel = (dateStr: string) => {
+  const d = new Date(dateStr + "T00:00:00");
+  const month = d.getMonth();
+  const year = d.getFullYear();
+  const q = month < 3 ? "Q1" : month < 6 ? "Q2" : month < 9 ? "Q3" : "Q4";
+  return `${q} ${year}`;
+};
 
 const Index = () => {
-  const { data: quarters = [], isLoading } = useQuarters();
-  const [selectedQuarterId, setSelectedQuarterId] = useState<string>("");
+  const navigate = useNavigate();
+  const { data: quarters = [], isLoading: qLoading } = useAvailableQuarters();
+  const { data: funds = [] } = useFunds();
+  const [selectedQuarter, setSelectedQuarter] = useState<string>("");
 
-  // Auto-select the latest quarter with complete data on load
-  const [quarterStatuses, setQuarterStatuses] = useState<Record<string, boolean>>({});
-  
   useEffect(() => {
-    if (quarters.length === 0 || selectedQuarterId) return;
-    
-    // Fetch statuses for all quarters to find the latest complete one
-    const fetchAllStatuses = async () => {
-      const statusMap: Record<string, boolean> = {};
-      for (const q of quarters) {
-        const { data } = await supabase
-          .from("fund_report_statuses")
-          .select("status")
-          .eq("quarter_id", q.id);
-        const allUploaded = data ? data.length > 0 && data.every((s) => s.status === "uploaded") : false;
-        statusMap[q.id] = allUploaded;
-      }
-      setQuarterStatuses(statusMap);
-      
-      // quarters are already sorted by sort_order desc, so first complete one is latest
-      const latestComplete = quarters.find((q) => statusMap[q.id]);
-      setSelectedQuarterId(latestComplete?.id || quarters[0].id);
-    };
-    
-    fetchAllStatuses();
-  }, [quarters, selectedQuarterId]);
+    if (quarters.length > 0 && !selectedQuarter) setSelectedQuarter(quarters[0]);
+  }, [quarters, selectedQuarter]);
 
-  const selectedQuarter = quarters.find((q) => q.id === selectedQuarterId);
-  const { data: reportStatuses = [] } = useFundReportStatuses(selectedQuarterId);
+  const { data: fundReports = [] } = useFundReports(selectedQuarter);
+  const { data: directValuations = [] } = useDirectValuations(selectedQuarter);
+  const { data: lpCashflows = [] } = useLPCashflows(selectedQuarter);
+  const { data: snapshot } = usePortfolioSnapshot(selectedQuarter);
 
-  if (isLoading) {
+  const directCosts = directValuations.map((dv: any) => Number(dv.company?.cost_basis || 0));
+  const totalCommitment = funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
+
+  const metrics = computeMetrics({
+    fundReports,
+    directValuations,
+    directCosts,
+    lpCashflows,
+    lpNav: snapshot?.lp_nav ? Number(snapshot.lp_nav) : 0,
+    totalCommitment,
+  });
+
+  if (qLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <p className="text-muted-foreground">Loading...</p>
@@ -55,58 +57,62 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <DashboardHeader
-        quarters={quarters}
-        selectedQuarterId={selectedQuarterId}
-        onSelectQuarter={setSelectedQuarterId}
-        reportStatuses={reportStatuses}
-        selectedQuarterLabel={selectedQuarter?.label || "Q3 2025"}
-        selectedQuarterSortOrder={selectedQuarter?.sort_order || 3}
-      />
+      {/* Header */}
+      <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
+        <div className="max-w-[1400px] mx-auto px-6 py-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-semibold text-foreground">1200VC</h1>
+            <p className="text-xs text-muted-foreground">Portfolio Performance Engine</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
+              <SelectTrigger className="w-[140px] h-8 text-sm border-border">
+                <SelectValue placeholder="Quarter" />
+              </SelectTrigger>
+              <SelectContent>
+                {quarters.map((q) => (
+                  <SelectItem key={q} value={q}>{formatQuarterLabel(q)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button size="sm" variant="outline" className="gap-2 border-border" onClick={() => navigate("/add-quarterly-data")}>
+              <Plus className="h-3.5 w-3.5" />
+              Add Data
+            </Button>
+          </div>
+        </div>
+      </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6">
-        <Tabs defaultValue="summary" className="space-y-6">
+        <PortfolioMetrics metrics={metrics} />
+
+        <Tabs defaultValue="funds" className="space-y-4">
           <TabsList className="bg-surface-1 border border-border">
-            <TabsTrigger value="summary" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Summary
+            <TabsTrigger value="funds" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Funds ({fundReports.length})
             </TabsTrigger>
-            <TabsTrigger value="underlying" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Underlying Portfolio
+            <TabsTrigger value="directs" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Directs ({directValuations.length})
             </TabsTrigger>
-            <TabsTrigger value="comments" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Portfolio Comments
-            </TabsTrigger>
-            <TabsTrigger value="fund-metrics" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Fund Metrics
+            <TabsTrigger value="cashflows" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              LP Cashflows ({lpCashflows.length})
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="summary">
-            <div className="space-y-6">
-              <IncompleteDataWarning statuses={reportStatuses} quarterLabel={selectedQuarter?.label || ""} />
-              <SummaryTab />
-            </div>
+          <TabsContent value="funds">
+            <FundsTable data={fundReports} />
           </TabsContent>
-          <TabsContent value="underlying">
-            <div className="space-y-6">
-              <IncompleteDataWarning statuses={reportStatuses} quarterLabel={selectedQuarter?.label || ""} />
-              <UnderlyingPortfolioTab />
-            </div>
+          <TabsContent value="directs">
+            <DirectsTable data={directValuations} />
           </TabsContent>
-          <TabsContent value="comments">
-            <div className="space-y-6">
-              <IncompleteDataWarning statuses={reportStatuses} quarterLabel={selectedQuarter?.label || ""} />
-              <PortfolioCommentsTab />
-            </div>
-          </TabsContent>
-          <TabsContent value="fund-metrics">
-            <FundMetricsTab quarters={quarters} selectedQuarterId={selectedQuarterId} />
+          <TabsContent value="cashflows">
+            <CashflowsTable data={lpCashflows} />
           </TabsContent>
         </Tabs>
 
         <footer className="border-t border-border pt-4 pb-8 mt-8">
           <p className="text-xs text-muted-foreground text-center">
-            {fundSummary.name} · Portfolio Metrics · {selectedQuarter?.label || fundSummary.quarter} · Confidential
+            1200VC · TWH Americas Fund I, LP · {selectedQuarter ? formatQuarterLabel(selectedQuarter) : ""} · Confidential
           </p>
         </footer>
       </main>
