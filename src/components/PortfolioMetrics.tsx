@@ -19,17 +19,17 @@ const PortfolioMetrics = ({ metrics: m }: Props) => {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard label="Gross NAV" value={formatCurrency(m.grossNav)} />
         <MetricCard label="Net NAV" value={m.netNav > 0 ? formatCurrency(m.netNav) : "—"} />
-        <MetricCard label="Paid-In Capital" value={formatCurrency(m.grossPaidIn)} sub={formatPercent(m.pctCalled) + " called"} />
-        <MetricCard label="Total Distributions" value={formatCurrency(m.grossDistributions)} />
+        <MetricCard label="Gross Paid-In" value={formatCurrency(m.grossPaidIn)} sub={formatPercent(m.pctCalled) + " called"} />
+        <MetricCard label="LP Paid-In" value={m.lpPaidIn > 0 ? formatCurrency(m.lpPaidIn) : "—"} />
       </div>
       {/* Row 2: Multiples */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-        <MetricCard label="Gross TVPI" value={formatMultiple(m.grossTvpi)} />
-        <MetricCard label="Net TVPI" value={m.netNav > 0 ? formatMultiple(m.netTvpi) : "—"} />
-        <MetricCard label="DPI" value={formatMultiple(m.dpi)} />
-        <MetricCard label="RVPI" value={formatMultiple(m.rvpi)} />
+        <MetricCard label="Gross TVPI" value={formatMultiple(m.grossTvpi)} sub={`DPI ${formatMultiple(m.grossDpi)} + RVPI ${formatMultiple(m.grossRvpi)}`} />
+        <MetricCard label="Net TVPI" value={m.lpPaidIn > 0 ? formatMultiple(m.netTvpi) : "—"} sub={m.lpPaidIn > 0 ? `DPI ${formatMultiple(m.netDpi)} + RVPI ${formatMultiple(m.netRvpi)}` : undefined} />
+        <MetricCard label="Gross Distributions" value={formatCurrency(m.grossDistributions)} />
+        <MetricCard label="LP Distributions" value={m.lpDistributions > 0 ? formatCurrency(m.lpDistributions) : "—"} />
         <MetricCard label="Total Commitment" value={formatCurrency(m.totalCommitment)} />
-        <MetricCard label="Net Paid-In" value={m.netPaidIn > 0 ? formatCurrency(m.netPaidIn) : "—"} />
+        <MetricCard label="% Called" value={formatPercent(m.pctCalled)} />
       </div>
     </div>
   );

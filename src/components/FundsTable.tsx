@@ -36,12 +36,16 @@ const FundsTable = ({ data }: FundsTableProps) => {
             const dist = Number(r.distributions_to_date || 0);
             const nav = Number(r.reported_nav || 0);
             const tvpi = called > 0 ? (dist + nav) / called : 0;
+            const dpi = called > 0 ? dist / called : 0;
+            const rvpi = called > 0 ? nav / called : 0;
+            const tvpiValid = called === 0 || Math.abs(tvpi - (dpi + rvpi)) < 0.0001;
             const irr = r.reported_gross_irr;
             return (
               <tr key={i} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
                 <td className="p-3">
                   <div className="font-medium text-foreground">{fund.fund_name || "—"}</div>
                   <div className="text-xs text-muted-foreground">{fund.strategy || ""} · {fund.vintage_year || ""}</div>
+                  {!tvpiValid && <div className="text-xs text-destructive mt-0.5">⚠ TVPI ≠ DPI + RVPI</div>}
                 </td>
                 <td className="p-3 text-right font-mono text-foreground">{fmt(Number(fund.commitment_amount || 0))}</td>
                 <td className="p-3 text-right font-mono text-foreground">{fmt(called)}</td>
