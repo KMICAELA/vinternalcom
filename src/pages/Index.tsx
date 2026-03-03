@@ -7,6 +7,7 @@ import IncompleteDataWarning from "@/components/IncompleteDataWarning";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { fundSummary } from "@/data/portfolioData";
 import { useQuarters, useFundReportStatuses } from "@/hooks/useQuarters";
+import ChatWidget from "@/components/ChatWidget";
 
 const Index = () => {
   const { data: quarters = [], isLoading } = useQuarters();
@@ -82,6 +83,7 @@ const Index = () => {
           </p>
         </footer>
       </main>
+      <ChatWidget />
     </div>
   );
 };
