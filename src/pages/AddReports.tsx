@@ -17,23 +17,12 @@ const AddReports = () => {
   const { toast } = useToast();
   const { data: quarters = [], isLoading } = useQuarters();
 
-  // Determine the next quarter
+  // Work with the current (latest) quarter
   const currentQuarter = quarters.find((q) => q.is_current) || quarters[0];
-  const nextQuarterLabel = currentQuarter ? getNextQuarterLabel(currentQuarter.label) : "Q4 2025";
-  const existingNextQuarter = quarters.find((q) => q.label === nextQuarterLabel);
-
-  // Check if current quarter is complete
   const { data: currentStatuses = [] } = useFundReportStatuses(currentQuarter?.id);
-  const currentQuarterComplete = currentStatuses.length > 0 && currentStatuses.every((s) => s.status === "uploaded");
-
-  // If the next quarter already exists, use its statuses
-  const { data: existingStatuses = [] } = useFundReportStatuses(existingNextQuarter?.id);
 
   const [stagedFiles, setStagedFiles] = useState<Record<string, StagedFile>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const createQuarter = useCreateNextQuarter();
-  const updateStatus = useUpdateReportStatus();
 
   const handleFileSelect = useCallback((fundName: string, file: File | null) => {
     if (!file) {
@@ -57,23 +46,11 @@ const AddReports = () => {
       return;
     }
 
+    if (!currentQuarter) return;
+    const quarterId = currentQuarter.id;
+
     setIsSubmitting(true);
     try {
-      let quarterId = existingNextQuarter?.id;
-
-      // Create the quarter if it doesn't exist
-      if (!quarterId && currentQuarter) {
-        const newQuarter = await createQuarter.mutateAsync({
-          label: nextQuarterLabel,
-          sortOrder: currentQuarter.sort_order + 1,
-          funds: FUND_NAMES,
-        });
-        quarterId = newQuarter.id;
-      }
-
-      if (!quarterId) throw new Error("Could not determine quarter ID");
-
-      // Upload each file to storage and mark as uploaded
       for (const { file, fundName } of filesToUpload) {
         const filePath = `${quarterId}/${fundName.replace(/[^a-zA-Z0-9]/g, "_")}/${file.name}`;
         const { error: uploadError } = await supabase.storage
@@ -85,23 +62,17 @@ const AddReports = () => {
           throw uploadError;
         }
 
-        // Find the status record and mark uploaded
-        // Re-fetch statuses since quarter may have just been created
-        const { data: statuses } = await supabase
-          .from("fund_report_statuses")
-          .select("*")
-          .eq("quarter_id", quarterId)
-          .eq("fund_name", fundName);
-
-        if (statuses && statuses.length > 0) {
+        // Mark as uploaded
+        const status = currentStatuses.find((s) => s.fund_name === fundName);
+        if (status) {
           await supabase
             .from("fund_report_statuses")
             .update({ status: "uploaded", uploaded_at: new Date().toISOString() })
-            .eq("id", statuses[0].id);
+            .eq("id", status.id);
         }
       }
 
-      toast({ title: "Reports uploaded", description: `${filesToUpload.length} report(s) uploaded for ${nextQuarterLabel}.` });
+      toast({ title: "Reports uploaded", description: `${filesToUpload.length} report(s) uploaded for ${currentQuarter.label}.` });
       navigate("/");
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message || "An error occurred.", variant: "destructive" });
@@ -117,45 +88,6 @@ const AddReports = () => {
       </div>
     );
   }
-
-  // Block if current quarter is not complete
-  if (!currentQuarterComplete) {
-    const pendingFunds = currentStatuses.filter((s) => s.status === "pending").map((s) => s.fund_name);
-    return (
-      <div className="min-h-screen bg-background">
-        <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
-          <div className="max-w-[800px] mx-auto px-6 py-4 flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/")} className="text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <div>
-              <h1 className="text-lg font-semibold text-foreground">Add Reports — {nextQuarterLabel}</h1>
-              <p className="text-xs text-muted-foreground">Upload fund reports for the new quarter</p>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-[800px] mx-auto px-6 py-12">
-          <div className="rounded-lg border border-warning/30 bg-warning/5 p-6 text-center space-y-4">
-            <AlertTriangle className="h-8 w-8 text-warning mx-auto" />
-            <h2 className="text-lg font-semibold text-foreground">Complete {currentQuarter?.label} first</h2>
-            <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              All reports for {currentQuarter?.label} must be uploaded before you can add reports for {nextQuarterLabel}.
-            </p>
-            <div className="space-y-1 mt-4">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Pending reports</p>
-              {pendingFunds.map((name) => (
-                <p key={name} className="text-sm text-warning">{name}</p>
-              ))}
-            </div>
-            <Button variant="outline" onClick={() => navigate("/")} className="mt-4">
-              Back to Dashboard
-            </Button>
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   const stagedCount = Object.keys(stagedFiles).length;
 
   return (
@@ -168,8 +100,8 @@ const AddReports = () => {
               <ArrowLeft className="h-4 w-4" />
             </Button>
             <div>
-              <h1 className="text-lg font-semibold text-foreground">Add Reports — {nextQuarterLabel}</h1>
-              <p className="text-xs text-muted-foreground">Upload fund reports for the new quarter</p>
+              <h1 className="text-lg font-semibold text-foreground">Add Reports — {currentQuarter?.label}</h1>
+              <p className="text-xs text-muted-foreground">Upload fund reports for this quarter</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -194,7 +126,7 @@ const AddReports = () => {
         <div className="space-y-3">
           {FUND_NAMES.map((fundName) => {
             const staged = stagedFiles[fundName];
-            const alreadyUploaded = existingStatuses.find((s) => s.fund_name === fundName && s.status === "uploaded");
+            const alreadyUploaded = currentStatuses.find((s) => s.fund_name === fundName && s.status === "uploaded");
 
             return (
               <div
