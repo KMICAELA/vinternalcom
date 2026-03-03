@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import DashboardHeader from "@/components/DashboardHeader";
 import SummaryTab from "@/components/SummaryTab";
 import UnderlyingPortfolioTab from "@/components/UnderlyingPortfolioTab";
@@ -13,12 +14,31 @@ const Index = () => {
   const { data: quarters = [], isLoading } = useQuarters();
   const [selectedQuarterId, setSelectedQuarterId] = useState<string>("");
 
-  // Auto-select current quarter on load
+  // Auto-select the latest quarter with complete data on load
+  const [quarterStatuses, setQuarterStatuses] = useState<Record<string, boolean>>({});
+  
   useEffect(() => {
-    if (quarters.length > 0 && !selectedQuarterId) {
-      const current = quarters.find((q) => q.is_current) || quarters[0];
-      setSelectedQuarterId(current.id);
-    }
+    if (quarters.length === 0 || selectedQuarterId) return;
+    
+    // Fetch statuses for all quarters to find the latest complete one
+    const fetchAllStatuses = async () => {
+      const statusMap: Record<string, boolean> = {};
+      for (const q of quarters) {
+        const { data } = await supabase
+          .from("fund_report_statuses")
+          .select("status")
+          .eq("quarter_id", q.id);
+        const allUploaded = data ? data.length > 0 && data.every((s) => s.status === "uploaded") : false;
+        statusMap[q.id] = allUploaded;
+      }
+      setQuarterStatuses(statusMap);
+      
+      // quarters are already sorted by sort_order desc, so first complete one is latest
+      const latestComplete = quarters.find((q) => statusMap[q.id]);
+      setSelectedQuarterId(latestComplete?.id || quarters[0].id);
+    };
+    
+    fetchAllStatuses();
   }, [quarters, selectedQuarterId]);
 
   const selectedQuarter = quarters.find((q) => q.id === selectedQuarterId);
