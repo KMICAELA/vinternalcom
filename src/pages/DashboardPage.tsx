@@ -4,7 +4,9 @@ import { formatCurrency, formatMultiple, formatPercent, computeFundMetrics } fro
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { Building2, Target, TrendingUp, DollarSign, Layers, Globe } from "lucide-react";
+import { Building2, Target, TrendingUp, DollarSign, Layers, Globe, Plus } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const COLORS = [
@@ -40,6 +42,7 @@ function MetricCard({ label, value, sub, icon: Icon, highlight }: {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const activeQuarter = useActiveQuarter();
   const { data: funds = [], isLoading } = useFunds();
   const { data: allFS = [] } = useAllFundFS(activeQuarter.date);
@@ -124,9 +127,15 @@ export default function DashboardPage() {
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">TWH Americas Fund I, LP · {activeQuarter.quarter} Overview</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">TWH Americas Fund I, LP · {activeQuarter.quarter} Overview</p>
+        </div>
+        <Button size="sm" variant="outline" className="gap-2 border-border" onClick={() => navigate("/add-quarterly-data")}>
+          <Plus className="h-3.5 w-3.5" />
+          Add Reports
+        </Button>
       </div>
 
       {/* Top Metrics */}
