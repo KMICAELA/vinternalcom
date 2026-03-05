@@ -183,7 +183,7 @@ export default function DashboardPage() {
         <MetricCard label="Net TVPI" value={cm.netTvpi > 0 ? formatMultiple(cm.netTvpi) : "—"} highlight />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard label="Contributed" value={cm.totalCapitalCalls > 0 ? formatCurrency(cm.totalCapitalCalls + cm.directsCost) : "—"} icon={TrendingUp} sub={cm.totalCapitalCalls > 0 ? `${formatPercent((cm.totalCapitalCalls + cm.directsCost) / (totalCommitment + cm.directsCost))} deployed` : "No activity yet"} />
+        <MetricCard label="Contributed" value={cm.totalCapitalCalls > 0 ? formatCurrency(cm.totalCapitalCalls) : "—"} icon={TrendingUp} sub={cm.totalCapitalCalls > 0 ? `${formatPercent(cm.totalCapitalCalls / (totalCommitment + cm.directsCost))} deployed` : "No activity yet"} />
         <MetricCard label="TWH NAV" value={cm.totalNav > 0 ? formatCurrency(cm.totalNav) : "—"} icon={Layers} sub={cm.totalNav > 0 ? undefined : "Upload FS to populate"} />
         <MetricCard label="Distributions" value={cm.totalDistributions > 0 ? formatCurrency(cm.totalDistributions) : "—"} />
         <MetricCard label="Unrealized Value" value={cm.twhFmvFromFunds + cm.directsFmv > 0 ? formatCurrency(cm.twhFmvFromFunds + cm.directsFmv) : "—"} />
