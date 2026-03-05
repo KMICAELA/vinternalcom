@@ -195,6 +195,7 @@ export default function DashboardPage() {
             <thead>
               <tr className="bg-surface-1 text-muted-foreground">
                 <th className="text-left px-4 py-2 font-medium">Fund</th>
+                <th className="text-left px-4 py-2 font-medium">Start Date</th>
                 <th className="text-left px-4 py-2 font-medium">Theme</th>
                 <th className="text-left px-4 py-2 font-medium">Geography</th>
                 <th className="text-right px-4 py-2 font-medium">Vintage</th>
@@ -207,9 +208,14 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {[...fundMetrics].sort((a, b) => (a.fund.start_date || '').localeCompare(b.fund.start_date || '')).map(({ fund, metrics, hasFS }: any) => (
+              {[...fundMetrics].sort((a, b) => {
+                const aDate = a.fund.start_date || 'zzzz';
+                const bDate = b.fund.start_date || 'zzzz';
+                return aDate.localeCompare(bDate);
+              }).map(({ fund, metrics, hasFS }: any) => (
                 <tr key={fund.id} className="border-t border-border table-row-hover">
                   <td className="px-4 py-2 font-medium text-foreground">{fund.fund_name}</td>
+                  <td className="px-4 py-2 text-muted-foreground font-mono text-xs">{fund.start_date || '—'}</td>
                   <td className="px-4 py-2 text-muted-foreground">{fund.theme || '—'}</td>
                   <td className="px-4 py-2 text-muted-foreground">{fund.geography || '—'}</td>
                   <td className="px-4 py-2 text-right font-mono">{fund.vintage_year || '—'}</td>
@@ -230,7 +236,7 @@ export default function DashboardPage() {
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-1 font-medium">
                 <td className="px-4 py-2">Total ({funds.length} funds)</td>
-                <td colSpan={3} />
+                <td colSpan={4} />
                 <td className="px-4 py-2 text-right font-mono">{formatCurrency(totalCommitment)}</td>
                 <td />
                 <td className="px-4 py-2 text-right font-mono">100.0%</td>
