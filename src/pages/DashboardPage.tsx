@@ -194,10 +194,10 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      {/* Fund Summary Table */}
+      {/* Fund Investments */}
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-medium">Fund Exposure Summary</h3>
+          <h3 className="text-sm font-medium">Fund Investments ({funds.length})</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -210,10 +210,10 @@ export default function DashboardPage() {
                 <th className="text-right px-4 py-2 font-medium">Vintage</th>
                 <th className="text-right px-4 py-2 font-medium">Commitment</th>
                 <th className="text-right px-4 py-2 font-medium">TWH %</th>
-                <th className="text-right px-4 py-2 font-medium">% of Fund</th>
+                <th className="text-right px-4 py-2 font-medium">% of Portfolio</th>
                 <th className="text-right px-4 py-2 font-medium">TWH NAV</th>
                 <th className="text-right px-4 py-2 font-medium">TVPI</th>
-                <th className="text-center px-4 py-2 font-medium">FS Status</th>
+                <th className="text-center px-4 py-2 font-medium">FS</th>
               </tr>
             </thead>
             <tbody>
@@ -255,6 +255,57 @@ export default function DashboardPage() {
             </tfoot>
           </table>
         </div>
+      </div>
+
+      {/* Direct Investments */}
+      <div className="border border-border rounded-lg overflow-hidden bg-card">
+        <div className="px-4 py-3 border-b border-border">
+          <h3 className="text-sm font-medium">Direct Investments ({directs.length})</h3>
+        </div>
+        {directs.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-surface-1 text-muted-foreground">
+                  <th className="text-left px-4 py-2 font-medium">Company</th>
+                  <th className="text-left px-4 py-2 font-medium">Date</th>
+                  <th className="text-left px-4 py-2 font-medium">Round</th>
+                  <th className="text-left px-4 py-2 font-medium">Instrument</th>
+                  <th className="text-left px-4 py-2 font-medium">Strategy</th>
+                  <th className="text-left px-4 py-2 font-medium">Geography</th>
+                  <th className="text-right px-4 py-2 font-medium">Cost Basis</th>
+                  <th className="text-right px-4 py-2 font-medium">Ownership</th>
+                  <th className="text-left px-4 py-2 font-medium">Co-Investors</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...directs].sort((a: any, b: any) => (a.investment_date || 'zzzz').localeCompare(b.investment_date || 'zzzz')).map((d: any) => (
+                  <tr key={d.id} className="border-t border-border table-row-hover">
+                    <td className="px-4 py-2 font-medium text-foreground">{d.company_name}</td>
+                    <td className="px-4 py-2 text-muted-foreground font-mono text-xs">{d.investment_date || '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{d.round || '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{d.instrument || '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{d.strategy || '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{d.geography || '—'}</td>
+                    <td className="px-4 py-2 text-right font-mono">{formatCurrency(Number(d.cost_basis))}</td>
+                    <td className="px-4 py-2 text-right font-mono">{d.ownership_percentage ? formatPercent(Number(d.ownership_percentage)) : '—'}</td>
+                    <td className="px-4 py-2 text-muted-foreground truncate max-w-[200px]">{d.co_investors || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-border bg-surface-1 font-medium">
+                  <td className="px-4 py-2">Total ({directs.length} directs)</td>
+                  <td colSpan={5} />
+                  <td className="px-4 py-2 text-right font-mono">{formatCurrency(directsCost)}</td>
+                  <td colSpan={2} />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
+          <div className="px-4 py-8 text-center text-xs text-muted-foreground">No direct investments yet</div>
+        )}
       </div>
 
       {/* Footer */}
