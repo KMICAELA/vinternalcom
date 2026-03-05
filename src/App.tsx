@@ -11,6 +11,7 @@ import DirectsPage from "./pages/DirectsPage";
 import ConsolidatedPage from "./pages/ConsolidatedPage";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
+import AddQuarterlyData from "./pages/AddQuarterlyData";
 
 const queryClient = new QueryClient();
 
@@ -29,6 +30,7 @@ const App = () => (
             <Route path="/consolidated" element={<ConsolidatedPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
+          <Route path="/add-quarterly-data" element={<AddQuarterlyData />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
