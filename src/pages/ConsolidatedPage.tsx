@@ -12,55 +12,34 @@ export default function ConsolidatedPage() {
   const { data: quarterlyHistory = [] } = useQuarterlyHistory();
   const cm = useConsolidatedMetrics();
 
-  // Fetch all fund cashflows for ledger display
-  const { data: allCashflows = [] } = useQuery({
-    queryKey: ["all-fund-cashflows"],
+  // Fetch LP-level cashflows for ledger display (actual wires)
+  const { data: lpCashflows = [] } = useQuery({
+    queryKey: ["lp-cashflows"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("fund_cashflows").select("*, fund:funds(fund_name)").order("cashflow_date");
+      const { data, error } = await supabase.from("fund_level_cashflows").select("*").order("cashflow_date");
       if (error) throw error;
       return data || [];
     },
   });
 
-  const { data: directs = [] } = useQuery({
-    queryKey: ["direct-investments"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("direct_investments").select("*").order("company_name");
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Build ledger for display
+  // Build ledger from LP-level wires
   const ledger = useMemo(() => {
     const entries: any[] = [];
-    for (const cf of allCashflows) {
-      const isCall = (cf as any).cashflow_type?.startsWith("Capital Call") || cf.capital_deployed > 0;
-      const amount = Number(cf.capital_deployed || 0) + Number(cf.distribution_received || 0);
+    for (const cf of lpCashflows as any[]) {
+      const isCall = cf.type === "capital_call";
+      const amount = Number(cf.amount || 0);
       entries.push({
         date: cf.cashflow_date,
-        source: (cf as any).fund?.fund_name || '—',
-        type: (cf as any).cashflow_type || (isCall ? 'Capital Call' : 'Distribution'),
+        source: cf.portfolio_name || cf.description || '—',
+        type: isCall ? 'Capital Call' : 'Distribution',
         contribution: isCall ? amount : 0,
         distribution: !isCall ? amount : 0,
         net_cf: isCall ? -amount : amount,
       });
     }
-    for (const d of directs) {
-      if ((d as any).investment_date && (d as any).cost_basis > 0) {
-        entries.push({
-          date: (d as any).investment_date,
-          source: (d as any).company_name,
-          type: 'Direct Investment',
-          contribution: Number((d as any).cost_basis),
-          distribution: 0,
-          net_cf: -Number((d as any).cost_basis),
-        });
-      }
-    }
     entries.sort((a, b) => a.date.localeCompare(b.date));
     return entries;
-  }, [allCashflows, directs]);
+  }, [lpCashflows]);
 
   // Chart data from quarterly history — only show locked quarters with real data
   const lockedQuarters = quarterlyHistory.filter((q: any) => q.locked);
@@ -84,7 +63,7 @@ export default function ConsolidatedPage() {
           { label: "Net IRR", value: formatIrr(cm.netIrr), highlight: true },
           { label: "Gross TVPI", value: formatMultiple(cm.grossTvpi) },
           { label: "Gross IRR", value: formatIrr(cm.grossIrr) },
-          { label: "Total Contributed", value: formatCurrency(cm.totalCapitalCalls + cm.directsCost) },
+          { label: "Total Contributed", value: formatCurrency(cm.totalCapitalCalls) },
           { label: "Total Distributions", value: formatCurrency(cm.totalDistributions) },
           { label: "Total NAV", value: formatCurrency(cm.totalNav) },
           { label: "Unrealized (FMV)", value: formatCurrency(cm.twhFmvFromFunds + cm.directsFmv) },
