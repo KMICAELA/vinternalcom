@@ -129,6 +129,7 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle }: {
     reportNav,
     reportCalled,
     reportDist,
+    ownershipPct: Number(fund.ownership_percentage || 0),
   });
 
   const [newCf, setNewCf] = useState({ cashflow_date: "", cashflow_type: "Capital Call — Investment", amount: 0, description: "" });
@@ -164,7 +165,7 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle }: {
         <TableCell className="text-muted-foreground">{(fund as any).start_date || '—'}</TableCell>
         <TableCell className="text-right font-mono">{formatCurrency(Number(fund.commitment_amount))}</TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).currency || 'USD'}</TableCell>
-        <TableCell className="text-right font-mono">{formatPercent(metrics.twhPct)}</TableCell>
+        <TableCell className="text-right font-mono">{metrics.twhPct > 0 ? formatPercent(metrics.twhPct) : '—'}</TableCell>
         <TableCell className="text-right font-mono">{formatCurrency(metrics.twhNav)}</TableCell>
         <TableCell className="text-right font-mono">{formatMultiple(metrics.tvpi)}</TableCell>
         <TableCell className="text-right font-mono">{formatIrr(metrics.irr)}</TableCell>
