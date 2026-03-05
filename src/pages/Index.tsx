@@ -81,7 +81,7 @@ const Index = () => {
             </Select>
             <Button size="sm" variant="outline" className="gap-2 border-border" onClick={() => navigate("/add-quarterly-data")}>
               <Plus className="h-3.5 w-3.5" />
-              Add Data
+              Add Reports
             </Button>
           </div>
         </div>
@@ -119,7 +119,7 @@ const Index = () => {
             <CashflowsTable data={lpCashflows} />
           </TabsContent>
           <TabsContent value="underlying">
-            <InventoryTable data={underlyingPortfolio} />
+            <InventoryTable data={underlyingPortfolio} quarterDate={selectedQuarter} />
           </TabsContent>
           <TabsContent value="inventory">
             <UnderlyingPortfolioTable data={underlyingTransactions} />
