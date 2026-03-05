@@ -62,8 +62,9 @@ export default function ConsolidatedPage() {
     return entries;
   }, [allCashflows, directs]);
 
-  // Chart data from quarterly history
-  const chartData = quarterlyHistory.map((q: any) => ({
+  // Chart data from quarterly history — only show locked quarters with real data
+  const lockedQuarters = quarterlyHistory.filter((q: any) => q.locked);
+  const chartData = lockedQuarters.map((q: any) => ({
     quarter: q.quarter,
     netTvpi: Number(q.net_tvpi),
     grossTvpi: Number(q.gross_tvpi),
@@ -96,7 +97,7 @@ export default function ConsolidatedPage() {
       </div>
 
       {/* TVPI Chart */}
-      {chartData.length > 0 && (
+      {chartData.length > 0 ? (
         <div className="border border-border rounded-lg p-4 bg-card">
           <h3 className="text-sm font-medium mb-4">TVPI Over Time</h3>
           <ResponsiveContainer width="100%" height={250}>
@@ -110,6 +111,10 @@ export default function ConsolidatedPage() {
               <Line type="monotone" dataKey="grossTvpi" stroke="hsl(var(--info))" name="Gross TVPI" strokeWidth={2} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="border border-border rounded-lg p-6 bg-card text-center">
+          <p className="text-sm text-muted-foreground">No historical data yet — lock quarters in Settings to build this chart.</p>
         </div>
       )}
 
