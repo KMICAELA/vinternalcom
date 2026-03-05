@@ -278,6 +278,7 @@ export type Database = {
         Row: {
           carry_percentage: number
           commitment_amount: number
+          company_industries: string | null
           created_at: string
           currency: string
           fund_name: string
@@ -288,12 +289,15 @@ export type Database = {
           ownership_percentage: number
           start_date: string | null
           strategy: string | null
+          target_industries: string | null
+          theme: string | null
           updated_at: string
           vintage_year: number | null
         }
         Insert: {
           carry_percentage?: number
           commitment_amount?: number
+          company_industries?: string | null
           created_at?: string
           currency?: string
           fund_name: string
@@ -304,12 +308,15 @@ export type Database = {
           ownership_percentage?: number
           start_date?: string | null
           strategy?: string | null
+          target_industries?: string | null
+          theme?: string | null
           updated_at?: string
           vintage_year?: number | null
         }
         Update: {
           carry_percentage?: number
           commitment_amount?: number
+          company_industries?: string | null
           created_at?: string
           currency?: string
           fund_name?: string
@@ -320,6 +327,8 @@ export type Database = {
           ownership_percentage?: number
           start_date?: string | null
           strategy?: string | null
+          target_industries?: string | null
+          theme?: string | null
           updated_at?: string
           vintage_year?: number | null
         }

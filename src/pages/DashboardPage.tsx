@@ -3,7 +3,7 @@ import { useFunds, useAllFundFS, useDirectInvestments, useActiveQuarter } from "
 import { formatCurrency, formatMultiple, formatPercent, computeFundMetrics } from "@/lib/calcEngine";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Building2, Target, TrendingUp, DollarSign, Layers, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -91,33 +91,20 @@ export default function DashboardPage() {
   const numFunds = funds.length;
   const numDirects = directs.length;
 
-  // Strategy breakdown
-  const strategyData = useMemo(() => {
+  // Build breakdown helper
+  const buildBreakdown = (field: string) => {
     const map: Record<string, number> = {};
     for (const f of funds) {
-      const strategy = (f as any).strategy || "Other";
-      map[strategy] = (map[strategy] || 0) + Number(f.commitment_amount);
+      const val = (f as any)[field] || "Other";
+      map[val] = (map[val] || 0) + Number(f.commitment_amount);
     }
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [funds]);
+  };
 
-  // Geography breakdown
-  const geoData = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const f of funds) {
-      const geo = (f as any).geography || "Other";
-      map[geo] = (map[geo] || 0) + Number(f.commitment_amount);
-    }
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [funds]);
-
-  // Fund allocation data (for bar chart)
-  const fundAllocation = useMemo(() => {
-    return funds.map((f: any) => ({
-      name: f.fund_name.length > 20 ? f.fund_name.substring(0, 18) + "…" : f.fund_name,
-      commitment: Number(f.commitment_amount),
-    })).sort((a: any, b: any) => b.commitment - a.commitment);
-  }, [funds]);
+  const themeData = useMemo(() => buildBreakdown("theme"), [funds]);
+  const companyIndData = useMemo(() => buildBreakdown("company_industries"), [funds]);
+  const targetIndData = useMemo(() => buildBreakdown("target_industries"), [funds]);
+  const geoData = useMemo(() => buildBreakdown("geography"), [funds]);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
@@ -153,98 +140,49 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Strategy Allocation */}
-        <div className="border border-border rounded-lg p-4 bg-card">
-          <h3 className="text-sm font-medium mb-3">Strategy Allocation</h3>
-          {strategyData.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width={140} height={140}>
-                <PieChart>
-                  <Pie
-                    data={strategyData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={35}
-                    outerRadius={65}
-                    dataKey="value"
-                    stroke="hsl(var(--background))"
-                    strokeWidth={2}
-                  >
-                    {strategyData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-1.5">
-                {strategyData.map((s, i) => (
-                  <div key={s.name} className="flex items-center gap-2 text-xs">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-muted-foreground truncate flex-1">{s.name}</span>
-                    <span className="font-mono text-foreground">{formatPercent(s.value / totalCommitment)}</span>
-                  </div>
-                ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { title: "Theme", data: themeData, offset: 0 },
+          { title: "Company Industry(ies)", data: companyIndData, offset: 3 },
+          { title: "Target Industry(ies)", data: targetIndData, offset: 6 },
+          { title: "Geography Allocation", data: geoData, offset: 9 },
+        ].map(({ title, data, offset }) => (
+          <div key={title} className="border border-border rounded-lg p-4 bg-card">
+            <h3 className="text-sm font-medium mb-3">{title}</h3>
+            {data.length > 0 ? (
+              <div className="flex flex-col items-center gap-3">
+                <ResponsiveContainer width={130} height={130}>
+                  <PieChart>
+                    <Pie
+                      data={data}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={58}
+                      dataKey="value"
+                      stroke="hsl(var(--background))"
+                      strokeWidth={2}
+                    >
+                      {data.map((_, i) => (
+                        <Cell key={i} fill={COLORS[(i + offset) % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<CustomTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="w-full space-y-1.5">
+                  {data.map((s, i) => (
+                    <div key={s.name} className="flex items-center gap-2 text-xs">
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[(i + offset) % COLORS.length] }} />
+                      <span className="text-muted-foreground truncate flex-1">{s.name}</span>
+                      <span className="font-mono text-foreground">{formatPercent(s.value / totalCommitment)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : <p className="text-xs text-muted-foreground">No fund data</p>}
-        </div>
-
-        {/* Geography Allocation */}
-        <div className="border border-border rounded-lg p-4 bg-card">
-          <h3 className="text-sm font-medium mb-3">Geography Allocation</h3>
-          {geoData.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width={140} height={140}>
-                <PieChart>
-                  <Pie
-                    data={geoData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={35}
-                    outerRadius={65}
-                    dataKey="value"
-                    stroke="hsl(var(--background))"
-                    strokeWidth={2}
-                  >
-                    {geoData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[(i + 3) % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="flex-1 space-y-1.5">
-                {geoData.map((g, i) => (
-                  <div key={g.name} className="flex items-center gap-2 text-xs">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[(i + 3) % COLORS.length] }} />
-                    <span className="text-muted-foreground truncate flex-1">{g.name}</span>
-                    <span className="font-mono text-foreground">{formatPercent(g.value / totalCommitment)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : <p className="text-xs text-muted-foreground">No fund data</p>}
-        </div>
-
-        {/* Fund Commitments Bar Chart */}
-        <div className="border border-border rounded-lg p-4 bg-card">
-          <h3 className="text-sm font-medium mb-3">Commitment by Fund</h3>
-          {fundAllocation.length > 0 ? (
-            <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={fundAllocation} layout="vertical" margin={{ left: 0, right: 10 }}>
-                <XAxis type="number" hide />
-                <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
-                <Tooltip
-                  formatter={(value: number) => formatCurrency(value)}
-                  contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 11 }}
-                />
-                <Bar dataKey="commitment" fill="hsl(var(--primary))" radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <p className="text-xs text-muted-foreground">No fund data</p>}
-        </div>
+            ) : <p className="text-xs text-muted-foreground">No data</p>}
+          </div>
+        ))}
       </div>
 
       {/* Fund Summary Table */}
@@ -257,7 +195,7 @@ export default function DashboardPage() {
             <thead>
               <tr className="bg-surface-1 text-muted-foreground">
                 <th className="text-left px-4 py-2 font-medium">Fund</th>
-                <th className="text-left px-4 py-2 font-medium">Strategy</th>
+                <th className="text-left px-4 py-2 font-medium">Theme</th>
                 <th className="text-left px-4 py-2 font-medium">Geography</th>
                 <th className="text-right px-4 py-2 font-medium">Vintage</th>
                 <th className="text-right px-4 py-2 font-medium">Commitment</th>
@@ -272,7 +210,7 @@ export default function DashboardPage() {
               {fundMetrics.map(({ fund, metrics, hasFS }: any) => (
                 <tr key={fund.id} className="border-t border-border table-row-hover">
                   <td className="px-4 py-2 font-medium text-foreground">{fund.fund_name}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{fund.strategy || '—'}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{fund.theme || '—'}</td>
                   <td className="px-4 py-2 text-muted-foreground">{fund.geography || '—'}</td>
                   <td className="px-4 py-2 text-right font-mono">{fund.vintage_year || '—'}</td>
                   <td className="px-4 py-2 text-right font-mono">{formatCurrency(Number(fund.commitment_amount))}</td>
