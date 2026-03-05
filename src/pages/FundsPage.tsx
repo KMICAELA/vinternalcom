@@ -1,15 +1,14 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Upload, Plus, Trash2, Save, FileText, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -25,28 +24,20 @@ export default function FundsPage() {
   const { data: funds = [], isLoading } = useFunds();
   const activeQuarter = useActiveQuarter();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
-  const [addFundOpen, setAddFundOpen] = useState(false);
-  const [newFund, setNewFund] = useState({ fund_name: "", start_date: "", commitment_amount: 0, currency: "USD", theme: "", company_industries: "", target_industries: "", geography: "" });
-  const [uploadFundId, setUploadFundId] = useState<string | null>(null);
+  const [addReportsOpen, setAddReportsOpen] = useState(false);
 
-  const handleAddFund = async () => {
-    if (!newFund.fund_name) return;
-    const { error } = await supabase.from("funds").insert({
-      fund_name: newFund.fund_name,
-      start_date: newFund.start_date || null,
-      commitment_amount: newFund.commitment_amount,
-      currency: newFund.currency,
-      theme: newFund.theme || null,
-      company_industries: newFund.company_industries || null,
-      target_industries: newFund.target_industries || null,
-      geography: newFund.geography || null,
-    } as any);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Fund added");
-    qc.invalidateQueries({ queryKey: ["funds"] });
-    setAddFundOpen(false);
-    setNewFund({ fund_name: "", start_date: "", commitment_amount: 0, currency: "USD", theme: "", company_industries: "", target_industries: "", geography: "" });
-  };
+  // Compute next quarter after active quarter
+  const nextQuarter = useMemo(() => {
+    const d = new Date(activeQuarter.date);
+    d.setMonth(d.getMonth() + 3);
+    const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+    d.setMonth(qMonth);
+    d.setDate(new Date(d.getFullYear(), qMonth + 1, 0).getDate());
+    const qNum = Math.floor(qMonth / 3) + 1;
+    const label = `Q${qNum} ${d.getFullYear()}`;
+    const dateStr = d.toISOString().split("T")[0];
+    return { label, date: dateStr };
+  }, [activeQuarter.date]);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
@@ -57,8 +48,8 @@ export default function FundsPage() {
           <h1 className="text-xl font-semibold text-foreground">Funds</h1>
           <p className="text-sm text-muted-foreground">Fund registry & financial statement management</p>
         </div>
-        <Button size="sm" onClick={() => setAddFundOpen(true)} className="gap-2">
-          <Plus className="h-3.5 w-3.5" /> Add Fund
+        <Button size="sm" onClick={() => setAddReportsOpen(true)} className="gap-2">
+          <Upload className="h-3.5 w-3.5" /> Add Reports
         </Button>
       </div>
 
@@ -76,8 +67,6 @@ export default function FundsPage() {
               <TableHead className="text-right">TWH NAV</TableHead>
               <TableHead className="text-right">TVPI</TableHead>
               <TableHead className="text-right">IRR</TableHead>
-              <TableHead>Last FS</TableHead>
-              <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -88,69 +77,19 @@ export default function FundsPage() {
                 quarterDate={activeQuarter.date}
                 isExpanded={expandedFund === fund.id}
                 onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
-                onUpload={() => setUploadFundId(fund.id)}
               />
             ))}
           </TableBody>
         </Table>
       </div>
 
-      {/* Add Fund Dialog */}
-      <Dialog open={addFundOpen} onOpenChange={setAddFundOpen}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Add Fund</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-sm text-muted-foreground">Fund Name</label>
-              <Input value={newFund.fund_name} onChange={e => setNewFund(p => ({ ...p, fund_name: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Start Date</label>
-              <Input type="date" value={newFund.start_date} onChange={e => setNewFund(p => ({ ...p, start_date: e.target.value }))} />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">TWH Commitment ($)</label>
-              <Input type="number" value={newFund.commitment_amount} onChange={e => setNewFund(p => ({ ...p, commitment_amount: Number(e.target.value) }))} />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Currency</label>
-              <Select value={newFund.currency} onValueChange={v => setNewFund(p => ({ ...p, currency: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD</SelectItem>
-                  <SelectItem value="EUR">EUR</SelectItem>
-                </SelectContent>
-            </Select>
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Theme</label>
-              <Input value={newFund.theme} onChange={e => setNewFund(p => ({ ...p, theme: e.target.value }))} placeholder="e.g. Climate Tech" />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Company Industry(ies)</label>
-              <Input value={newFund.company_industries} onChange={e => setNewFund(p => ({ ...p, company_industries: e.target.value }))} placeholder="e.g. SaaS, Fintech" />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Target Industry(ies)</label>
-              <Input value={newFund.target_industries} onChange={e => setNewFund(p => ({ ...p, target_industries: e.target.value }))} placeholder="e.g. Healthcare, Enterprise" />
-            </div>
-            <div>
-              <label className="text-sm text-muted-foreground">Geography</label>
-              <Input value={newFund.geography} onChange={e => setNewFund(p => ({ ...p, geography: e.target.value }))} placeholder="e.g. North America" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button onClick={handleAddFund}>Add Fund</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Upload FS Dialog */}
-      {uploadFundId && (
-        <FSUploadDialog
-          fundId={uploadFundId}
-          quarterDate={activeQuarter.date}
-          onClose={() => setUploadFundId(null)}
+      {/* Add Reports Dialog */}
+      {addReportsOpen && (
+        <AddReportsDialog
+          funds={funds}
+          quarterLabel={nextQuarter.label}
+          quarterDate={nextQuarter.date}
+          onClose={() => setAddReportsOpen(false)}
         />
       )}
     </div>
@@ -159,21 +98,18 @@ export default function FundsPage() {
 
 // ─── Fund Row with expandable capital activity ─────────────────────
 
-function FundRow({ fund, quarterDate, isExpanded, onToggle, onUpload }: {
-  fund: any; quarterDate: string; isExpanded: boolean; onToggle: () => void; onUpload: () => void;
+function FundRow({ fund, quarterDate, isExpanded, onToggle }: {
+  fund: any; quarterDate: string; isExpanded: boolean; onToggle: () => void;
 }) {
   const { data: fs } = useFundFinancialStatement(fund.id, quarterDate);
   const { data: allFundReports = [] } = useFundReports(quarterDate);
   const { data: cashflows = [] } = useFundCashflows(fund.id);
   const qc = useQueryClient();
 
-  // Find this fund's quarterly report (primary data source)
   const fundReport = allFundReports.find((r: any) => r.fund_id === fund.id);
-
   const fsData = fs?.extracted_data as any;
   const fundTotals = fsData?.fund_totals || {};
 
-  // Use quarterly report data as primary, FS as supplementary for cost/FMV
   const reportNav = Number(fundReport?.reported_nav || 0);
   const reportCalled = Number(fundReport?.capital_called_to_date || 0);
   const reportDist = Number(fundReport?.distributions_to_date || 0);
@@ -190,7 +126,6 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, onUpload }: {
       amount: Number(c.capital_deployed || 0) + Number(c.distribution_received || 0),
     })),
     reportDate: quarterDate,
-    // Pass quarterly report data so metrics can use it as override
     reportNav,
     reportCalled,
     reportDist,
@@ -233,17 +168,11 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, onUpload }: {
         <TableCell className="text-right font-mono">{formatCurrency(metrics.twhNav)}</TableCell>
         <TableCell className="text-right font-mono">{formatMultiple(metrics.tvpi)}</TableCell>
         <TableCell className="text-right font-mono">{formatIrr(metrics.irr)}</TableCell>
-        <TableCell className="text-muted-foreground text-xs">{fs?.confirmed ? quarterDate : '—'}</TableCell>
-        <TableCell>
-          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onUpload(); }} className="gap-1">
-            <Upload className="h-3.5 w-3.5" /> FS
-          </Button>
-        </TableCell>
       </TableRow>
 
       {isExpanded && (
         <TableRow>
-          <TableCell colSpan={11} className="bg-surface-1 p-0">
+          <TableCell colSpan={9} className="bg-surface-1 p-0">
             <div className="p-4 space-y-4">
               {/* Fund Classification */}
               <div>
@@ -361,93 +290,122 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, onUpload }: {
   );
 }
 
-// ─── FS Upload Dialog ──────────────────────────────────────────────
+// ─── Add Reports Dialog — upload FS for all funds for next quarter ──
 
-function FSUploadDialog({ fundId, quarterDate, onClose }: { fundId: string; quarterDate: string; onClose: () => void }) {
+function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
+  funds: any[]; quarterLabel: string; quarterDate: string; onClose: () => void;
+}) {
   const qc = useQueryClient();
-  const [file, setFile] = useState<File | null>(null);
-  const [extracting, setExtracting] = useState(false);
-  const [extractedData, setExtractedData] = useState<any>(null);
-  const [editing, setEditing] = useState(false);
+  const [uploadingFundId, setUploadingFundId] = useState<string | null>(null);
+  const [files, setFiles] = useState<Record<string, File>>({});
+  const [extractedMap, setExtractedMap] = useState<Record<string, any>>({});
+  const [confirmedSet, setConfirmedSet] = useState<Set<string>>(new Set());
+  const [extracting, setExtracting] = useState<string | null>(null);
 
-  const handleExtract = async () => {
+  const handleFileSelect = (fundId: string, file: File) => {
+    setFiles(prev => ({ ...prev, [fundId]: file }));
+  };
+
+  const handleExtract = async (fundId: string) => {
+    const file = files[fundId];
     if (!file) return;
-    setExtracting(true);
+    setExtracting(fundId);
     try {
-      // Upload file to storage
-      const filePath = `${fundId}/${quarterDate}/${file.name}`;
+      const filePath = `${quarterDate}/${fundId}/${file.name}`;
       const { error: uploadError } = await supabase.storage.from("fund-reports").upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
 
-      // Convert to base64 for AI extraction
       const arrayBuffer = await file.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
 
-      // Call edge function for extraction
       const { data, error } = await supabase.functions.invoke("extract-fund-fs", {
         body: { pdf_base64: base64, file_name: file.name },
       });
       if (error) throw error;
-      setExtractedData(data);
+      setExtractedMap(prev => ({ ...prev, [fundId]: data }));
     } catch (err: any) {
       toast.error(err.message || "Extraction failed");
     } finally {
-      setExtracting(false);
+      setExtracting(null);
     }
   };
 
-  const handleConfirm = async () => {
+  const handleConfirm = async (fundId: string) => {
+    const extractedData = extractedMap[fundId];
     if (!extractedData) return;
     const { error } = await supabase.from("fund_financial_statements").upsert({
       fund_id: fundId,
       quarter_date: quarterDate,
       extracted_data: extractedData,
       confirmed: true,
-      file_path: file?.name || null,
+      file_path: files[fundId]?.name || null,
     } as any, { onConflict: "fund_id,quarter_date" });
     if (error) { toast.error(error.message); return; }
-    toast.success("Financial statement saved");
+    setConfirmedSet(prev => new Set(prev).add(fundId));
+    toast.success("Report confirmed");
     qc.invalidateQueries({ queryKey: ["fund-fs"] });
     qc.invalidateQueries({ queryKey: ["all-fund-fs"] });
-    onClose();
   };
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" /> Upload Financial Statement
+            <FileText className="h-5 w-5" /> Add Reports — {quarterLabel}
           </DialogTitle>
+          <p className="text-sm text-muted-foreground">Upload financial statements for each fund for {quarterLabel} ({quarterDate})</p>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div>
-            <label className="text-sm text-muted-foreground">Quarter: {quarterDate}</label>
-          </div>
+        <div className="space-y-3">
+          {funds.map((fund: any) => {
+            const hasFile = !!files[fund.id];
+            const hasExtracted = !!extractedMap[fund.id];
+            const isConfirmed = confirmedSet.has(fund.id);
+            const isExtracting = extracting === fund.id;
 
-          <div className="flex items-center gap-3">
-            <Input type="file" accept=".pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
-            <Button onClick={handleExtract} disabled={!file || extracting} className="gap-2">
-              {extracting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Extract
-            </Button>
-          </div>
+            return (
+              <div key={fund.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{fund.fund_name}</p>
+                  <p className="text-xs text-muted-foreground">{fund.strategy || ""} · {fund.vintage_year || ""}</p>
+                </div>
 
-          {extractedData && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-medium">Extracted Data</h3>
-              <pre className="bg-surface-1 border border-border rounded p-3 text-xs font-mono max-h-64 overflow-auto">
-                {JSON.stringify(extractedData, null, 2)}
-              </pre>
-              <p className="text-xs text-muted-foreground">Review the extracted data above. Click Confirm to save.</p>
-            </div>
-          )}
+                {isConfirmed ? (
+                  <div className="flex items-center gap-1.5 text-positive text-xs font-medium">
+                    <Check className="h-4 w-4" /> Uploaded
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="file"
+                      accept=".pdf"
+                      className="h-8 text-xs w-48"
+                      onChange={e => {
+                        const f = e.target.files?.[0];
+                        if (f) handleFileSelect(fund.id, f);
+                      }}
+                    />
+                    {hasFile && !hasExtracted && (
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => handleExtract(fund.id)} disabled={isExtracting}>
+                        {isExtracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                        Extract
+                      </Button>
+                    )}
+                    {hasExtracted && (
+                      <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => handleConfirm(fund.id)}>
+                        <Check className="h-3.5 w-3.5" /> Confirm
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={handleConfirm} disabled={!extractedData}>Confirm & Save</Button>
+          <Button variant="outline" onClick={onClose}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
