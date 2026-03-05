@@ -207,7 +207,7 @@ export default function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {fundMetrics.map(({ fund, metrics, hasFS }: any) => (
+              {[...fundMetrics].sort((a, b) => (a.fund.start_date || '').localeCompare(b.fund.start_date || '')).map(({ fund, metrics, hasFS }: any) => (
                 <tr key={fund.id} className="border-t border-border table-row-hover">
                   <td className="px-4 py-2 font-medium text-foreground">{fund.fund_name}</td>
                   <td className="px-4 py-2 text-muted-foreground">{fund.theme || '—'}</td>
