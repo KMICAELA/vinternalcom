@@ -107,10 +107,16 @@ export function computeFundMetrics(params: {
   reportNav?: number;
   reportCalled?: number;
   reportDist?: number;
+  // From funds table — fallback ownership percentage
+  ownershipPct?: number;
 }): FundMetrics {
-  const { twhCommitment, totalFundCommitment, totalInvestmentCost, totalPortfolioFmv, fundNav, capitalActivity, reportDate, reportNav, reportCalled, reportDist } = params;
+  const { twhCommitment, totalFundCommitment, totalInvestmentCost, totalPortfolioFmv, fundNav, capitalActivity, reportDate, reportNav, reportCalled, reportDist, ownershipPct } = params;
 
-  const twhPct = totalFundCommitment > 0 ? twhCommitment / totalFundCommitment : 0;
+  // TWH %: prefer FS-derived, fallback to funds.ownership_percentage
+  const twhPct = totalFundCommitment > 0
+    ? twhCommitment / totalFundCommitment
+    : (ownershipPct != null && ownershipPct > 0 ? ownershipPct : 0);
+  const hasTwhPct = twhPct > 0;
 
   const twhContributions = capitalActivity
     .filter(c => c.type.startsWith('Capital Call'))
@@ -127,10 +133,10 @@ export function computeFundMetrics(params: {
   const fsNav = fundNav * twhPct;
   const twhNav = (reportNav != null && reportNav > 0) ? reportNav : fsNav;
 
-  // Contributions: use max of ledger vs report
-  const effectiveContributions = Math.max(twhContributions, reportCalled || 0);
-  // Distributions: use max of ledger vs report
-  const effectiveDistributions = Math.max(twhDistributions, reportDist || 0);
+  // Contributions: prefer reportCalled (authoritative cumulative), fallback to ledger sum
+  const effectiveContributions = (reportCalled != null && reportCalled > 0) ? reportCalled : twhContributions;
+  // Distributions: prefer reportDist, fallback to ledger sum
+  const effectiveDistributions = (reportDist != null && reportDist > 0) ? reportDist : twhDistributions;
 
   const pic = twhCommitment > 0 ? effectiveContributions / twhCommitment : 0;
   const rvpi = effectiveContributions > 0 ? twhNav / effectiveContributions : 0;
