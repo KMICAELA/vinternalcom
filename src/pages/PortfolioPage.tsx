@@ -11,7 +11,7 @@ export default function PortfolioPage() {
   const activeQuarter = useActiveQuarter();
   const { data: holdings = [] } = useUnderlyingPortfolio(activeQuarter.date);
 
-  // Also fetch fund names for display
+  // Fetch funds for ID→name mapping
   const { data: funds = [] } = useQuery({
     queryKey: ["funds"],
     queryFn: async () => {
@@ -21,9 +21,24 @@ export default function PortfolioPage() {
     },
   });
 
+  // Also fetch transactions which carry fund_name as a string for holdings without fund_id
+  const { data: transactions = [] } = useQuery({
+    queryKey: ["underlying-transactions", activeQuarter.date],
+    queryFn: async () => {
+      if (!activeQuarter.date) return [];
+      const { data, error } = await supabase
+        .from("underlying_portfolio_transactions")
+        .select("company_name, fund_name")
+        .eq("quarter_date", activeQuarter.date);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!activeQuarter.date,
+  });
+
   const [search, setSearch] = useState("");
   const [fundFilter, setFundFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
+  const [innovationFilter, setInnovationFilter] = useState("");
   const [themeFilter, setThemeFilter] = useState("");
   const [stageFilter, setStageFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -31,28 +46,36 @@ export default function PortfolioPage() {
 
   // Merge comments with financial data
   const companies = useMemo(() => {
-    // Build a map of holdings by company name (lowercase for matching)
-    const holdingMap = new Map<string, any>();
-    for (const h of holdings) {
-      holdingMap.set(h.company_name.toLowerCase(), h);
-    }
-
-    // Build fund name map
     const fundMap = new Map<string, string>();
     for (const f of funds) {
       fundMap.set(f.id, f.fund_name);
     }
 
-    // Start with all holdings and enrich with comments
+    // Company→fund_name from transactions
+    const txFundMap = new Map<string, string>();
+    for (const t of transactions) {
+      txFundMap.set(t.company_name.toLowerCase(), t.fund_name);
+    }
+
     const commentMap = new Map<string, PortfolioComment>();
     for (const c of portfolioCommentsSeed) {
       commentMap.set(c.company.toLowerCase(), c);
     }
 
-    // Use holdings as the base, enriched with comments
+    const holdingMap = new Map<string, boolean>();
+    for (const h of holdings) {
+      holdingMap.set(h.company_name.toLowerCase(), true);
+    }
+
     const result = holdings.map((h: any) => {
       const comment = commentMap.get(h.company_name.toLowerCase());
-      const fundName = h.fund_id ? (fundMap.get(h.fund_id) || "Unknown") : "—";
+      // Resolve fund name: fund_id lookup → transactions lookup → fallback
+      let fundName = "—";
+      if (h.fund_id && fundMap.has(h.fund_id)) {
+        fundName = fundMap.get(h.fund_id)!;
+      } else if (txFundMap.has(h.company_name.toLowerCase())) {
+        fundName = txFundMap.get(h.company_name.toLowerCase())!;
+      }
       const moic = h.twh_cost > 0 ? h.twh_fmv / h.twh_cost : 0;
 
       return {
@@ -60,7 +83,7 @@ export default function PortfolioPage() {
         fund: fundName,
         status: h.type || "Active",
         region: comment?.region || h.region || null,
-        type: comment?.type || null,
+        innovation: comment?.type || null,
         theme: comment?.theme || null,
         stage: comment?.stage || null,
         whatTheyDo: comment?.whatTheyDo || null,
@@ -73,15 +96,15 @@ export default function PortfolioPage() {
       };
     });
 
-    // Also add comments for companies not in holdings
+    // Add comments for companies not in holdings
     for (const c of portfolioCommentsSeed) {
       if (!holdingMap.has(c.company.toLowerCase())) {
         result.push({
           company: c.company,
-          fund: "—",
+          fund: txFundMap.get(c.company.toLowerCase()) || "—",
           status: "Active",
           region: c.region,
-          type: c.type,
+          innovation: c.type,
           theme: c.theme,
           stage: c.stage,
           whatTheyDo: c.whatTheyDo,
@@ -96,33 +119,33 @@ export default function PortfolioPage() {
     }
 
     return result.sort((a, b) => a.company.localeCompare(b.company));
-  }, [holdings, funds]);
+  }, [holdings, funds, transactions]);
 
   // Extract unique filter values
-  const uniqueFunds = useMemo(() => [...new Set(companies.map(c => c.fund).filter(Boolean))].sort(), [companies]);
-  const uniqueTypes = useMemo(() => [...new Set(companies.map(c => c.type).filter(Boolean))].sort(), [companies]);
-  const uniqueThemes = useMemo(() => [...new Set(companies.map(c => c.theme).filter(Boolean))].sort(), [companies]);
-  const uniqueStages = useMemo(() => [...new Set(companies.map(c => c.stage).filter(Boolean))].sort(), [companies]);
-  const uniqueStatuses = useMemo(() => [...new Set(companies.map(c => c.status).filter(Boolean))].sort(), [companies]);
+  const uniqueFunds = useMemo(() => [...new Set(companies.map(c => c.fund).filter(f => f && f !== "—"))].sort(), [companies]);
+  const uniqueInnovations = useMemo(() => [...new Set(companies.map(c => c.innovation).filter(Boolean))].sort() as string[], [companies]);
+  const uniqueThemes = useMemo(() => [...new Set(companies.map(c => c.theme).filter(Boolean))].sort() as string[], [companies]);
+  const uniqueStages = useMemo(() => [...new Set(companies.map(c => c.stage).filter(Boolean))].sort() as string[], [companies]);
+  const uniqueStatuses = useMemo(() => [...new Set(companies.map(c => c.status).filter(Boolean))].sort() as string[], [companies]);
 
   // Filter
   const filtered = useMemo(() => {
     return companies.filter(c => {
       if (search && !c.company.toLowerCase().includes(search.toLowerCase())) return false;
       if (fundFilter && c.fund !== fundFilter) return false;
-      if (typeFilter && c.type !== typeFilter) return false;
+      if (innovationFilter && c.innovation !== innovationFilter) return false;
       if (themeFilter && c.theme !== themeFilter) return false;
       if (stageFilter && c.stage !== stageFilter) return false;
       if (statusFilter && c.status !== statusFilter) return false;
       return true;
     });
-  }, [companies, search, fundFilter, typeFilter, themeFilter, stageFilter, statusFilter]);
+  }, [companies, search, fundFilter, innovationFilter, themeFilter, stageFilter, statusFilter]);
 
-  const hasActiveFilters = fundFilter || typeFilter || themeFilter || stageFilter || statusFilter;
+  const hasActiveFilters = fundFilter || innovationFilter || themeFilter || stageFilter || statusFilter;
 
   const clearFilters = () => {
     setFundFilter("");
-    setTypeFilter("");
+    setInnovationFilter("");
     setThemeFilter("");
     setStageFilter("");
     setStatusFilter("");
@@ -171,9 +194,9 @@ export default function PortfolioPage() {
           />
         </div>
         <FilterSelect label="Fund" value={fundFilter} onChange={setFundFilter} options={uniqueFunds} />
-        <FilterSelect label="Type" value={typeFilter} onChange={setTypeFilter} options={uniqueTypes} />
+        <FilterSelect label="Innovation" value={innovationFilter} onChange={setInnovationFilter} options={uniqueInnovations.length > 0 ? uniqueInnovations : ["Deep Tech", "Tech Based", "Tech Enabled"]} />
         <FilterSelect label="Theme" value={themeFilter} onChange={setThemeFilter} options={uniqueThemes} />
-        <FilterSelect label="Stage" value={stageFilter} onChange={setStageFilter} options={uniqueStages} />
+        <FilterSelect label="Stage" value={stageFilter} onChange={setStageFilter} options={uniqueStages.length > 0 ? uniqueStages : ["Pre-Seed", "Seed", "A", "B", "C+"]} />
         <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter} options={uniqueStatuses} />
         {hasActiveFilters && (
           <button onClick={clearFilters} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -185,8 +208,8 @@ export default function PortfolioPage() {
       {/* Card View */}
       {viewMode === "card" ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(c => (
-            <div key={`${c.company}-${c.fund}`} className="border border-border rounded-lg bg-card p-4 flex flex-col gap-3">
+          {filtered.map((c, idx) => (
+            <div key={`${c.company}-${c.fund}-${idx}`} className="border border-border rounded-lg bg-card p-4 flex flex-col gap-3">
               {/* Header */}
               <div>
                 <h3 className="text-sm font-semibold text-foreground leading-tight">{c.company}</h3>
@@ -199,7 +222,7 @@ export default function PortfolioPage() {
                   {c.status}
                 </span>
                 {c.region && <Tag>{c.region}</Tag>}
-                {c.type && <Tag>{c.type}</Tag>}
+                {c.innovation && <Tag>{c.innovation}</Tag>}
                 {c.theme && <Tag>{c.theme}</Tag>}
                 {c.stage && <Tag>{c.stage}</Tag>}
               </div>
@@ -260,6 +283,7 @@ export default function PortfolioPage() {
                   <th className="text-left px-4 py-2 font-medium">Company</th>
                   <th className="text-left px-4 py-2 font-medium">Fund</th>
                   <th className="text-left px-4 py-2 font-medium">Status</th>
+                  <th className="text-left px-4 py-2 font-medium">Innovation</th>
                   <th className="text-left px-4 py-2 font-medium">What they do</th>
                   <th className="text-right px-4 py-2 font-medium">TWH Cost</th>
                   <th className="text-right px-4 py-2 font-medium">TWH FMV</th>
@@ -267,8 +291,8 @@ export default function PortfolioPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(c => (
-                  <tr key={`${c.company}-${c.fund}`} className="border-t border-border table-row-hover">
+                {filtered.map((c, idx) => (
+                  <tr key={`${c.company}-${c.fund}-${idx}`} className="border-t border-border table-row-hover">
                     <td className="px-4 py-2 font-medium text-foreground">{c.company}</td>
                     <td className="px-4 py-2 text-muted-foreground max-w-[150px] truncate">{c.fund}</td>
                     <td className="px-4 py-2">
@@ -276,6 +300,7 @@ export default function PortfolioPage() {
                         {c.status}
                       </span>
                     </td>
+                    <td className="px-4 py-2 text-muted-foreground">{c.innovation || "—"}</td>
                     <td className="px-4 py-2 text-muted-foreground max-w-[300px] truncate">{c.whatTheyDo || "—"}</td>
                     <td className="px-4 py-2 text-right font-mono">{c.twhCost > 0 ? formatCurrency(c.twhCost) : "—"}</td>
                     <td className="px-4 py-2 text-right font-mono">{c.twhFmv > 0 ? formatCurrency(c.twhFmv) : "—"}</td>

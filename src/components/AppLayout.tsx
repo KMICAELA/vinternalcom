@@ -7,9 +7,9 @@ import ChatWidget from "./ChatWidget";
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
   { to: "/funds", icon: Building2, label: "Funds" },
+  { to: "/directs", icon: Target, label: "Directs" },
   { to: "/underlying", icon: Layers, label: "Underlying Portfolio" },
   { to: "/portfolio", icon: Briefcase, label: "Portfolio" },
-  { to: "/directs", icon: Target, label: "Directs" },
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
