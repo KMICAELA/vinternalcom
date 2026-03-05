@@ -2,12 +2,16 @@ import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Upload, HardDrive, FileText, Check, X, CheckCircle2, Clock } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ArrowLeft, Upload, HardDrive, FileText, Check, X, CheckCircle2, Clock, PenLine, Zap } from "lucide-react";
 import { useFunds, useAvailableQuarters } from "@/hooks/usePortfolioData";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
+import { underlyingPortfolioSeed, fundTwhPct } from "@/data/underlyingPortfolioSeed";
 
 const ALL_QUARTERS = [
   "2024-03-31", "2024-06-30", "2024-09-30", "2024-12-31",
@@ -23,12 +27,10 @@ const formatQuarterLabel = (dateStr: string) => {
   return `${q} ${year}`;
 };
 
-/** Given the latest confirmed quarter date, return the next quarter date */
 function getNextQuarter(latestConfirmedDate: string | null): string {
   if (!latestConfirmedDate) return "2025-03-31";
   const d = new Date(latestConfirmedDate + "T00:00:00");
   d.setMonth(d.getMonth() + 3);
-  // snap to quarter-end
   const m = d.getMonth();
   if (m < 3) d.setMonth(2, 31);
   else if (m < 6) d.setMonth(5, 30);
@@ -37,15 +39,41 @@ function getNextQuarter(latestConfirmedDate: string | null): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Compute per-fund totals from seed data */
+function computeSeedTotals(fundName: string) {
+  const rows = underlyingPortfolioSeed.filter(r => r.fund === fundName);
+  const totalCost = rows.reduce((s, r) => s + r.cost, 0);
+  const totalFmv = rows.reduce((s, r) => s + r.fmv, 0);
+  const totalProceeds = rows.reduce((s, r) => s + r.proceeds, 0);
+  const twhPct = fundTwhPct[fundName] || 0;
+  const totalCommitment = twhPct > 0 ? totalCost / twhPct : 0; // approximate
+  return {
+    total_commitment: Math.round(totalCommitment),
+    total_contributions_called: Math.round(totalCost),
+    total_investment_cost: Math.round(totalCost),
+    total_portfolio_fmv: Math.round(totalFmv),
+    fund_nav: Math.round(totalFmv), // approximate: NAV ≈ FMV for seed
+    total_distributions: Math.round(totalProceeds),
+  };
+}
+
+interface ManualFormData {
+  report_date: string;
+  total_commitment: number;
+  total_contributions_called: number;
+  total_investment_cost: number;
+  total_portfolio_fmv: number;
+  fund_nav: number;
+  total_distributions: number;
+}
+
 const AddQuarterlyData = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { data: funds = [] } = useFunds();
   const { data: availableQuarters = [] } = useAvailableQuarters();
-  
   const queryClient = useQueryClient();
-  
-  // Auto-detect next quarter based on latest confirmed data
+
   const defaultQuarter = useMemo(() => {
     if (availableQuarters.length > 0) {
       return getNextQuarter(availableQuarters[0]);
@@ -53,7 +81,6 @@ const AddQuarterlyData = () => {
     return "2025-09-30";
   }, [availableQuarters]);
 
-  // Only show quarters up to and including the next reportable quarter
   const quarterOptions = useMemo(() => {
     return ALL_QUARTERS.filter((q) => q <= defaultQuarter);
   }, [defaultQuarter]);
@@ -61,7 +88,6 @@ const AddQuarterlyData = () => {
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
   const activeQuarter = selectedQuarter || defaultQuarter;
 
-  // Fetch existing financial statements for this quarter to know upload status
   const { data: existingFS = [] } = useQuery({
     queryKey: ["fund-fs-status", activeQuarter],
     queryFn: async () => {
@@ -85,6 +111,12 @@ const AddQuarterlyData = () => {
 
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, File | null>>({});
   const [uploadingFundId, setUploadingFundId] = useState<string | null>(null);
+  const [bulkConfirming, setBulkConfirming] = useState(false);
+
+  // Manual entry state
+  const [manualFund, setManualFund] = useState<any>(null);
+  const [manualForm, setManualForm] = useState<ManualFormData | null>(null);
+  const [savingManual, setSavingManual] = useState(false);
 
   const handleFileSelect = (fundId: string, file: File | null) => {
     setUploadedFiles((prev) => ({ ...prev, [fundId]: file }));
@@ -93,26 +125,20 @@ const AddQuarterlyData = () => {
   const handleUpload = async (fundId: string) => {
     const file = uploadedFiles[fundId];
     if (!file) return;
-
     setUploadingFundId(fundId);
     try {
       const filePath = `${activeQuarter}/${fundId}/${file.name}`;
       const { error: storageError } = await supabase.storage
         .from("fund-reports")
         .upload(filePath, file, { upsert: true });
-
       if (storageError) throw storageError;
-
-      // Upsert a record in fund_financial_statements so status updates
       const { error: dbError } = await supabase
         .from("fund_financial_statements")
         .upsert(
           { fund_id: fundId, quarter_date: activeQuarter, file_path: filePath, confirmed: false },
           { onConflict: "fund_id,quarter_date" }
         );
-
       if (dbError) throw dbError;
-
       toast({ title: "Uploaded", description: `Report for ${funds.find((f: any) => f.id === fundId)?.fund_name} uploaded.` });
       setUploadedFiles((prev) => ({ ...prev, [fundId]: null }));
       queryClient.invalidateQueries({ queryKey: ["fund-fs-status", activeQuarter] });
@@ -124,15 +150,111 @@ const AddQuarterlyData = () => {
   };
 
   const handleConnectDrive = () => {
-    toast({
-      title: "Google Drive",
-      description: "Google Drive integration is not yet configured. Please contact your administrator.",
+    toast({ title: "Google Drive", description: "Google Drive integration is not yet configured." });
+  };
+
+  // Open manual entry dialog
+  const openManualEntry = (fund: any) => {
+    const seed = computeSeedTotals(fund.fund_name);
+    setManualFund(fund);
+    setManualForm({
+      report_date: activeQuarter,
+      ...seed,
     });
   };
 
-  // Count statuses
-  const uploadedCount = funds.filter((f: any) => fsStatusMap[f.id]?.filePath).length;
-  const pendingCount = funds.length - uploadedCount;
+  // Save manual entry
+  const saveManualEntry = async () => {
+    if (!manualFund || !manualForm) return;
+    setSavingManual(true);
+    try {
+      const extractedData = {
+        fund_totals: {
+          total_commitment: manualForm.total_commitment,
+          total_contributions_called: manualForm.total_contributions_called,
+          total_investment_cost: manualForm.total_investment_cost,
+          total_portfolio_fmv: manualForm.total_portfolio_fmv,
+          fund_nav: manualForm.fund_nav,
+          total_distributions: manualForm.total_distributions,
+        },
+        source: "manual_entry",
+      };
+
+      const { error } = await supabase
+        .from("fund_financial_statements")
+        .upsert(
+          {
+            fund_id: manualFund.id,
+            quarter_date: activeQuarter,
+            confirmed: true,
+            extracted_data: extractedData,
+            file_path: null,
+          },
+          { onConflict: "fund_id,quarter_date" }
+        );
+      if (error) throw error;
+
+      toast({ title: "Confirmed", description: `${manualFund.fund_name} marked as uploaded for ${formatQuarterLabel(activeQuarter)}.` });
+      setManualFund(null);
+      setManualForm(null);
+      queryClient.invalidateQueries({ queryKey: ["fund-fs-status", activeQuarter] });
+      queryClient.invalidateQueries({ queryKey: ["all-fund-fs"] });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setSavingManual(false);
+    }
+  };
+
+  // Bulk confirm all funds for 3Q25
+  const handleBulkConfirm = async () => {
+    setBulkConfirming(true);
+    try {
+      const upserts = funds.map((f: any) => {
+        const seed = computeSeedTotals(f.fund_name);
+        return {
+          fund_id: f.id,
+          quarter_date: activeQuarter,
+          confirmed: true,
+          file_path: null,
+          extracted_data: {
+            fund_totals: {
+              total_commitment: seed.total_commitment,
+              total_contributions_called: seed.total_contributions_called,
+              total_investment_cost: seed.total_investment_cost,
+              total_portfolio_fmv: seed.total_portfolio_fmv,
+              fund_nav: seed.fund_nav,
+              total_distributions: seed.total_distributions,
+            },
+            source: "bulk_portfolio_metrics",
+          },
+        };
+      });
+
+      const { error } = await supabase
+        .from("fund_financial_statements")
+        .upsert(upserts, { onConflict: "fund_id,quarter_date" });
+      if (error) throw error;
+
+      toast({ title: "All funds confirmed", description: `All ${funds.length} funds marked as uploaded for ${formatQuarterLabel(activeQuarter)} from portfolio metrics data.` });
+      queryClient.invalidateQueries({ queryKey: ["fund-fs-status", activeQuarter] });
+      queryClient.invalidateQueries({ queryKey: ["all-fund-fs"] });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    } finally {
+      setBulkConfirming(false);
+    }
+  };
+
+  // Count statuses — check confirmed OR filePath
+  const confirmedCount = funds.filter((f: any) => fsStatusMap[f.id]?.confirmed).length;
+  const uploadedCount = funds.filter((f: any) => fsStatusMap[f.id]?.filePath && !fsStatusMap[f.id]?.confirmed).length;
+  const pendingCount = funds.length - confirmedCount - uploadedCount;
+
+  const is3Q25 = activeQuarter === "2025-09-30";
+  const allConfirmed = confirmedCount === funds.length && funds.length > 0;
+
+  const formatNum = (n: number) => n.toLocaleString("en-US");
 
   return (
     <div className="min-h-screen bg-background">
@@ -147,7 +269,6 @@ const AddQuarterlyData = () => {
               <p className="text-xs text-muted-foreground">Upload quarterly fund reports</p>
             </div>
           </div>
-          <div />
         </div>
       </header>
 
@@ -169,15 +290,43 @@ const AddQuarterlyData = () => {
           </div>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-              <span>{uploadedCount} uploaded</span>
+              <CheckCircle2 className="h-3.5 w-3.5 text-[hsl(var(--positive))]" />
+              <span>{confirmedCount + uploadedCount} uploaded</span>
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5 text-amber-500" />
+              <Clock className="h-3.5 w-3.5 text-primary" />
               <span>{pendingCount} pending</span>
             </div>
           </div>
         </div>
+
+        {/* Bulk confirm button for 3Q25 */}
+        {is3Q25 && !allConfirmed && (
+          <div className="border border-primary/30 bg-primary/5 rounded-lg p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-foreground">3Q25 data available from Portfolio Metrics file</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                All fund data for this quarter has been seeded from the portfolio metrics Excel. Confirm all at once to mark them as uploaded.
+              </p>
+            </div>
+            <Button
+              size="sm"
+              className="gap-2 shrink-0"
+              onClick={handleBulkConfirm}
+              disabled={bulkConfirming}
+            >
+              <Zap className="h-3.5 w-3.5" />
+              {bulkConfirming ? "Confirming…" : "Mark all 3Q25 as confirmed"}
+            </Button>
+          </div>
+        )}
+
+        {allConfirmed && (
+          <div className="border border-[hsl(var(--positive))]/30 bg-[hsl(var(--positive))]/5 rounded-lg p-4 text-center">
+            <p className="text-sm font-medium text-foreground">✓ All {funds.length} funds confirmed for {formatQuarterLabel(activeQuarter)}</p>
+            <p className="text-xs text-muted-foreground mt-1">You can now generate metrics from the Funds tab.</p>
+          </div>
+        )}
 
         {/* Fund list */}
         <div className="space-y-2">
@@ -188,31 +337,33 @@ const AddQuarterlyData = () => {
             const file = uploadedFiles[f.id];
             const isUploading = uploadingFundId === f.id;
             const status = fsStatusMap[f.id];
-            const hasReport = !!status?.filePath;
+            const isConfirmed = !!status?.confirmed;
+            const hasFile = !!status?.filePath;
 
             return (
               <div key={f.id} className="flex items-center gap-4 p-4 rounded-lg border border-border bg-card">
-                {/* Status indicator */}
                 <div className="flex-shrink-0">
-                  {hasReport ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                  {isConfirmed ? (
+                    <CheckCircle2 className="h-5 w-5 text-[hsl(var(--positive))]" />
+                  ) : hasFile ? (
+                    <FileText className="h-5 w-5 text-primary" />
                   ) : (
-                    <Clock className="h-5 w-5 text-amber-500" />
+                    <Clock className="h-5 w-5 text-primary" />
                   )}
                 </div>
 
-                {/* Fund info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-foreground truncate">{f.fund_name}</p>
                     <Badge
-                      variant={hasReport ? "default" : "secondary"}
-                      className={hasReport
-                        ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/10"
-                        : "bg-amber-500/10 text-amber-600 border-amber-500/20 hover:bg-amber-500/10"
+                      variant={isConfirmed ? "default" : "secondary"}
+                      className={
+                        isConfirmed
+                          ? "bg-[hsl(var(--positive))]/10 text-[hsl(var(--positive))] border-[hsl(var(--positive))]/20 hover:bg-[hsl(var(--positive))]/10"
+                          : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/10"
                       }
                     >
-                      {hasReport ? "Uploaded" : "Pending"}
+                      {isConfirmed ? "Uploaded" : "Pending"}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -220,7 +371,6 @@ const AddQuarterlyData = () => {
                   </p>
                 </div>
 
-                {/* Actions */}
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {file ? (
                     <>
@@ -230,36 +380,25 @@ const AddQuarterlyData = () => {
                         <X className="h-3.5 w-3.5" />
                       </Button>
                       <Button size="sm" className="gap-1.5 h-7" onClick={() => handleUpload(f.id)} disabled={isUploading}>
-                        {isUploading ? (
-                          <span className="text-xs">Uploading…</span>
-                        ) : (
-                          <>
-                            <Check className="h-3 w-3" />
-                            <span className="text-xs">Upload</span>
-                          </>
-                        )}
+                        {isUploading ? <span className="text-xs">Uploading…</span> : <><Check className="h-3 w-3" /><span className="text-xs">Upload</span></>}
                       </Button>
                     </>
                   ) : (
                     <>
                       <label className="cursor-pointer">
-                        <input
-                          type="file"
-                          className="hidden"
-                          accept=".pdf,.xlsx,.xls,.csv"
-                          onChange={(e) => handleFileSelect(f.id, e.target.files?.[0] || null)}
-                        />
+                        <input type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv" onChange={(e) => handleFileSelect(f.id, e.target.files?.[0] || null)} />
                         <div className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors border border-dashed border-primary/30 rounded-md px-3 py-1.5">
                           <Upload className="h-3.5 w-3.5" />
                           Desktop
                         </div>
                       </label>
-                      <button
-                        onClick={handleConnectDrive}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-dashed border-border rounded-md px-3 py-1.5"
-                      >
+                      <button onClick={handleConnectDrive} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-dashed border-border rounded-md px-3 py-1.5">
                         <HardDrive className="h-3.5 w-3.5" />
                         Drive
+                      </button>
+                      <button onClick={() => openManualEntry(f)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-dashed border-border rounded-md px-3 py-1.5">
+                        <PenLine className="h-3.5 w-3.5" />
+                        Manual
                       </button>
                     </>
                   )}
@@ -269,6 +408,59 @@ const AddQuarterlyData = () => {
           })}
         </div>
       </main>
+
+      {/* Manual Entry Dialog */}
+      <Dialog open={!!manualFund} onOpenChange={(open) => { if (!open) { setManualFund(null); setManualForm(null); } }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="text-base">Enter Fund Data — {manualFund?.fund_name}</DialogTitle>
+            <p className="text-xs text-muted-foreground">{formatQuarterLabel(activeQuarter)} · Manual entry</p>
+          </DialogHeader>
+          {manualForm && (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2">
+                <Label className="text-xs">Report Date</Label>
+                <Input
+                  value={manualForm.report_date}
+                  onChange={(e) => setManualForm({ ...manualForm, report_date: e.target.value })}
+                  className="font-mono text-sm"
+                />
+              </div>
+              {([
+                ["total_commitment", "Total Fund Commitment"],
+                ["total_contributions_called", "Total Contributions Called"],
+                ["total_investment_cost", "Total Investment Cost"],
+                ["total_portfolio_fmv", "Total Portfolio FMV"],
+                ["fund_nav", "Fund NAV"],
+                ["total_distributions", "Total Distributions"],
+              ] as const).map(([key, label]) => (
+                <div key={key} className="space-y-1">
+                  <Label className="text-xs">{label}</Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">$</span>
+                    <Input
+                      type="text"
+                      value={formatNum(manualForm[key])}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9.-]/g, "");
+                        setManualForm({ ...manualForm, [key]: Number(raw) || 0 });
+                      }}
+                      className="font-mono text-sm pl-7"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setManualFund(null); setManualForm(null); }}>Cancel</Button>
+            <Button size="sm" onClick={saveManualEntry} disabled={savingManual} className="gap-1.5">
+              <Check className="h-3.5 w-3.5" />
+              {savingManual ? "Saving…" : "Confirm & Mark Uploaded"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
