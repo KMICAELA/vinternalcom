@@ -7,6 +7,7 @@ import AppLayout from "./components/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import FundsPage from "./pages/FundsPage";
 import UnderlyingPortfolioPage from "./pages/UnderlyingPortfolioPage";
+import PortfolioPage from "./pages/PortfolioPage";
 import DirectsPage from "./pages/DirectsPage";
 import ConsolidatedPage from "./pages/ConsolidatedPage";
 import SettingsPage from "./pages/SettingsPage";
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/" element={<DashboardPage />} />
             <Route path="/funds" element={<FundsPage />} />
             <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
+            <Route path="/portfolio" element={<PortfolioPage />} />
             <Route path="/directs" element={<DirectsPage />} />
             <Route path="/consolidated" element={<ConsolidatedPage />} />
             <Route path="/settings" element={<SettingsPage />} />
