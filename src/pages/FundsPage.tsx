@@ -1,14 +1,15 @@
 import { useState, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
+import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check } from "lucide-react";
+import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -23,8 +24,40 @@ export default function FundsPage() {
   const qc = useQueryClient();
   const { data: funds = [], isLoading } = useFunds();
   const activeQuarter = useActiveQuarter();
+  const cm = useConsolidatedMetrics();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
   const [addReportsOpen, setAddReportsOpen] = useState(false);
+  const [lockModalOpen, setLockModalOpen] = useState(false);
+
+  // Fetch all FS for active quarter to compute completion
+  const { data: allFsForQuarter = [] } = useQuery({
+    queryKey: ["all-fund-fs-status", activeQuarter.date],
+    queryFn: async () => {
+      if (!activeQuarter.date) return [];
+      const { data, error } = await supabase
+        .from("fund_financial_statements")
+        .select("fund_id, confirmed, quarter_date")
+        .eq("quarter_date", activeQuarter.date)
+        .eq("confirmed", true);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!activeQuarter.date,
+  });
+
+  // Fetch latest FS per fund (any quarter) for "Last FS" label
+  const { data: latestFsPerFund = [] } = useQuery({
+    queryKey: ["latest-fs-per-fund"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fund_financial_statements")
+        .select("fund_id, quarter_date, confirmed")
+        .eq("confirmed", true)
+        .order("quarter_date", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   // Compute next quarter after active quarter
   const nextQuarter = useMemo(() => {
@@ -38,6 +71,54 @@ export default function FundsPage() {
     const dateStr = d.toISOString().split("T")[0];
     return { label, date: dateStr };
   }, [activeQuarter.date]);
+
+  // FS status per fund
+  const fsStatusMap = useMemo(() => {
+    const confirmedSet = new Set(allFsForQuarter.map((fs: any) => fs.fund_id));
+    const latestMap = new Map<string, string>();
+    for (const fs of latestFsPerFund as any[]) {
+      if (!latestMap.has(fs.fund_id)) {
+        latestMap.set(fs.fund_id, fs.quarter_date);
+      }
+    }
+    return { confirmedSet, latestMap };
+  }, [allFsForQuarter, latestFsPerFund]);
+
+  const activeFunds = funds; // All funds are considered active for now
+  const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
+  const totalActive = activeFunds.length;
+  const allUploaded = uploadedCount === totalActive && totalActive > 0;
+  const completionPct = totalActive > 0 ? (uploadedCount / totalActive) * 100 : 0;
+
+  // Quarter label helper
+  const quarterDateToLabel = (dateStr: string) => {
+    const d = new Date(dateStr);
+    const q = Math.floor(d.getMonth() / 3) + 1;
+    return `${q}Q${d.getFullYear().toString().slice(2)}`;
+  };
+
+  // Lock quarter handler
+  const handleLockQuarter = async () => {
+    const { error } = await supabase.from("quarterly_history").upsert(
+      {
+        quarter: activeQuarter.quarter,
+        quarter_date: activeQuarter.date,
+        locked: true,
+        nav: cm.totalNav,
+        contribution: cm.totalCapitalCalls,
+        distribution: cm.totalDistributions,
+        net_tvpi: cm.netTvpi,
+        net_irr: cm.netIrr || 0,
+        gross_tvpi: cm.grossTvpi,
+        gross_irr: cm.grossIrr || 0,
+      } as any,
+      { onConflict: "quarter_date" }
+    );
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${activeQuarter.quarter} metrics locked and saved to historical record.`);
+    setLockModalOpen(false);
+    qc.invalidateQueries({ queryKey: ["quarterly-history"] });
+  };
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
@@ -53,6 +134,40 @@ export default function FundsPage() {
         </Button>
       </div>
 
+      {/* Quarter Completion Banner */}
+      <div className="border border-border rounded-lg p-4 bg-card space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-foreground">{activeQuarter.quarter} Reports:</span>
+            <span className="text-sm text-muted-foreground">{uploadedCount} / {totalActive} uploaded</span>
+          </div>
+          <Button
+            size="sm"
+            disabled={!allUploaded}
+            onClick={() => setLockModalOpen(true)}
+            className={cn(
+              "gap-2 transition-colors",
+              allUploaded
+                ? "bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
+                : "bg-muted text-muted-foreground cursor-not-allowed"
+            )}
+          >
+            <Lock className="h-3.5 w-3.5" />
+            Generate Metrics for {activeQuarter.quarter}
+          </Button>
+        </div>
+        {/* Progress bar */}
+        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${completionPct}%`,
+              backgroundColor: allUploaded ? "hsl(var(--gold))" : "hsl(var(--gold) / 0.6)",
+            }}
+          />
+        </div>
+      </div>
+
       {/* Fund Registry Table */}
       <div className="border border-border rounded-lg overflow-hidden">
         <Table>
@@ -61,6 +176,7 @@ export default function FundsPage() {
               <TableHead className="w-8" />
               <TableHead>Fund Name</TableHead>
               <TableHead>Start Date</TableHead>
+              <TableHead className="text-center">FS Status</TableHead>
               <TableHead className="text-right">TWH Commitment</TableHead>
               <TableHead>Currency</TableHead>
               <TableHead className="text-right">TWH %</TableHead>
@@ -70,15 +186,24 @@ export default function FundsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {funds.map((fund: any) => (
-              <FundRow
-                key={fund.id}
-                fund={fund}
-                quarterDate={activeQuarter.date}
-                isExpanded={expandedFund === fund.id}
-                onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
-              />
-            ))}
+            {funds.map((fund: any) => {
+              const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
+              const latestFsDate = fsStatusMap.latestMap.get(fund.id);
+              const latestFsLabel = latestFsDate ? quarterDateToLabel(latestFsDate) : null;
+              const isStale = !hasActiveQuarterFS && latestFsLabel;
+
+              return (
+                <FundRow
+                  key={fund.id}
+                  fund={fund}
+                  quarterDate={activeQuarter.date}
+                  isExpanded={expandedFund === fund.id}
+                  onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
+                  fsStatus={hasActiveQuarterFS ? "uploaded" : latestFsLabel ? "stale" : "pending"}
+                  fsLabel={hasActiveQuarterFS ? activeQuarter.quarter : isStale ? `Last FS: ${latestFsLabel}` : "Pending"}
+                />
+              );
+            })}
           </TableBody>
         </Table>
       </div>
@@ -92,14 +217,40 @@ export default function FundsPage() {
           onClose={() => setAddReportsOpen(false)}
         />
       )}
+
+      {/* Lock Quarter Confirmation Modal */}
+      <Dialog open={lockModalOpen} onOpenChange={setLockModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate Metrics for {activeQuarter.quarter}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This will snapshot all current metrics (Net TVPI, Net IRR, Gross TVPI, Gross IRR, NAV, and contributions) into the historical record.
+            The TVPI chart on TWH Consolidated will show this data point.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            After locking, you can advance to the next quarter in Settings.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setLockModalOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleLockQuarter}
+              className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90 gap-2"
+            >
+              <Lock className="h-3.5 w-3.5" /> Lock {activeQuarter.quarter} Metrics
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
-// ─── Fund Row with expandable capital activity ─────────────────────
+// ─── Fund Row with expandable capital activity + FS status badge ────
 
-function FundRow({ fund, quarterDate, isExpanded, onToggle }: {
+function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel }: {
   fund: any; quarterDate: string; isExpanded: boolean; onToggle: () => void;
+  fsStatus: "uploaded" | "stale" | "pending"; fsLabel: string;
 }) {
   const { data: fs } = useFundFinancialStatement(fund.id, quarterDate);
   const { data: allFundReports = [] } = useFundReports(quarterDate);
@@ -155,6 +306,31 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle }: {
     qc.invalidateQueries({ queryKey: ["fund-cashflows", fund.id] });
   };
 
+  const statusBadge = () => {
+    if (fsStatus === "uploaded") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[hsl(var(--positive))]/20 text-[hsl(var(--positive))] font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--positive))]" />
+          {fsLabel}
+        </span>
+      );
+    }
+    if (fsStatus === "stale") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[hsl(var(--warning))]/20 text-[hsl(var(--warning))] font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--warning))]" />
+          {fsLabel}
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+        <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+        Pending
+      </span>
+    );
+  };
+
   return (
     <>
       <TableRow className="table-row-hover cursor-pointer" onClick={onToggle}>
@@ -163,6 +339,7 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle }: {
         </TableCell>
         <TableCell className="font-medium">{fund.fund_name}</TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).start_date || '—'}</TableCell>
+        <TableCell className="text-center">{statusBadge()}</TableCell>
         <TableCell className="text-right font-mono">{formatCurrency(Number(fund.commitment_amount))}</TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).currency || 'USD'}</TableCell>
         <TableCell className="text-right font-mono">{metrics.twhPct > 0 ? formatPercent(metrics.twhPct) : '—'}</TableCell>
@@ -173,7 +350,7 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle }: {
 
       {isExpanded && (
         <TableRow>
-          <TableCell colSpan={9} className="bg-surface-1 p-0">
+          <TableCell colSpan={10} className="bg-surface-1 p-0">
             <div className="p-4 space-y-4">
               {/* Fund Classification */}
               <div>
@@ -346,6 +523,7 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
     toast.success("Report confirmed");
     qc.invalidateQueries({ queryKey: ["fund-fs"] });
     qc.invalidateQueries({ queryKey: ["all-fund-fs"] });
+    qc.invalidateQueries({ queryKey: ["all-fund-fs-status"] });
   };
 
   return (
@@ -373,7 +551,7 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
                 </div>
 
                 {isConfirmed ? (
-                  <div className="flex items-center gap-1.5 text-positive text-xs font-medium">
+                  <div className="flex items-center gap-1.5 text-[hsl(var(--positive))] text-xs font-medium">
                     <Check className="h-4 w-4" /> Uploaded
                   </div>
                 ) : (
@@ -382,20 +560,20 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
                       type="file"
                       accept=".pdf"
                       className="h-8 text-xs w-48"
-                      onChange={e => {
+                      onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (f) handleFileSelect(fund.id, f);
                       }}
                     />
                     {hasFile && !hasExtracted && (
-                      <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={() => handleExtract(fund.id)} disabled={isExtracting}>
-                        {isExtracting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                      <Button size="sm" variant="outline" onClick={() => handleExtract(fund.id)} disabled={isExtracting} className="h-8 gap-1 text-xs">
+                        {isExtracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
                         Extract
                       </Button>
                     )}
-                    {hasExtracted && (
-                      <Button size="sm" className="h-8 gap-1.5 text-xs" onClick={() => handleConfirm(fund.id)}>
-                        <Check className="h-3.5 w-3.5" /> Confirm
+                    {hasExtracted && !isConfirmed && (
+                      <Button size="sm" onClick={() => handleConfirm(fund.id)} className="h-8 gap-1 text-xs bg-[hsl(var(--gold))] text-[hsl(var(--background))]">
+                        <Check className="h-3 w-3" /> Confirm
                       </Button>
                     )}
                   </div>

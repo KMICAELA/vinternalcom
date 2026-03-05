@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Building2, Target, TrendingUp, DollarSign, Layers, Globe, Plus } from "lucide-react";
+import LogoMark from "@/components/LogoMark";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -165,9 +166,12 @@ export default function DashboardPage() {
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">TWH Americas Fund I, LP · {activeQuarter.quarter} Overview</p>
+        <div className="flex items-center gap-3">
+          <LogoMark size={20} />
+          <div>
+            <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
+            <p className="text-sm text-muted-foreground">TWH Americas Fund I, LP · {activeQuarter.quarter} Overview</p>
+          </div>
         </div>
         <Button size="sm" variant="outline" className="gap-2 border-border" onClick={() => navigate("/add-quarterly-data")}>
           <Plus className="h-3.5 w-3.5" />

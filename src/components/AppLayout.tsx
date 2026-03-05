@@ -3,6 +3,7 @@ import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Setti
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ChatWidget from "./ChatWidget";
+import LogoMark from "./LogoMark";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -28,11 +29,15 @@ export default function AppLayout() {
       >
         <div className="p-4 border-b border-border flex items-center justify-between">
           {!collapsed && (
-            <div>
-              <h1 className="text-sm font-semibold text-foreground">TWH Americas</h1>
-              <p className="text-[10px] text-muted-foreground">Fund I, LP</p>
+            <div className="flex items-center gap-2">
+              <LogoMark size={28} />
+              <div>
+                <h1 className="text-sm font-semibold text-foreground">TWH Americas</h1>
+                <p className="text-[10px] text-muted-foreground">Fund I, LP</p>
+              </div>
             </div>
           )}
+          {collapsed && <LogoMark size={24} />}
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="p-1 rounded hover:bg-accent text-muted-foreground"
