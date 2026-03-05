@@ -60,14 +60,6 @@ export function useConsolidatedMetrics() {
       (s: number, r: any) => s + Number(r.reported_nav || 0), 0
     );
 
-    // Also sum capital_called_to_date and distributions_to_date from reports
-    const capitalCalledFromReports = fundQuarterlyReports.reduce(
-      (s: number, r: any) => s + Number(r.capital_called_to_date || 0), 0
-    );
-    const distributionsFromReports = fundQuarterlyReports.reduce(
-      (s: number, r: any) => s + Number(r.distributions_to_date || 0), 0
-    );
-
     // ─── TWH metrics from FS (supplementary — for cost/FMV/proceeds) ─
     const fundData = allFS.map((fs: any) => {
       const extracted = fs.extracted_data as any;
@@ -100,20 +92,38 @@ export function useConsolidatedMetrics() {
     const directsFmv = directValuations.reduce((s: number, dv: any) => s + Number(dv.current_valuation || 0), 0);
     const directsProceeds = directValuations.reduce((s: number, dv: any) => s + Number(dv.realized_proceeds_this_quarter || 0), 0);
 
-    // ─── Cashflow aggregates ─────────────────────────────────
-    // Use the HIGHER of: sum of individual cashflows vs capital_called_to_date from reports
-    // This catches cases where cashflow ledger entries are incomplete
-    const totalCapitalCallsFromLedger = allCashflows
-      .filter((c: any) => c.cashflow_type?.startsWith("Capital Call"))
-      .reduce((s: number, c: any) => s + Number(c.capital_deployed || 0), 0);
+    // ─── Cashflow aggregates (source of truth: fund capital activity ledger) ───
+    const normalizeType = (type: unknown) => String(type ?? "").trim().toLowerCase();
+    const toDate = (value: unknown) => {
+      const d = new Date(String(value ?? ""));
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
 
-    const totalCapitalCalls = Math.max(totalCapitalCallsFromLedger, capitalCalledFromReports);
+    const isCapitalCall = (cf: any) => {
+      const type = normalizeType(cf.cashflow_type);
+      const capital = Number(cf.capital_deployed || 0);
+      const distribution = Number(cf.distribution_received || 0);
+      return type.startsWith("capital call") || (capital > 0 && distribution === 0);
+    };
 
-    const totalDistributionsFromLedger = allCashflows
-      .filter((c: any) => c.cashflow_type === "Distribution")
-      .reduce((s: number, c: any) => s + Number(c.distribution_received || 0), 0);
+    const isDistribution = (cf: any) => {
+      const type = normalizeType(cf.cashflow_type);
+      return type === "distribution" || Number(cf.distribution_received || 0) > 0;
+    };
 
-    const totalDistributions = Math.max(totalDistributionsFromLedger, distributionsFromReports);
+    const isInvestmentCall = (cf: any) => {
+      const type = normalizeType(cf.cashflow_type);
+      return isCapitalCall(cf) && type.includes("investment");
+    };
+
+    // Total Contributed = sum(all Capital Call rows in fund ledger) + directs cost (added later in denominator)
+    const totalCapitalCalls = allCashflows
+      .filter((cf: any) => isCapitalCall(cf))
+      .reduce((s: number, cf: any) => s + Number(cf.capital_deployed || 0), 0);
+
+    const totalDistributions = allCashflows
+      .filter((cf: any) => isDistribution(cf))
+      .reduce((s: number, cf: any) => s + Number(cf.distribution_received || 0), 0);
 
     // ─── GROSS TVPI ──────────────────────────────────────────
     // (twhFmv + twhProceeds + directsFmv + directsProceeds) / (twhCost + directsCost)
@@ -131,21 +141,32 @@ export function useConsolidatedMetrics() {
     // All capital calls → negative, directs → negative, distributions → positive, terminal = NAV + directsFmv
     const netIrrCFs: { date: Date; amount: number }[] = [];
     for (const cf of allCashflows) {
-      const isCall = (cf as any).cashflow_type?.startsWith("Capital Call");
-      if (isCall) {
-        netIrrCFs.push({ date: new Date(cf.cashflow_date), amount: -Number(cf.capital_deployed || 0) });
-      } else {
-        netIrrCFs.push({ date: new Date(cf.cashflow_date), amount: Number(cf.distribution_received || 0) });
+      const date = toDate(cf.cashflow_date);
+      if (!date) continue;
+
+      if (isCapitalCall(cf)) {
+        const amount = Number(cf.capital_deployed || 0);
+        if (amount > 0) netIrrCFs.push({ date, amount: -amount });
+      }
+
+      if (isDistribution(cf)) {
+        const amount = Number(cf.distribution_received || 0);
+        if (amount > 0) netIrrCFs.push({ date, amount });
       }
     }
+
     for (const d of directs as any[]) {
-      if (d.investment_date && Number(d.cost_basis) > 0) {
-        netIrrCFs.push({ date: new Date(d.investment_date), amount: -Number(d.cost_basis) });
+      const date = toDate(d.investment_date);
+      const amount = Number(d.cost_basis || 0);
+      if (date && amount > 0) {
+        netIrrCFs.push({ date, amount: -amount });
       }
     }
+
     const netTerminal = twhNavFromFunds + directsFmv;
-    if (netTerminal > 0) {
-      netIrrCFs.push({ date: new Date(activeQuarter.date), amount: netTerminal });
+    const terminalDate = toDate(activeQuarter.date);
+    if (netTerminal > 0 && terminalDate) {
+      netIrrCFs.push({ date: terminalDate, amount: netTerminal });
     }
     netIrrCFs.sort((a, b) => a.date.getTime() - b.date.getTime());
     const netIrr = computeXIRR(netIrrCFs);
@@ -155,22 +176,31 @@ export function useConsolidatedMetrics() {
     // Proceeds → positive, terminal = twhFmv + directsFmv
     const grossIrrCFs: { date: Date; amount: number }[] = [];
     for (const cf of allCashflows) {
-      if ((cf as any).cashflow_type === "Capital Call — Investment") {
-        grossIrrCFs.push({ date: new Date(cf.cashflow_date), amount: -Number(cf.capital_deployed || 0) });
+      const date = toDate(cf.cashflow_date);
+      if (!date) continue;
+
+      if (isInvestmentCall(cf)) {
+        const amount = Number(cf.capital_deployed || 0);
+        if (amount > 0) grossIrrCFs.push({ date, amount: -amount });
       }
-      // Proceeds from distributions
-      if ((cf as any).cashflow_type === "Distribution") {
-        grossIrrCFs.push({ date: new Date(cf.cashflow_date), amount: Number(cf.distribution_received || 0) });
+
+      if (isDistribution(cf)) {
+        const amount = Number(cf.distribution_received || 0);
+        if (amount > 0) grossIrrCFs.push({ date, amount });
       }
     }
+
     for (const d of directs as any[]) {
-      if (d.investment_date && Number(d.cost_basis) > 0) {
-        grossIrrCFs.push({ date: new Date(d.investment_date), amount: -Number(d.cost_basis) });
+      const date = toDate(d.investment_date);
+      const amount = Number(d.cost_basis || 0);
+      if (date && amount > 0) {
+        grossIrrCFs.push({ date, amount: -amount });
       }
     }
+
     const grossTerminal = twhFmvFromFunds + directsFmv;
-    if (grossTerminal > 0) {
-      grossIrrCFs.push({ date: new Date(activeQuarter.date), amount: grossTerminal });
+    if (grossTerminal > 0 && terminalDate) {
+      grossIrrCFs.push({ date: terminalDate, amount: grossTerminal });
     }
     grossIrrCFs.sort((a, b) => a.date.getTime() - b.date.getTime());
     const grossIrr = computeXIRR(grossIrrCFs);
