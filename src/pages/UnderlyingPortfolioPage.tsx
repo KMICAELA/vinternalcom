@@ -1,53 +1,39 @@
 import { useState, useMemo } from "react";
-import { useAllFundFS, useActiveQuarter, useFunds, useUnderlyingPortfolio, useDirectInvestments } from "@/hooks/usePortfolioData";
+import { useAllFundFS, useActiveQuarter, useFunds } from "@/hooks/usePortfolioData";
 import { formatCurrency, formatMultiple, formatPercent } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
+import { underlyingPortfolioSeed, fundTwhPct } from "@/data/underlyingPortfolioSeed";
 
 export default function UnderlyingPortfolioPage() {
   const activeQuarter = useActiveQuarter();
   const { data: allFS = [] } = useAllFundFS(activeQuarter.date);
   const { data: funds = [] } = useFunds();
-  const { data: holdings = [] } = useUnderlyingPortfolio(activeQuarter.date);
-  const { data: directs = [] } = useDirectInvestments();
 
   const [search, setSearch] = useState("");
   const [filterFund, setFilterFund] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
 
-  // Set of direct investment company names to exclude
-  const directNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const d of directs) {
-      names.add(d.company_name.toLowerCase());
-    }
-    // Also exclude known aggregate rows
-    names.add("directs portfolio");
-    return names;
-  }, [directs]);
-
-  // Build fund_id → fund map
-  const fundMap = useMemo(() => {
+  // Build fund_name → fund record map for TWH% lookup
+  const fundByName = useMemo(() => {
     const m: Record<string, any> = {};
-    for (const f of funds) m[f.id] = f;
+    for (const f of funds) m[f.fund_name] = f;
     return m;
   }, [funds]);
 
-  // Layer 1: Seed data from underlying_portfolio_holdings (pre-computed TWH values)
-  // Layer 2: Overlay with confirmed FS extractions per fund (replaces seed for that fund)
   const companies = useMemo(() => {
     const rows: any[] = [];
 
-    // Collect fund IDs that have confirmed FS data — those funds use FS data, not seed
-    const fsFundIds = new Set<string>();
+    // Collect fund names that have confirmed FS data
+    const fsFundNames = new Set<string>();
     for (const fs of allFS) {
       const fund = (fs as any).fund;
-      if (fund?.id) fsFundIds.add(fund.id);
+      if (fund?.fund_name) fsFundNames.add(fund.fund_name);
     }
 
-    // Layer 2: Add companies from confirmed FS extractions
+    // Layer 2: Add companies from confirmed FS extractions (replaces seed for that fund)
     for (const fs of allFS) {
       const extracted = fs.extracted_data as any;
       const fund = (fs as any).fund;
@@ -60,8 +46,6 @@ export default function UnderlyingPortfolioPage() {
 
       for (const co of extracted?.portfolio_companies || []) {
         const name = co.company_name || '';
-        if (directNames.has(name.toLowerCase())) continue;
-
         const invCost = Number(co.investment_cost || 0);
         const fmv = Number(co.fmv || 0);
         const proceeds = Number(co.proceeds || 0);
@@ -69,7 +53,6 @@ export default function UnderlyingPortfolioPage() {
         const twhFmv = fmv * twhPct;
         const twhProceeds = proceeds * twhPct;
 
-        // Normalize status to only valid values
         const rawStatus = (co.status || '').trim();
         const status = ['Active', 'Write-off', 'Exit'].includes(rawStatus) ? rawStatus : 'Active';
 
@@ -93,37 +76,25 @@ export default function UnderlyingPortfolioPage() {
       }
     }
 
-    // Layer 1: Add seed data from underlying_portfolio_holdings for funds without FS
-    for (const h of holdings) {
-      // Skip if this holding belongs to a fund that has FS data
-      if (h.fund_id && fsFundIds.has(h.fund_id)) continue;
-      // Skip direct investments
-      if (directNames.has(h.company_name.toLowerCase())) continue;
-      // Skip rows with no fund_id (these are unmapped — likely directs or aggregates)
-      // But include them if they have TWH values (they're legitimate fund holdings)
-      
-      const invCost = Number(h.investment_cost || 0);
-      const fmv = Number(h.fmv || 0);
-      const proceeds = Number(h.proceeds || 0);
-      const twhCost = Number(h.twh_cost || 0);
-      const twhFmv = Number(h.twh_fmv || 0);
-      const twhProceeds = Number(h.twh_proceeds || 0);
-      const twhPct = invCost > 0 ? twhCost / invCost : 0;
+    // Layer 1: Seed data for funds without confirmed FS
+    for (const s of underlyingPortfolioSeed) {
+      if (fsFundNames.has(s.fund)) continue; // FS replaces seed for this fund
 
-      // Determine status: if FMV is 0 and no proceeds, likely write-off
-      let status = 'Active';
-      if (fmv === 0 && proceeds === 0 && invCost > 0) status = 'Write-off';
-
-      // Get fund name from fund_id if available
-      const fundName = h.fund_id && fundMap[h.fund_id] ? fundMap[h.fund_id].fund_name : '—';
+      const twhPct = fundTwhPct[s.fund] || 0;
+      const invCost = s.cost;
+      const fmv = s.fmv;
+      const proceeds = s.proceeds;
+      const twhCost = invCost * twhPct;
+      const twhFmv = fmv * twhPct;
+      const twhProceeds = proceeds * twhPct;
 
       rows.push({
-        company_name: h.company_name,
-        fund_name: fundName,
-        status,
-        investment_date: null,
-        instrument: null,
-        round: null,
+        company_name: s.company,
+        fund_name: s.fund,
+        status: s.status,
+        investment_date: s.date,
+        instrument: s.instrument,
+        round: s.round,
         investment_cost: invCost,
         fmv,
         proceeds,
@@ -137,7 +108,7 @@ export default function UnderlyingPortfolioPage() {
     }
 
     return rows;
-  }, [allFS, holdings, funds, directNames, fundMap]);
+  }, [allFS, funds, fundByName]);
 
   const filtered = companies.filter(c => {
     if (search && !c.company_name.toLowerCase().includes(search.toLowerCase())) return false;
@@ -164,7 +135,6 @@ export default function UnderlyingPortfolioPage() {
         <p className="text-sm text-muted-foreground">Company-level view across all funds · {activeQuarter.quarter}</p>
       </div>
 
-      {/* Filters */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
