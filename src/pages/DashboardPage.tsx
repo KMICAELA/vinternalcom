@@ -139,12 +139,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Top Metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
         <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment)} icon={DollarSign} highlight />
-        <MetricCard label="Fund Investments" value={String(numFunds)} icon={Building2} sub={`${numDirects} directs`} />
+        <MetricCard label="Fund Investments (#)" value={String(numFunds)} icon={Building2} />
+        <MetricCard label="Fund Investments ($)" value={formatCurrency(totalCommitment)} icon={DollarSign} />
+        <MetricCard label="Direct Investments (#)" value={String(numDirects)} icon={Target} />
+        <MetricCard label="Direct Investments ($)" value={directsCost > 0 ? formatCurrency(directsCost) : "—"} icon={DollarSign} />
         <MetricCard label="Contributed" value={totalContributions > 0 ? formatCurrency(totalContributions) : "—"} icon={TrendingUp} sub={totalContributions > 0 ? `${formatPercent(totalContributions / totalCommitment)} deployed` : "No capital activity yet"} />
         <MetricCard label="TWH NAV" value={totalNav > 0 ? formatCurrency(totalNav) : "—"} icon={Layers} sub={totalNav > 0 ? undefined : "Upload FS to populate"} />
-        <MetricCard label="Directs Invested" value={directsCost > 0 ? formatCurrency(directsCost) : "—"} icon={Target} />
         <MetricCard label="Net TVPI" value={totalContributions > 0 ? formatMultiple((totalNav + totalDistributions) / totalContributions) : "—"} highlight />
       </div>
 
