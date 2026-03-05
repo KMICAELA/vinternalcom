@@ -6,7 +6,7 @@ import { ArrowLeft, Upload, HardDrive, FileText, Check, X, CheckCircle2, Clock }
 import { useFunds, useAvailableQuarters } from "@/hooks/usePortfolioData";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 
 const ALL_QUARTERS = [
@@ -42,6 +42,8 @@ const AddQuarterlyData = () => {
   const { toast } = useToast();
   const { data: funds = [] } = useFunds();
   const { data: availableQuarters = [] } = useAvailableQuarters();
+  
+  const queryClient = useQueryClient();
   
   // Auto-detect next quarter based on latest confirmed data
   const defaultQuarter = useMemo(() => {
@@ -95,15 +97,25 @@ const AddQuarterlyData = () => {
     setUploadingFundId(fundId);
     try {
       const filePath = `${activeQuarter}/${fundId}/${file.name}`;
-      const { error } = await supabase.storage
+      const { error: storageError } = await supabase.storage
         .from("fund-reports")
         .upload(filePath, file, { upsert: true });
 
-      if (error) throw error;
+      if (storageError) throw storageError;
+
+      // Upsert a record in fund_financial_statements so status updates
+      const { error: dbError } = await supabase
+        .from("fund_financial_statements")
+        .upsert(
+          { fund_id: fundId, quarter_date: activeQuarter, file_path: filePath, confirmed: false },
+          { onConflict: "fund_id,quarter_date" }
+        );
+
+      if (dbError) throw dbError;
 
       toast({ title: "Uploaded", description: `Report for ${funds.find((f: any) => f.id === fundId)?.fund_name} uploaded.` });
-      // Clear the file from local state
       setUploadedFiles((prev) => ({ ...prev, [fundId]: null }));
+      queryClient.invalidateQueries({ queryKey: ["fund-fs-status", activeQuarter] });
     } catch (err: any) {
       toast({ title: "Upload failed", description: err.message, variant: "destructive" });
     } finally {
