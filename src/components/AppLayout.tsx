@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Building2, Layers, Target, BarChart3, Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Building2, Layers, Target, BarChart3, Settings, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ChatWidget from "./ChatWidget";
 
 const navItems = [
-  { to: "/", icon: Building2, label: "Funds" },
+  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/funds", icon: Building2, label: "Funds" },
   { to: "/underlying", icon: Layers, label: "Underlying Portfolio" },
   { to: "/directs", icon: Target, label: "Directs" },
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },

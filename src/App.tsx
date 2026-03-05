@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import AppLayout from "./components/AppLayout";
+import DashboardPage from "./pages/DashboardPage";
 import FundsPage from "./pages/FundsPage";
 import UnderlyingPortfolioPage from "./pages/UnderlyingPortfolioPage";
 import DirectsPage from "./pages/DirectsPage";
@@ -21,7 +22,8 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<FundsPage />} />
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/funds" element={<FundsPage />} />
             <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
             <Route path="/directs" element={<DirectsPage />} />
             <Route path="/consolidated" element={<ConsolidatedPage />} />
