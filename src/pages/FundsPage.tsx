@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useFunds, useFundCashflows, useFundFinancialStatement, useActiveQuarter } from "@/hooks/usePortfolioData";
+import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -163,11 +163,20 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, onUpload }: {
   fund: any; quarterDate: string; isExpanded: boolean; onToggle: () => void; onUpload: () => void;
 }) {
   const { data: fs } = useFundFinancialStatement(fund.id, quarterDate);
+  const { data: allFundReports = [] } = useFundReports(quarterDate);
   const { data: cashflows = [] } = useFundCashflows(fund.id);
   const qc = useQueryClient();
 
+  // Find this fund's quarterly report (primary data source)
+  const fundReport = allFundReports.find((r: any) => r.fund_id === fund.id);
+
   const fsData = fs?.extracted_data as any;
   const fundTotals = fsData?.fund_totals || {};
+
+  // Use quarterly report data as primary, FS as supplementary for cost/FMV
+  const reportNav = Number(fundReport?.reported_nav || 0);
+  const reportCalled = Number(fundReport?.capital_called_to_date || 0);
+  const reportDist = Number(fundReport?.distributions_to_date || 0);
 
   const metrics = computeFundMetrics({
     twhCommitment: Number(fund.commitment_amount),
@@ -181,6 +190,10 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, onUpload }: {
       amount: Number(c.capital_deployed || 0) + Number(c.distribution_received || 0),
     })),
     reportDate: quarterDate,
+    // Pass quarterly report data so metrics can use it as override
+    reportNav,
+    reportCalled,
+    reportDist,
   });
 
   const [newCf, setNewCf] = useState({ cashflow_date: "", cashflow_type: "Capital Call — Investment", amount: 0, description: "" });

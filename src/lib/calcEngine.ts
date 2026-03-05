@@ -103,8 +103,12 @@ export function computeFundMetrics(params: {
   fundNav: number;            // from FS
   capitalActivity: { date: string; type: string; amount: number }[];
   reportDate: string;
+  // From fund_quarterly_reports (primary source when FS not available)
+  reportNav?: number;
+  reportCalled?: number;
+  reportDist?: number;
 }): FundMetrics {
-  const { twhCommitment, totalFundCommitment, totalInvestmentCost, totalPortfolioFmv, fundNav, capitalActivity, reportDate } = params;
+  const { twhCommitment, totalFundCommitment, totalInvestmentCost, totalPortfolioFmv, fundNav, capitalActivity, reportDate, reportNav, reportCalled, reportDist } = params;
 
   const twhPct = totalFundCommitment > 0 ? twhCommitment / totalFundCommitment : 0;
 
@@ -118,12 +122,20 @@ export function computeFundMetrics(params: {
 
   const twhCost = totalInvestmentCost * twhPct;
   const twhFmv = totalPortfolioFmv * twhPct;
-  const twhNav = fundNav * twhPct;
+  
+  // TWH NAV: prefer quarterly report nav (already TWH-level), fall back to FS-derived
+  const fsNav = fundNav * twhPct;
+  const twhNav = (reportNav != null && reportNav > 0) ? reportNav : fsNav;
 
-  const pic = twhCommitment > 0 ? twhContributions / twhCommitment : 0;
-  const rvpi = twhContributions > 0 ? twhNav / twhContributions : 0;
-  const dpi = twhContributions > 0 ? twhDistributions / twhContributions : 0;
-  const tvpi = twhContributions > 0 ? (twhNav + twhDistributions) / twhContributions : 0;
+  // Contributions: use max of ledger vs report
+  const effectiveContributions = Math.max(twhContributions, reportCalled || 0);
+  // Distributions: use max of ledger vs report
+  const effectiveDistributions = Math.max(twhDistributions, reportDist || 0);
+
+  const pic = twhCommitment > 0 ? effectiveContributions / twhCommitment : 0;
+  const rvpi = effectiveContributions > 0 ? twhNav / effectiveContributions : 0;
+  const dpi = effectiveContributions > 0 ? effectiveDistributions / effectiveContributions : 0;
+  const tvpi = effectiveContributions > 0 ? (twhNav + effectiveDistributions) / effectiveContributions : 0;
   const moic = twhCost > 0 ? twhFmv / twhCost : 0;
 
   // XIRR
@@ -138,7 +150,7 @@ export function computeFundMetrics(params: {
   xirrCashflows.sort((a, b) => a.date.getTime() - b.date.getTime());
   const irr = computeXIRR(xirrCashflows);
 
-  return { twhPct, twhContributions, twhDistributions, twhCost, twhFmv, twhNav, pic, rvpi, dpi, tvpi, moic, irr };
+  return { twhPct, twhContributions: effectiveContributions, twhDistributions: effectiveDistributions, twhCost, twhFmv, twhNav, pic, rvpi, dpi, tvpi, moic, irr };
 }
 
 // ─── Legacy computeMetrics (kept for backward compat) ──────────────
