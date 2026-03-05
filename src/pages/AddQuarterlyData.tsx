@@ -147,10 +147,7 @@ const AddQuarterlyData = () => {
               <p className="text-xs text-muted-foreground">Upload quarterly fund reports</p>
             </div>
           </div>
-          <Button size="sm" variant="outline" className="gap-2" onClick={handleConnectDrive}>
-            <HardDrive className="h-3.5 w-3.5" />
-            Connect Drive
-          </Button>
+          <div />
         </div>
       </header>
 
