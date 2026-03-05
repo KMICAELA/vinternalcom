@@ -73,13 +73,31 @@ export default function DashboardPage() {
     enabled: !!activeQuarter.date,
   });
 
+  // Fund quarterly reports — primary source for per-fund TWH NAV
+  const { data: fundQuarterlyReports = [] } = useQuery({
+    queryKey: ["fund-quarterly-reports", activeQuarter.date],
+    queryFn: async () => {
+      if (!activeQuarter.date) return [];
+      const { data, error } = await supabase
+        .from("fund_quarterly_reports")
+        .select("*")
+        .eq("quarter_date", activeQuarter.date);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!activeQuarter.date,
+  });
+
   // Per-fund metrics (for fund table only)
   const fundMetrics = useMemo(() => {
     return funds.map((fund: any) => {
       const fs = allFS.find((f: any) => f.fund_id === fund.id);
+      const fqr = fundQuarterlyReports.find((r: any) => r.fund_id === fund.id);
       const fsData = (fs?.extracted_data as any) || {};
       const fundTotals = fsData.fund_totals || {};
       const cashflows = allCashflows.filter((c: any) => c.fund_id === fund.id);
+
+      const fqrNav = Number(fqr?.reported_nav || 0);
 
       const metrics = computeFundMetrics({
         twhCommitment: Number(fund.commitment_amount),
@@ -95,9 +113,18 @@ export default function DashboardPage() {
         reportDate: activeQuarter.date,
       });
 
-      return { fund, metrics, hasFS: !!fs?.confirmed };
+      // Override twhNav with FQR value if available (already TWH-level)
+      if (fqrNav > 0) {
+        metrics.twhNav = fqrNav;
+        if (metrics.twhContributions > 0) {
+          metrics.tvpi = (fqrNav + metrics.twhDistributions) / metrics.twhContributions;
+          metrics.rvpi = fqrNav / metrics.twhContributions;
+        }
+      }
+
+      return { fund, metrics, hasFS: !!fs?.confirmed || !!fqr };
     });
-  }, [funds, allFS, allCashflows, activeQuarter.date]);
+  }, [funds, allFS, allCashflows, fundQuarterlyReports, activeQuarter.date]);
 
   // Use consolidated metrics for top-level numbers
   const totalCommitment = funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);

@@ -25,6 +25,21 @@ export function useConsolidatedMetrics() {
     },
   });
 
+  // Fund quarterly reports — primary source for TWH NAV per fund
+  const { data: fundQuarterlyReports = [] } = useQuery({
+    queryKey: ["fund-quarterly-reports", activeQuarter.date],
+    queryFn: async () => {
+      if (!activeQuarter.date) return [];
+      const { data, error } = await supabase
+        .from("fund_quarterly_reports")
+        .select("*, fund:funds(*)")
+        .eq("quarter_date", activeQuarter.date);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!activeQuarter.date,
+  });
+
   // Direct quarterly valuations for active quarter
   const { data: directValuations = [] } = useQuery({
     queryKey: ["direct-valuations", activeQuarter.date],
@@ -39,7 +54,21 @@ export function useConsolidatedMetrics() {
   });
 
   return useMemo(() => {
-    // ─── TWH % per fund ──────────────────────────────────────
+    // ─── TWH NAV from fund_quarterly_reports (primary source) ─
+    // reported_nav in this table is already TWH-level NAV
+    const twhNavFromReports = fundQuarterlyReports.reduce(
+      (s: number, r: any) => s + Number(r.reported_nav || 0), 0
+    );
+
+    // Also sum capital_called_to_date and distributions_to_date from reports
+    const capitalCalledFromReports = fundQuarterlyReports.reduce(
+      (s: number, r: any) => s + Number(r.capital_called_to_date || 0), 0
+    );
+    const distributionsFromReports = fundQuarterlyReports.reduce(
+      (s: number, r: any) => s + Number(r.distributions_to_date || 0), 0
+    );
+
+    // ─── TWH metrics from FS (supplementary — for cost/FMV/proceeds) ─
     const fundData = allFS.map((fs: any) => {
       const extracted = fs.extracted_data as any;
       const fund = fs.fund;
@@ -50,14 +79,15 @@ export function useConsolidatedMetrics() {
       return {
         fundId: fs.fund_id,
         twhPct,
-        twhNav: Number(extracted?.fund_totals?.fund_nav || 0) * twhPct,
         twhCost: Number(extracted?.fund_totals?.total_investment_cost || 0) * twhPct,
         twhFmv: Number(extracted?.fund_totals?.total_portfolio_fmv || 0) * twhPct,
         twhProceeds: Number(extracted?.fund_totals?.total_proceeds || 0) * twhPct,
       };
     });
 
-    const twhNavFromFunds = fundData.reduce((s, d) => s + d.twhNav, 0);
+    // TWH NAV: prefer fund_quarterly_reports (always populated), fallback to FS
+    const twhNavFromFS = fundData.reduce((s, d) => s + (d as any).twhNav || 0, 0);
+    const twhNavFromFunds = twhNavFromReports > 0 ? twhNavFromReports : twhNavFromFS;
     const twhCostFromFunds = fundData.reduce((s, d) => s + d.twhCost, 0);
     const twhFmvFromFunds = fundData.reduce((s, d) => s + d.twhFmv, 0);
     const twhProceedsFromFunds = fundData.reduce((s, d) => s + d.twhProceeds, 0);
@@ -65,18 +95,23 @@ export function useConsolidatedMetrics() {
     // ─── Directs ─────────────────────────────────────────────
     const directsCost = directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
     
-    // Build a map of company_id → valuation for the active quarter
     const directsFmv = directValuations.reduce((s: number, dv: any) => s + Number(dv.current_valuation || 0), 0);
     const directsProceeds = directValuations.reduce((s: number, dv: any) => s + Number(dv.realized_proceeds_this_quarter || 0), 0);
 
     // ─── Cashflow aggregates ─────────────────────────────────
-    const totalCapitalCalls = allCashflows
+    // Use the HIGHER of: sum of individual cashflows vs capital_called_to_date from reports
+    // This catches cases where cashflow ledger entries are incomplete
+    const totalCapitalCallsFromLedger = allCashflows
       .filter((c: any) => c.cashflow_type?.startsWith("Capital Call"))
       .reduce((s: number, c: any) => s + Number(c.capital_deployed || 0), 0);
 
-    const totalDistributions = allCashflows
+    const totalCapitalCalls = Math.max(totalCapitalCallsFromLedger, capitalCalledFromReports);
+
+    const totalDistributionsFromLedger = allCashflows
       .filter((c: any) => c.cashflow_type === "Distribution")
       .reduce((s: number, c: any) => s + Number(c.distribution_received || 0), 0);
+
+    const totalDistributions = Math.max(totalDistributionsFromLedger, distributionsFromReports);
 
     // ─── GROSS TVPI ──────────────────────────────────────────
     // (twhFmv + twhProceeds + directsFmv + directsProceeds) / (twhCost + directsCost)
@@ -158,5 +193,5 @@ export function useConsolidatedMetrics() {
       totalNav: netTerminal, // twhNav + directsFmv
       activeQuarter,
     };
-  }, [funds, allFS, directs, allCashflows, directValuations, activeQuarter]);
+  }, [funds, allFS, directs, allCashflows, directValuations, fundQuarterlyReports, activeQuarter]);
 }
