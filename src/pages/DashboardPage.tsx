@@ -138,43 +138,18 @@ export default function DashboardPage() {
         </Button>
       </div>
 
-      {/* Top Metrics — three summary cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Portfolio Total */}
-        <div className={cn("rounded-lg border border-primary/20 bg-primary/5 p-4 metric-glow")}>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Total Portfolio</p>
-          <p className="text-2xl font-semibold font-mono text-foreground">{formatCurrency(totalCommitment + directsCost)}</p>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-2">
-            <span>{numFunds} funds · {numDirects} directs</span>
-            <span>TVPI: {totalContributions > 0 ? formatMultiple((totalNav + totalDistributions) / totalContributions) : "—"}</span>
-          </div>
-        </div>
-
-        {/* Fund Investments */}
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Fund Investments</p>
-          </div>
-          <p className="text-2xl font-semibold font-mono text-foreground">{formatCurrency(totalCommitment)}</p>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-2">
-            <span>{numFunds} funds</span>
-            <span>Contributed: {totalContributions > 0 ? formatCurrency(totalContributions) : "—"}</span>
-            <span>NAV: {totalNav > 0 ? formatCurrency(totalNav) : "—"}</span>
-          </div>
-        </div>
-
-        {/* Direct Investments */}
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <Target className="h-3.5 w-3.5 text-muted-foreground" />
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Direct Investments</p>
-          </div>
-          <p className="text-2xl font-semibold font-mono text-foreground">{directsCost > 0 ? formatCurrency(directsCost) : "—"}</p>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground mt-2">
-            <span>{numDirects} companies</span>
-          </div>
-        </div>
+      {/* Top Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment + directsCost)} icon={DollarSign} highlight />
+        <MetricCard label="Fund Investments" value={formatCurrency(totalCommitment)} icon={Building2} sub={`${numFunds} funds`} />
+        <MetricCard label="Direct Investments" value={directsCost > 0 ? formatCurrency(directsCost) : "—"} icon={Target} sub={`${numDirects} companies`} />
+        <MetricCard label="Net TVPI" value={totalContributions > 0 ? formatMultiple((totalNav + totalDistributions) / totalContributions) : "—"} highlight />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <MetricCard label="Contributed" value={totalContributions > 0 ? formatCurrency(totalContributions) : "—"} icon={TrendingUp} sub={totalContributions > 0 ? `${formatPercent(totalContributions / totalCommitment)} deployed` : "No activity yet"} />
+        <MetricCard label="TWH NAV" value={totalNav > 0 ? formatCurrency(totalNav) : "—"} icon={Layers} sub={totalNav > 0 ? undefined : "Upload FS to populate"} />
+        <MetricCard label="Distributions" value={totalDistributions > 0 ? formatCurrency(totalDistributions) : "—"} />
+        <MetricCard label="Unrealized Value" value={totalFmv > 0 ? formatCurrency(totalFmv) : "—"} />
       </div>
 
       {/* Charts Row */}
