@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      app_settings: {
+        Row: {
+          id: string
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          id?: string
+          key: string
+          updated_at?: string
+          value?: Json
+        }
+        Update: {
+          id?: string
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       direct_investments: {
         Row: {
           co_investors: string | null
@@ -98,6 +119,7 @@ export type Database = {
         Row: {
           capital_deployed: number
           cashflow_date: string
+          cashflow_type: string
           created_at: string
           description: string | null
           distribution_received: number
@@ -107,6 +129,7 @@ export type Database = {
         Insert: {
           capital_deployed?: number
           cashflow_date: string
+          cashflow_type?: string
           created_at?: string
           description?: string | null
           distribution_received?: number
@@ -116,6 +139,7 @@ export type Database = {
         Update: {
           capital_deployed?: number
           cashflow_date?: string
+          cashflow_type?: string
           created_at?: string
           description?: string | null
           distribution_received?: number
@@ -125,6 +149,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "fund_cashflows_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fund_financial_statements: {
+        Row: {
+          confirmed: boolean
+          created_at: string
+          extracted_data: Json
+          file_path: string | null
+          fund_id: string
+          id: string
+          quarter_date: string
+          updated_at: string
+        }
+        Insert: {
+          confirmed?: boolean
+          created_at?: string
+          extracted_data?: Json
+          file_path?: string | null
+          fund_id: string
+          id?: string
+          quarter_date: string
+          updated_at?: string
+        }
+        Update: {
+          confirmed?: boolean
+          created_at?: string
+          extracted_data?: Json
+          file_path?: string | null
+          fund_id?: string
+          id?: string
+          quarter_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_financial_statements_fund_id_fkey"
             columns: ["fund_id"]
             isOneToOne: false
             referencedRelation: "funds"
@@ -214,12 +279,14 @@ export type Database = {
           carry_percentage: number
           commitment_amount: number
           created_at: string
+          currency: string
           fund_name: string
           geography: string | null
           hurdle_rate: number
           id: string
           management_fee_rate: number
           ownership_percentage: number
+          start_date: string | null
           strategy: string | null
           updated_at: string
           vintage_year: number | null
@@ -228,12 +295,14 @@ export type Database = {
           carry_percentage?: number
           commitment_amount?: number
           created_at?: string
+          currency?: string
           fund_name: string
           geography?: string | null
           hurdle_rate?: number
           id?: string
           management_fee_rate?: number
           ownership_percentage?: number
+          start_date?: string | null
           strategy?: string | null
           updated_at?: string
           vintage_year?: number | null
@@ -242,12 +311,14 @@ export type Database = {
           carry_percentage?: number
           commitment_amount?: number
           created_at?: string
+          currency?: string
           fund_name?: string
           geography?: string | null
           hurdle_rate?: number
           id?: string
           management_fee_rate?: number
           ownership_percentage?: number
+          start_date?: string | null
           strategy?: string | null
           updated_at?: string
           vintage_year?: number | null
@@ -274,6 +345,51 @@ export type Database = {
           id?: string
           lp_nav?: number
           notes?: string | null
+          quarter_date?: string
+        }
+        Relationships: []
+      }
+      quarterly_history: {
+        Row: {
+          contribution: number
+          created_at: string
+          distribution: number
+          gross_irr: number
+          gross_tvpi: number
+          id: string
+          locked: boolean
+          nav: number
+          net_irr: number
+          net_tvpi: number
+          quarter: string
+          quarter_date: string
+        }
+        Insert: {
+          contribution?: number
+          created_at?: string
+          distribution?: number
+          gross_irr?: number
+          gross_tvpi?: number
+          id?: string
+          locked?: boolean
+          nav?: number
+          net_irr?: number
+          net_tvpi?: number
+          quarter: string
+          quarter_date: string
+        }
+        Update: {
+          contribution?: number
+          created_at?: string
+          distribution?: number
+          gross_irr?: number
+          gross_tvpi?: number
+          id?: string
+          locked?: boolean
+          nav?: number
+          net_irr?: number
+          net_tvpi?: number
+          quarter?: string
           quarter_date?: string
         }
         Relationships: []

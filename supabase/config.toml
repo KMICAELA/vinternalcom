@@ -2,3 +2,6 @@ project_id = "cubrasruukdsqdzwfyjp"
 
 [functions.portfolio-chat]
 verify_jwt = false
+
+[functions.extract-fund-fs]
+verify_jwt = false
