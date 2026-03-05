@@ -282,37 +282,52 @@ export type Database = {
         Row: {
           company_name: string
           created_at: string
+          fmv: number
           fund_id: string | null
           id: string
+          investment_cost: number
+          notes: string | null
+          proceeds: number
           quarter_date: string
           region: string | null
           sector: string | null
           twh_cost: number
           twh_fmv: number
+          twh_proceeds: number
           type: string | null
         }
         Insert: {
           company_name: string
           created_at?: string
+          fmv?: number
           fund_id?: string | null
           id?: string
+          investment_cost?: number
+          notes?: string | null
+          proceeds?: number
           quarter_date: string
           region?: string | null
           sector?: string | null
           twh_cost?: number
           twh_fmv?: number
+          twh_proceeds?: number
           type?: string | null
         }
         Update: {
           company_name?: string
           created_at?: string
+          fmv?: number
           fund_id?: string | null
           id?: string
+          investment_cost?: number
+          notes?: string | null
+          proceeds?: number
           quarter_date?: string
           region?: string | null
           sector?: string | null
           twh_cost?: number
           twh_fmv?: number
+          twh_proceeds?: number
           type?: string | null
         }
         Relationships: [
@@ -324,6 +339,63 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      underlying_portfolio_transactions: {
+        Row: {
+          company_name: string
+          created_at: string
+          fmv: number
+          fund_name: string
+          id: string
+          instrument: string | null
+          investment_cost: number
+          proceeds: number
+          quarter_date: string
+          round: string | null
+          status: string | null
+          transaction_date: string | null
+          twh_cost: number
+          twh_fmv: number
+          twh_pct: number
+          twh_proceeds: number
+        }
+        Insert: {
+          company_name: string
+          created_at?: string
+          fmv?: number
+          fund_name: string
+          id?: string
+          instrument?: string | null
+          investment_cost?: number
+          proceeds?: number
+          quarter_date: string
+          round?: string | null
+          status?: string | null
+          transaction_date?: string | null
+          twh_cost?: number
+          twh_fmv?: number
+          twh_pct?: number
+          twh_proceeds?: number
+        }
+        Update: {
+          company_name?: string
+          created_at?: string
+          fmv?: number
+          fund_name?: string
+          id?: string
+          instrument?: string | null
+          investment_cost?: number
+          proceeds?: number
+          quarter_date?: string
+          round?: string | null
+          status?: string | null
+          transaction_date?: string | null
+          twh_cost?: number
+          twh_fmv?: number
+          twh_pct?: number
+          twh_proceeds?: number
+        }
+        Relationships: []
       }
     }
     Views: {
