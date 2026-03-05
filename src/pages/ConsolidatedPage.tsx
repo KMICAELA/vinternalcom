@@ -66,7 +66,7 @@ export default function ConsolidatedPage() {
           { label: "Total Contributed", value: formatCurrency(cm.totalCapitalCalls) },
           { label: "Total Distributions", value: formatCurrency(cm.totalDistributions) },
           { label: "Total NAV", value: formatCurrency(cm.totalNav) },
-          { label: "Unrealized (FMV)", value: formatCurrency(cm.twhFmvFromFunds + cm.directsFmv) },
+          { label: "Unrealized (FMV)", value: formatCurrency(cm.grossFmv) },
         ].map(m => (
           <div key={m.label} className={`border rounded-lg p-4 ${m.highlight ? 'border-primary/30 bg-primary/5' : 'border-border bg-card'}`}>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{m.label}</p>

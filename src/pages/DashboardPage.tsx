@@ -186,7 +186,7 @@ export default function DashboardPage() {
         <MetricCard label="Contributed" value={cm.totalCapitalCalls > 0 ? formatCurrency(cm.totalCapitalCalls) : "—"} icon={TrendingUp} sub={cm.totalCapitalCalls > 0 ? `${formatPercent(cm.totalCapitalCalls / (totalCommitment + cm.directsCost))} deployed` : "No activity yet"} />
         <MetricCard label="TWH NAV" value={cm.totalNav > 0 ? formatCurrency(cm.totalNav) : "—"} icon={Layers} sub={cm.totalNav > 0 ? undefined : "Upload FS to populate"} />
         <MetricCard label="Distributions" value={cm.totalDistributions > 0 ? formatCurrency(cm.totalDistributions) : "—"} />
-        <MetricCard label="Unrealized Value" value={cm.twhFmvFromFunds + cm.directsFmv > 0 ? formatCurrency(cm.twhFmvFromFunds + cm.directsFmv) : "—"} />
+        <MetricCard label="Unrealized Value" value={cm.grossFmv > 0 ? formatCurrency(cm.grossFmv) : "—"} />
       </div>
 
       {/* Charts Row */}
