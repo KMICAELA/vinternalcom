@@ -9,7 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 
-const quarterOptions = [
+const ALL_QUARTERS = [
+  "2024-03-31", "2024-06-30", "2024-09-30", "2024-12-31",
   "2025-03-31", "2025-06-30", "2025-09-30", "2025-12-31",
   "2026-03-31", "2026-06-30", "2026-09-30", "2026-12-31",
 ];
@@ -45,10 +46,15 @@ const AddQuarterlyData = () => {
   // Auto-detect next quarter based on latest confirmed data
   const defaultQuarter = useMemo(() => {
     if (availableQuarters.length > 0) {
-      return getNextQuarter(availableQuarters[0]); // availableQuarters sorted desc
+      return getNextQuarter(availableQuarters[0]);
     }
     return "2025-09-30";
   }, [availableQuarters]);
+
+  // Only show quarters up to and including the next reportable quarter
+  const quarterOptions = useMemo(() => {
+    return ALL_QUARTERS.filter((q) => q <= defaultQuarter);
+  }, [defaultQuarter]);
 
   const [selectedQuarter, setSelectedQuarter] = useState<string | null>(null);
   const activeQuarter = selectedQuarter || defaultQuarter;
