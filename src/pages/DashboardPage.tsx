@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo } from "react"; // dashboard v2
 import { useFunds, useAllFundFS, useDirectInvestments, useActiveQuarter } from "@/hooks/usePortfolioData";
 import { formatCurrency, formatMultiple, formatPercent, computeFundMetrics } from "@/lib/calcEngine";
 import { supabase } from "@/integrations/supabase/client";
