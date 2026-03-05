@@ -102,10 +102,10 @@ const Index = () => {
               LP Cashflows ({lpCashflows.length})
             </TabsTrigger>
             <TabsTrigger value="underlying" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Underl. Port ({underlyingTransactions.length})
+              Underlying Portfolio ({underlyingPortfolio.length})
             </TabsTrigger>
             <TabsTrigger value="inventory" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Inventory ({underlyingPortfolio.length})
+              Inventory ({underlyingTransactions.length})
             </TabsTrigger>
           </TabsList>
 
@@ -119,10 +119,10 @@ const Index = () => {
             <CashflowsTable data={lpCashflows} />
           </TabsContent>
           <TabsContent value="underlying">
-            <UnderlyingPortfolioTable data={underlyingTransactions} />
+            <InventoryTable data={underlyingPortfolio} />
           </TabsContent>
           <TabsContent value="inventory">
-            <InventoryTable data={underlyingPortfolio} />
+            <UnderlyingPortfolioTable data={underlyingTransactions} />
           </TabsContent>
         </Tabs>
 
