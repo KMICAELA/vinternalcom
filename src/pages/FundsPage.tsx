@@ -26,7 +26,7 @@ export default function FundsPage() {
   const activeQuarter = useActiveQuarter();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
   const [addFundOpen, setAddFundOpen] = useState(false);
-  const [newFund, setNewFund] = useState({ fund_name: "", start_date: "", commitment_amount: 0, currency: "USD" });
+  const [newFund, setNewFund] = useState({ fund_name: "", start_date: "", commitment_amount: 0, currency: "USD", theme: "", company_industries: "", target_industries: "", geography: "" });
   const [uploadFundId, setUploadFundId] = useState<string | null>(null);
 
   const handleAddFund = async () => {
@@ -36,12 +36,16 @@ export default function FundsPage() {
       start_date: newFund.start_date || null,
       commitment_amount: newFund.commitment_amount,
       currency: newFund.currency,
+      theme: newFund.theme || null,
+      company_industries: newFund.company_industries || null,
+      target_industries: newFund.target_industries || null,
+      geography: newFund.geography || null,
     } as any);
     if (error) { toast.error(error.message); return; }
     toast.success("Fund added");
     qc.invalidateQueries({ queryKey: ["funds"] });
     setAddFundOpen(false);
-    setNewFund({ fund_name: "", start_date: "", commitment_amount: 0, currency: "USD" });
+    setNewFund({ fund_name: "", start_date: "", commitment_amount: 0, currency: "USD", theme: "", company_industries: "", target_industries: "", geography: "" });
   };
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
@@ -116,7 +120,23 @@ export default function FundsPage() {
                   <SelectItem value="USD">USD</SelectItem>
                   <SelectItem value="EUR">EUR</SelectItem>
                 </SelectContent>
-              </Select>
+            </Select>
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Theme</label>
+              <Input value={newFund.theme} onChange={e => setNewFund(p => ({ ...p, theme: e.target.value }))} placeholder="e.g. Climate Tech" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Company Industry(ies)</label>
+              <Input value={newFund.company_industries} onChange={e => setNewFund(p => ({ ...p, company_industries: e.target.value }))} placeholder="e.g. SaaS, Fintech" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Target Industry(ies)</label>
+              <Input value={newFund.target_industries} onChange={e => setNewFund(p => ({ ...p, target_industries: e.target.value }))} placeholder="e.g. Healthcare, Enterprise" />
+            </div>
+            <div>
+              <label className="text-sm text-muted-foreground">Geography</label>
+              <Input value={newFund.geography} onChange={e => setNewFund(p => ({ ...p, geography: e.target.value }))} placeholder="e.g. North America" />
             </div>
           </div>
           <DialogFooter>
@@ -212,6 +232,31 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, onUpload }: {
         <TableRow>
           <TableCell colSpan={11} className="bg-surface-1 p-0">
             <div className="p-4 space-y-4">
+              {/* Fund Classification */}
+              <div>
+                <h3 className="text-sm font-medium mb-2">Fund Details</h3>
+                <div className="grid grid-cols-4 gap-3">
+                  {[
+                    { label: "Theme", field: "theme" },
+                    { label: "Company Industry(ies)", field: "company_industries" },
+                    { label: "Target Industry(ies)", field: "target_industries" },
+                    { label: "Geography", field: "geography" },
+                  ].map(({ label, field }) => (
+                    <div key={field}>
+                      <label className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</label>
+                      <Input
+                        className="h-7 text-xs mt-1"
+                        value={(fund as any)[field] || ""}
+                        onChange={async (e) => {
+                          await supabase.from("funds").update({ [field]: e.target.value || null } as any).eq("id", fund.id);
+                          qc.invalidateQueries({ queryKey: ["funds"] });
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {/* Calculated Metrics */}
               <div className="grid grid-cols-5 gap-3">
                 {[
