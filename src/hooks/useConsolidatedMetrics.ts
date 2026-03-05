@@ -151,13 +151,15 @@ export function useConsolidatedMetrics() {
     const eligibleDirectsCost = eligibleDirects.reduce((s: number, d: any) => s + Number(d.cost_basis || 0), 0);
 
     // ─── NET TVPI ────────────────────────────────────────────
-    // Uses LP-level wires as denominator (the actual cash TWH sent)
+    // Net metrics use LP-level wires only. Terminal = fund NAVs only
+    // (directs cost is already embedded in LP wire contributions)
     const netDenominator = totalLpContributions;
-    const netNumerator = twhNavFromFunds + directsFmv + totalLpDistributions;
+    const netTerminal = twhNavFromFunds; // fund NAVs only, no directs FMV
+    const netNumerator = netTerminal + totalLpDistributions;
     const netTvpi = netDenominator > 0 ? netNumerator / netDenominator : 0;
 
     // ─── NET IRR ─────────────────────────────────────────────
-    // LP-level wires → negative, LP distributions → positive, terminal = NAV
+    // LP-level wires → negative, LP distributions → positive, terminal = fund NAV only
     const netIrrCFs: { date: Date; amount: number }[] = [];
     for (const cf of lpCashflows as any[]) {
       const date = toDate(cf.cashflow_date);
@@ -170,7 +172,6 @@ export function useConsolidatedMetrics() {
       }
     }
 
-    const netTerminal = twhNavFromFunds + directsFmv;
     const terminalDate = quarterEnd;
     if (netTerminal > 0 && terminalDate) {
       netIrrCFs.push({ date: terminalDate, amount: netTerminal });
@@ -179,19 +180,24 @@ export function useConsolidatedMetrics() {
     const netIrr = computeXIRR(netIrrCFs);
 
     // ─── GROSS TVPI ──────────────────────────────────────────
-    const grossDenominator = twhCostFromFunds + eligibleDirectsCost;
-    const grossNumerator = twhFmvFromFunds + twhProceedsFromFunds + directsFmv + directsProceeds;
+    // Gross cost = sum of ALL capital calls from fund_cashflows + eligible directs cost
+    const grossFundCost = allCashflows
+      .filter((cf: any) => isCapitalCall(cf))
+      .reduce((s: number, cf: any) => s + Number(cf.capital_deployed || 0), 0);
+    const grossDenominator = grossFundCost + eligibleDirectsCost;
+    const grossTerminal = twhFmvFromFunds + directsFmv;
+    const grossNumerator = grossTerminal + twhProceedsFromFunds + directsProceeds;
     const grossTvpi = grossDenominator > 0 ? grossNumerator / grossDenominator : 0;
 
     // ─── GROSS IRR ───────────────────────────────────────────
-    // Investment calls only (exclude mgmt fees/other) → negative, directs → negative
+    // ALL capital calls → negative, directs → negative
     // Proceeds → positive, terminal = twhFmv + directsFmv
     const grossIrrCFs: { date: Date; amount: number }[] = [];
     for (const cf of allCashflows) {
       const date = toDate(cf.cashflow_date);
       if (!date) continue;
 
-      if (isInvestmentCall(cf)) {
+      if (isCapitalCall(cf)) {
         const amount = Number(cf.capital_deployed || 0);
         if (amount > 0) grossIrrCFs.push({ date, amount: -amount });
       }
@@ -210,7 +216,6 @@ export function useConsolidatedMetrics() {
       }
     }
 
-    const grossTerminal = twhFmvFromFunds + directsFmv;
     if (grossTerminal > 0 && terminalDate) {
       grossIrrCFs.push({ date: terminalDate, amount: grossTerminal });
     }
@@ -234,7 +239,8 @@ export function useConsolidatedMetrics() {
       netIrr,
       grossIrr,
       // For display
-      totalNav: netTerminal, // twhNav + directsFmv
+      totalNav: netTerminal, // fund NAVs only
+      grossFmv: grossTerminal, // fund FMVs + directs FMV
       activeQuarter,
     };
   }, [funds, allFS, directs, allCashflows, lpCashflows, directValuations, fundQuarterlyReports, activeQuarter]);
