@@ -1,0 +1,1 @@
+ALTER TABLE public.fund_cashflows DROP CONSTRAINT IF EXISTS uq_fund_cashflow_date;
