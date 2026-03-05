@@ -1,19 +1,18 @@
 import { useMemo } from "react";
-import { useFunds, useActiveQuarter, useAllFundFS, useDirectInvestments, useQuarterlyHistory } from "@/hooks/usePortfolioData";
+import { useActiveQuarter, useQuarterlyHistory } from "@/hooks/usePortfolioData";
+import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { supabase } from "@/integrations/supabase/client";
-import { formatCurrency, formatMultiple, formatIrr, formatPercent, computeXIRR } from "@/lib/calcEngine";
+import { formatCurrency, formatMultiple, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 export default function ConsolidatedPage() {
   const activeQuarter = useActiveQuarter();
-  const { data: funds = [] } = useFunds();
-  const { data: allFS = [] } = useAllFundFS(activeQuarter.date);
-  const { data: directs = [] } = useDirectInvestments();
   const { data: quarterlyHistory = [] } = useQuarterlyHistory();
+  const cm = useConsolidatedMetrics();
 
-  // Fetch all fund cashflows
+  // Fetch all fund cashflows for ledger display
   const { data: allCashflows = [] } = useQuery({
     queryKey: ["all-fund-cashflows"],
     queryFn: async () => {
@@ -23,10 +22,18 @@ export default function ConsolidatedPage() {
     },
   });
 
-  // Build net cashflow ledger
+  const { data: directs = [] } = useQuery({
+    queryKey: ["direct-investments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("direct_investments").select("*").order("company_name");
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Build ledger for display
   const ledger = useMemo(() => {
     const entries: any[] = [];
-
     for (const cf of allCashflows) {
       const isCall = (cf as any).cashflow_type?.startsWith("Capital Call") || cf.capital_deployed > 0;
       const amount = Number(cf.capital_deployed || 0) + Number(cf.distribution_received || 0);
@@ -39,71 +46,21 @@ export default function ConsolidatedPage() {
         net_cf: isCall ? -amount : amount,
       });
     }
-
-    // Add directs
     for (const d of directs) {
-      if (d.investment_date && d.cost_basis > 0) {
+      if ((d as any).investment_date && (d as any).cost_basis > 0) {
         entries.push({
-          date: d.investment_date,
-          source: d.company_name,
+          date: (d as any).investment_date,
+          source: (d as any).company_name,
           type: 'Direct Investment',
-          contribution: Number(d.cost_basis),
+          contribution: Number((d as any).cost_basis),
           distribution: 0,
-          net_cf: -Number(d.cost_basis),
+          net_cf: -Number((d as any).cost_basis),
         });
       }
     }
-
     entries.sort((a, b) => a.date.localeCompare(b.date));
     return entries;
   }, [allCashflows, directs]);
-
-  // Consolidated metrics
-  const totalContributions = ledger.reduce((s, e) => s + e.contribution, 0);
-  const totalDistributions = ledger.reduce((s, e) => s + e.distribution, 0);
-
-  // TWH NAV from FS data
-  const twhNavFromFunds = allFS.reduce((sum, fs) => {
-    const extracted = fs.extracted_data as any;
-    const fund = (fs as any).fund;
-    const twhPct = fund && Number(extracted?.fund_totals?.total_commitment) > 0
-      ? Number(fund.commitment_amount) / Number(extracted.fund_totals.total_commitment)
-      : 0;
-    return sum + Number(extracted?.fund_totals?.fund_nav || 0) * twhPct;
-  }, 0);
-
-  const totalNav = twhNavFromFunds; // + directs FMV when available
-  const netTvpi = totalContributions > 0 ? (totalNav + totalDistributions) / totalContributions : 0;
-
-  // Gross metrics
-  const twhCostFromFunds = allFS.reduce((sum, fs) => {
-    const extracted = fs.extracted_data as any;
-    const fund = (fs as any).fund;
-    const twhPct = fund && Number(extracted?.fund_totals?.total_commitment) > 0
-      ? Number(fund.commitment_amount) / Number(extracted.fund_totals.total_commitment)
-      : 0;
-    return sum + Number(extracted?.fund_totals?.total_investment_cost || 0) * twhPct;
-  }, 0);
-
-  const twhFmvFromFunds = allFS.reduce((sum, fs) => {
-    const extracted = fs.extracted_data as any;
-    const fund = (fs as any).fund;
-    const twhPct = fund && Number(extracted?.fund_totals?.total_commitment) > 0
-      ? Number(fund.commitment_amount) / Number(extracted.fund_totals.total_commitment)
-      : 0;
-    return sum + Number(extracted?.fund_totals?.total_portfolio_fmv || 0) * twhPct;
-  }, 0);
-
-  const directsCost = directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
-  const grossTvpi = (twhCostFromFunds + directsCost) > 0
-    ? (twhFmvFromFunds) / (twhCostFromFunds + directsCost) : 0;
-
-  // Net IRR
-  const netIrrCashflows = ledger.map(e => ({ date: new Date(e.date), amount: e.net_cf }));
-  if (totalNav > 0) {
-    netIrrCashflows.push({ date: new Date(activeQuarter.date), amount: totalNav });
-  }
-  const netIrr = computeXIRR(netIrrCashflows);
 
   // Chart data from quarterly history
   const chartData = quarterlyHistory.map((q: any) => ({
@@ -120,14 +77,16 @@ export default function ConsolidatedPage() {
       </div>
 
       {/* Performance Metrics Header */}
-      <div className="grid grid-cols-6 gap-4">
+      <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
         {[
-          { label: "Net TVPI", value: formatMultiple(netTvpi), highlight: true },
-          { label: "Net IRR", value: formatIrr(netIrr), highlight: true },
-          { label: "Gross TVPI", value: formatMultiple(grossTvpi) },
-          { label: "Total Contributed", value: formatCurrency(totalContributions) },
-          { label: "Total Distributions", value: formatCurrency(totalDistributions) },
-          { label: "Total NAV", value: formatCurrency(totalNav) },
+          { label: "Net TVPI", value: formatMultiple(cm.netTvpi), highlight: true },
+          { label: "Net IRR", value: formatIrr(cm.netIrr), highlight: true },
+          { label: "Gross TVPI", value: formatMultiple(cm.grossTvpi) },
+          { label: "Gross IRR", value: formatIrr(cm.grossIrr) },
+          { label: "Total Contributed", value: formatCurrency(cm.totalCapitalCalls + cm.directsCost) },
+          { label: "Total Distributions", value: formatCurrency(cm.totalDistributions) },
+          { label: "Total NAV", value: formatCurrency(cm.totalNav) },
+          { label: "Unrealized (FMV)", value: formatCurrency(cm.twhFmvFromFunds + cm.directsFmv) },
         ].map(m => (
           <div key={m.label} className={`border rounded-lg p-4 ${m.highlight ? 'border-primary/30 bg-primary/5' : 'border-border bg-card'}`}>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{m.label}</p>
@@ -177,7 +136,7 @@ export default function ConsolidatedPage() {
                 <TableCell>Terminal NAV</TableCell>
                 <TableCell />
                 <TableCell />
-                <TableCell className="text-right font-mono text-positive">{formatCurrency(totalNav)}</TableCell>
+                <TableCell className="text-right font-mono text-positive">{formatCurrency(cm.totalNav)}</TableCell>
               </TableRow>
               {ledger.map((e, i) => (
                 <TableRow key={i} className="text-xs table-row-hover">

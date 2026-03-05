@@ -1,0 +1,1 @@
+ALTER TABLE public.direct_quarterly_valuations ADD CONSTRAINT direct_quarterly_valuations_company_quarter_unique UNIQUE (company_id, quarter_date);

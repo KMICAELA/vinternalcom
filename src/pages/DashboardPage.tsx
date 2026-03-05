@@ -1,8 +1,9 @@
 import { useMemo } from "react"; // dashboard v2
-import { useFunds, useAllFundFS, useDirectInvestments, useActiveQuarter } from "@/hooks/usePortfolioData";
-import { formatCurrency, formatMultiple, formatPercent, computeFundMetrics } from "@/lib/calcEngine";
+import { useFunds, useDirectInvestments, useActiveQuarter } from "@/hooks/usePortfolioData";
+import { formatCurrency, formatMultiple, formatPercent, formatIrr, computeFundMetrics } from "@/lib/calcEngine";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Building2, Target, TrendingUp, DollarSign, Layers, Globe, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -45,10 +46,10 @@ export default function DashboardPage() {
   const navigate = useNavigate();
   const activeQuarter = useActiveQuarter();
   const { data: funds = [], isLoading } = useFunds();
-  const { data: allFS = [] } = useAllFundFS(activeQuarter.date);
   const { data: directs = [] } = useDirectInvestments();
+  const cm = useConsolidatedMetrics();
 
-  // Fetch all fund cashflows for metrics
+  // Fetch all fund cashflows for per-fund metrics
   const { data: allCashflows = [] } = useQuery({
     queryKey: ["all-fund-cashflows"],
     queryFn: async () => {
@@ -58,7 +59,21 @@ export default function DashboardPage() {
     },
   });
 
-  // Per-fund metrics
+  const { data: allFS = [] } = useQuery({
+    queryKey: ["all-fund-fs", activeQuarter.date],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("fund_financial_statements")
+        .select("*, fund:funds(*)")
+        .eq("quarter_date", activeQuarter.date)
+        .eq("confirmed", true);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!activeQuarter.date,
+  });
+
+  // Per-fund metrics (for fund table only)
   const fundMetrics = useMemo(() => {
     return funds.map((fund: any) => {
       const fs = allFS.find((f: any) => f.fund_id === fund.id);
@@ -84,13 +99,8 @@ export default function DashboardPage() {
     });
   }, [funds, allFS, allCashflows, activeQuarter.date]);
 
-  // Aggregates
+  // Use consolidated metrics for top-level numbers
   const totalCommitment = funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
-  const totalContributions = fundMetrics.reduce((s, fm) => s + fm.metrics.twhContributions, 0);
-  const totalNav = fundMetrics.reduce((s, fm) => s + fm.metrics.twhNav, 0);
-  const totalFmv = fundMetrics.reduce((s, fm) => s + fm.metrics.twhFmv, 0);
-  const totalDistributions = fundMetrics.reduce((s, fm) => s + fm.metrics.twhDistributions, 0);
-  const directsCost = directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
   const numFunds = funds.length;
   const numDirects = directs.length;
 
@@ -140,16 +150,16 @@ export default function DashboardPage() {
 
       {/* Top Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment + directsCost)} icon={DollarSign} highlight />
+        <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment + cm.directsCost)} icon={DollarSign} highlight />
         <MetricCard label="Fund Investments" value={formatCurrency(totalCommitment)} icon={Building2} sub={`${numFunds} funds`} />
-        <MetricCard label="Direct Investments" value={directsCost > 0 ? formatCurrency(directsCost) : "—"} icon={Target} sub={`${numDirects} companies`} />
-        <MetricCard label="Net TVPI" value={totalContributions > 0 ? formatMultiple((totalNav + totalDistributions) / totalContributions) : "—"} highlight />
+        <MetricCard label="Direct Investments" value={cm.directsCost > 0 ? formatCurrency(cm.directsCost) : "—"} icon={Target} sub={`${numDirects} companies`} />
+        <MetricCard label="Net TVPI" value={cm.netTvpi > 0 ? formatMultiple(cm.netTvpi) : "—"} highlight />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <MetricCard label="Contributed" value={totalContributions > 0 ? formatCurrency(totalContributions) : "—"} icon={TrendingUp} sub={totalContributions > 0 ? `${formatPercent(totalContributions / totalCommitment)} deployed` : "No activity yet"} />
-        <MetricCard label="TWH NAV" value={totalNav > 0 ? formatCurrency(totalNav) : "—"} icon={Layers} sub={totalNav > 0 ? undefined : "Upload FS to populate"} />
-        <MetricCard label="Distributions" value={totalDistributions > 0 ? formatCurrency(totalDistributions) : "—"} />
-        <MetricCard label="Unrealized Value" value={totalFmv > 0 ? formatCurrency(totalFmv) : "—"} />
+        <MetricCard label="Contributed" value={cm.totalCapitalCalls > 0 ? formatCurrency(cm.totalCapitalCalls + cm.directsCost) : "—"} icon={TrendingUp} sub={cm.totalCapitalCalls > 0 ? `${formatPercent((cm.totalCapitalCalls + cm.directsCost) / (totalCommitment + cm.directsCost))} deployed` : "No activity yet"} />
+        <MetricCard label="TWH NAV" value={cm.totalNav > 0 ? formatCurrency(cm.totalNav) : "—"} icon={Layers} sub={cm.totalNav > 0 ? undefined : "Upload FS to populate"} />
+        <MetricCard label="Distributions" value={cm.totalDistributions > 0 ? formatCurrency(cm.totalDistributions) : "—"} />
+        <MetricCard label="Unrealized Value" value={cm.twhFmvFromFunds + cm.directsFmv > 0 ? formatCurrency(cm.twhFmvFromFunds + cm.directsFmv) : "—"} />
       </div>
 
       {/* Charts Row */}
@@ -253,7 +263,7 @@ export default function DashboardPage() {
                 <td className="px-4 py-2 text-right font-mono">{formatCurrency(totalCommitment)}</td>
                 <td />
                 <td className="px-4 py-2 text-right font-mono">100.0%</td>
-                <td className="px-4 py-2 text-right font-mono">{totalNav > 0 ? formatCurrency(totalNav) : '—'}</td>
+                <td className="px-4 py-2 text-right font-mono">{cm.twhNavFromFunds > 0 ? formatCurrency(cm.twhNavFromFunds) : '—'}</td>
                 <td colSpan={2} />
               </tr>
             </tfoot>
@@ -301,7 +311,7 @@ export default function DashboardPage() {
                 <tr className="border-t-2 border-border bg-surface-1 font-medium">
                   <td className="px-4 py-2">Total ({directs.length} directs)</td>
                   <td colSpan={5} />
-                  <td className="px-4 py-2 text-right font-mono">{formatCurrency(directsCost)}</td>
+                  <td className="px-4 py-2 text-right font-mono">{formatCurrency(cm.directsCost)}</td>
                   <td colSpan={2} />
                 </tr>
               </tfoot>
