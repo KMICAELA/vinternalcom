@@ -89,7 +89,9 @@ export function useConsolidatedMetrics() {
     const twhNavFromFS = fundData.reduce((s, d) => s + (d as any).twhNav || 0, 0);
     const twhNavFromFunds = twhNavFromReports > 0 ? twhNavFromReports : twhNavFromFS;
     const twhCostFromFunds = fundData.reduce((s, d) => s + d.twhCost, 0);
-    const twhFmvFromFunds = fundData.reduce((s, d) => s + d.twhFmv, 0);
+    const twhFmvFromFS = fundData.reduce((s, d) => s + d.twhFmv, 0);
+    // When no FS data is confirmed, use NAV from quarterly reports as FMV proxy
+    const twhFmvFromFunds = twhFmvFromFS > 0 ? twhFmvFromFS : twhNavFromFunds;
     const twhProceedsFromFunds = fundData.reduce((s, d) => s + d.twhProceeds, 0);
 
     // ─── Directs ─────────────────────────────────────────────
