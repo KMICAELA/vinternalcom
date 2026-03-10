@@ -135,7 +135,7 @@ const AddQuarterlyData = () => {
       const { error: dbError } = await supabase
         .from("fund_financial_statements")
         .upsert(
-          { fund_id: fundId, quarter_date: activeQuarter, file_path: filePath, confirmed: false },
+          { fund_id: fundId, quarter_date: activeQuarter, file_path: filePath, confirmed: true },
           { onConflict: "fund_id,quarter_date" }
         );
       if (dbError) throw dbError;
