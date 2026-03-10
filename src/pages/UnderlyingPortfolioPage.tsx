@@ -26,11 +26,13 @@ export default function UnderlyingPortfolioPage() {
   const companies = useMemo(() => {
     const rows: any[] = [];
 
-    // Collect fund names that have confirmed FS data
+    // Collect fund names that have confirmed FS data WITH portfolio companies
     const fsFundNames = new Set<string>();
     for (const fs of allFS) {
       const fund = (fs as any).fund;
-      if (fund?.fund_name) fsFundNames.add(fund.fund_name);
+      const extracted = fs.extracted_data as any;
+      const hasCompanies = (extracted?.portfolio_companies || []).length > 0;
+      if (fund?.fund_name && hasCompanies) fsFundNames.add(fund.fund_name);
     }
 
     // Layer 2: Add companies from confirmed FS extractions (replaces seed for that fund)
