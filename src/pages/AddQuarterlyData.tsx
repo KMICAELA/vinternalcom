@@ -135,7 +135,7 @@ const AddQuarterlyData = () => {
       const { error: dbError } = await supabase
         .from("fund_financial_statements")
         .upsert(
-          { fund_id: fundId, quarter_date: activeQuarter, file_path: filePath, confirmed: false },
+          { fund_id: fundId, quarter_date: activeQuarter, file_path: filePath, confirmed: true },
           { onConflict: "fund_id,quarter_date" }
         );
       if (dbError) throw dbError;
@@ -363,7 +363,7 @@ const AddQuarterlyData = () => {
                           : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/10"
                       }
                     >
-                      {isConfirmed ? "Uploaded" : "Pending"}
+                      {isConfirmed ? "Done" : "Pending"}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -386,7 +386,7 @@ const AddQuarterlyData = () => {
                   ) : (
                     <>
                       <label className="cursor-pointer">
-                        <input type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv" onChange={(e) => handleFileSelect(f.id, e.target.files?.[0] || null)} />
+                        <input type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx" onChange={(e) => handleFileSelect(f.id, e.target.files?.[0] || null)} />
                         <div className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors border border-dashed border-primary/30 rounded-md px-3 py-1.5">
                           <Upload className="h-3.5 w-3.5" />
                           Desktop
