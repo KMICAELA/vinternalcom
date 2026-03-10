@@ -363,7 +363,7 @@ const AddQuarterlyData = () => {
                           : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/10"
                       }
                     >
-                      {isConfirmed ? "Uploaded" : "Pending"}
+                      {isConfirmed ? "Done" : "Pending"}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground">
