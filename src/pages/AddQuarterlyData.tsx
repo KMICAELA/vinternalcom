@@ -386,7 +386,7 @@ const AddQuarterlyData = () => {
                   ) : (
                     <>
                       <label className="cursor-pointer">
-                        <input type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv" onChange={(e) => handleFileSelect(f.id, e.target.files?.[0] || null)} />
+                        <input type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv,.doc,.docx" onChange={(e) => handleFileSelect(f.id, e.target.files?.[0] || null)} />
                         <div className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors border border-dashed border-primary/30 rounded-md px-3 py-1.5">
                           <Upload className="h-3.5 w-3.5" />
                           Desktop
