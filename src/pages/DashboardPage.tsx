@@ -298,7 +298,7 @@ export default function DashboardPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-1 font-medium">
-                <td className="px-4 py-2">Total ({funds.length} funds)</td>
+                <td className="px-4 py-2">Total ({activeFunds.length} funds)</td>
                 <td colSpan={4} />
                 <td className="px-4 py-2 text-right font-mono">{formatCurrency(totalCommitment)}</td>
                 <td />
