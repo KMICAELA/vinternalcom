@@ -33,25 +33,22 @@ export function useConsolidatedMetrics() {
       };
     }
 
-    const fundsNAVTotal = Object.values(qData.fundNAVs).reduce((s, v) => s + v, 0);
-    const grossFmv = fundsNAVTotal + qData.directsFMV;
-
     return {
-      twhNavFromFunds: fundsNAVTotal,
+      twhNavFromFunds: Object.values(qData.fundNAVs).reduce((s, v) => s + v, 0),
       twhCostFromFunds: 0,
-      twhFmvFromFunds: fundsNAVTotal,
+      twhFmvFromFunds: Object.values(qData.fundNAVs).reduce((s, v) => s + v, 0),
       twhProceedsFromFunds: 0,
       directsCost: qData.directsCost,
       directsFmv: qData.directsFMV,
       directsProceeds: 0,
       totalCapitalCalls: qData.netTotalContributions,
       totalDistributions: qData.netTotalDistributions,
-      grossTvpi: qData.grossTotalCost > 0 ? Number((qData.grossTerminalFMV / qData.grossTotalCost).toFixed(4)) : 0,
+      grossTvpi: qData.grossTVPI,
       netTvpi: qData.netTVPI,
       netIrr: qData.netIRR,
-      grossIrr: null as number | null,
+      grossIrr: qData.grossIRR,
       totalNav: qData.netTerminalNAV,
-      grossFmv,
+      grossFmv: qData.grossTerminalFMV,
       activeQuarter,
     };
   }, [activeQuarter]);

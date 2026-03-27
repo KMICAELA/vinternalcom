@@ -20,6 +20,8 @@ export interface QuarterData {
   netIRR: number | null;
   grossTerminalFMV: number;
   grossTotalCost: number;
+  grossTVPI: number;
+  grossIRR: number | null;
   activeFunds: string[];
   fundNAVs: Record<string, number>;
   fundTVPIs: Record<string, number | null>;
@@ -41,6 +43,8 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netIRR: null,
     grossTerminalFMV: 4206101,
     grossTotalCost: 3597578,
+    grossTVPI: 1.169,
+    grossIRR: null,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
@@ -88,8 +92,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTotalDistributions: 0,
     netTVPI: 1.1224,
     netIRR: 0.2183,
-    grossTerminalFMV: 8625952 + 4070000,
+    grossTerminalFMV: 12695952,
     grossTotalCost: 9358163,
+    grossTVPI: 1.357,
+    grossIRR: null,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
@@ -150,8 +156,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTotalDistributions: 0,
     netTVPI: 0.9990,
     netIRR: -0.00143,
-    grossTerminalFMV: 7716342 + 4820000,
-    grossTotalCost: 12108163,
+    grossTerminalFMV: 12786342,
+    grossTotalCost: 10263348,
+    grossTVPI: 1.2458,
+    grossIRR: 0.4256,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
@@ -223,8 +231,6 @@ export function getChartData() {
   return Object.values(QUARTER_REGISTRY).map(q => ({
     quarter: q.label,
     netTvpi: Number(q.netTVPI.toFixed(2)),
-    grossTvpi: q.grossTotalCost > 0
-      ? Number((q.grossTerminalFMV / q.grossTotalCost).toFixed(2))
-      : null,
+    grossTvpi: Number(q.grossTVPI.toFixed(2)),
   }));
 }
