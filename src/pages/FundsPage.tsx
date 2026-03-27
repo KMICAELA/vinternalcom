@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
 import { useQuarterContext } from "@/contexts/QuarterContext";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
+import { getQuarterData } from "@/data/quarterRegistry";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ export default function FundsPage() {
   const { data: funds = [], isLoading } = useFunds();
   const activeQuarter = useActiveQuarter();
   const { defaultQuarter } = useQuarterContext();
+  const qData = getQuarterData(activeQuarter.quarter);
   const cm = useConsolidatedMetrics();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
   const [addReportsOpen, setAddReportsOpen] = useState(false);
@@ -101,11 +103,9 @@ export default function FundsPage() {
   }, [allFsForQuarter, latestFsPerFund]);
 
   const activeFunds = useMemo(() => {
-    return funds.filter((fund: any) => {
-      if (!fund.start_date) return false;
-      return fund.start_date <= activeQuarter.date;
-    });
-  }, [funds, activeQuarter.date]);
+    if (!qData) return [];
+    return funds.filter((fund: any) => qData.activeFunds.includes(fund.fund_name));
+  }, [funds, qData]);
 
   const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
   const totalActive = activeFunds.length;
@@ -205,6 +205,8 @@ export default function FundsPage() {
           <TableBody>
             {activeFunds.map((fund: any) => {
               const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
+              const registryNav = qData?.fundNAVs[fund.fund_name] ?? null;
+              const registryTvpi = qData?.fundTVPIs[fund.fund_name] ?? null;
 
               return (
                 <FundRow
@@ -215,6 +217,8 @@ export default function FundsPage() {
                   onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
                   fsStatus={hasActiveQuarterFS ? "uploaded" : "pending"}
                   fsLabel={hasActiveQuarterFS ? activeQuarter.quarter : "Pending"}
+                  registryNav={registryNav}
+                  registryTvpi={registryTvpi}
                 />
               );
             })}
@@ -267,9 +271,10 @@ export default function FundsPage() {
 
 // ─── Fund Row with expandable capital activity + FS status badge ────
 
-function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel }: {
+function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, registryNav, registryTvpi }: {
   fund: any; quarterDate: string; isExpanded: boolean; onToggle: () => void;
   fsStatus: "uploaded" | "stale" | "pending"; fsLabel: string;
+  registryNav?: number | null; registryTvpi?: number | null;
 }) {
   const { data: fs } = useFundFinancialStatement(fund.id, quarterDate);
   const { data: allFundReports = [] } = useFundReports(quarterDate);
@@ -362,8 +367,8 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel }:
         <TableCell className="text-right font-mono">{formatCurrency(Number(fund.commitment_amount))}</TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).currency || 'USD'}</TableCell>
         <TableCell className="text-right font-mono">{metrics.twhPct > 0 ? formatPercent(metrics.twhPct) : '—'}</TableCell>
-        <TableCell className="text-right font-mono">{formatCurrency(metrics.twhNav)}</TableCell>
-        <TableCell className="text-right font-mono">{formatMultiple(metrics.tvpi)}</TableCell>
+        <TableCell className="text-right font-mono">{registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')}</TableCell>
+        <TableCell className="text-right font-mono">{registryTvpi != null ? formatMultiple(registryTvpi) : (metrics.tvpi > 0 ? formatMultiple(metrics.tvpi) : '—')}</TableCell>
         <TableCell className="text-right font-mono">{formatIrr(metrics.irr)}</TableCell>
       </TableRow>
 
