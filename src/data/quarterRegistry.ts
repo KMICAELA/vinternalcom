@@ -3,6 +3,13 @@
  * for consolidated performance across the platform.
  */
 
+export interface NetCashflow {
+  date: string;
+  portfolio: string;
+  type: string;
+  amount: number;
+}
+
 export interface QuarterData {
   label: string;
   quarterEndDate: string;
@@ -11,6 +18,8 @@ export interface QuarterData {
   netTotalDistributions: number;
   netTVPI: number;
   netIRR: number | null;
+  grossTerminalFMV: number;
+  grossTotalCost: number;
   activeFunds: string[];
   fundNAVs: Record<string, number>;
   fundTVPIs: Record<string, number | null>;
@@ -18,6 +27,7 @@ export interface QuarterData {
   totalCommitment: number;
   directsCost: number;
   directsFMV: number;
+  netCashflows: NetCashflow[];
 }
 
 export const QUARTER_REGISTRY: Record<string, QuarterData> = {
@@ -27,8 +37,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTerminalNAV: 3036100.75,
     netTotalContributions: 3597577.62,
     netTotalDistributions: 0,
-    netTVPI: 0.84,
+    netTVPI: 0.8439,
     netIRR: null,
+    grossTerminalFMV: 4206101,
+    grossTotalCost: 3597578,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
@@ -62,6 +74,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     totalCommitment: 8170000,
     directsCost: 1170000,
     directsFMV: 1170000,
+    netCashflows: [
+      { date: "2024-05-03", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1868605.98 },
+      { date: "2024-08-14", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1728971.64 },
+    ],
   },
 
   "2Q25": {
@@ -70,8 +86,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTerminalNAV: 10503968.64,
     netTotalContributions: 9358162.61,
     netTotalDistributions: 0,
-    netTVPI: 1.12,
+    netTVPI: 1.1224,
     netIRR: 0.2183,
+    grossTerminalFMV: 8625952 + 4070000,
+    grossTotalCost: 9358163,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
@@ -115,6 +133,13 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     totalCommitment: 17136143,
     directsCost: 4070000,
     directsFMV: 4070000,
+    netCashflows: [
+      { date: "2024-05-03", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1868605.98 },
+      { date: "2024-08-14", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1728971.64 },
+      { date: "2024-12-19", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2050584.99 },
+      { date: "2025-02-20", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1000000.00 },
+      { date: "2025-05-28", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2710000.00 },
+    ],
   },
 
   "3Q25": {
@@ -123,8 +148,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTerminalNAV: 12096611.35,
     netTotalContributions: 12108162.61,
     netTotalDistributions: 0,
-    netTVPI: 1.00,
+    netTVPI: 0.9990,
     netIRR: -0.00143,
+    grossTerminalFMV: 7716342 + 4820000,
+    grossTotalCost: 12108163,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
@@ -174,6 +201,15 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     totalCommitment: 17886587,
     directsCost: 4820000,
     directsFMV: 4820000,
+    netCashflows: [
+      { date: "2024-05-08", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1868605.98 },
+      { date: "2024-08-16", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1728971.64 },
+      { date: "2024-12-19", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2050584.99 },
+      { date: "2025-02-20", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1000000.00 },
+      { date: "2025-05-28", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2710000.00 },
+      { date: "2025-07-11", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1400000.00 },
+      { date: "2025-09-10", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1350000.00 },
+    ],
   },
 };
 
@@ -186,9 +222,9 @@ export function getQuarterData(quarterLabel: string): QuarterData | null {
 export function getChartData() {
   return Object.values(QUARTER_REGISTRY).map(q => ({
     quarter: q.label,
-    netTvpi: q.netTVPI,
-    grossTvpi: q.netTotalContributions > q.directsCost
-      ? Number((q.netTerminalNAV / (q.netTotalContributions - q.directsCost)).toFixed(2))
+    netTvpi: Number(q.netTVPI.toFixed(2)),
+    grossTvpi: q.grossTotalCost > 0
+      ? Number((q.grossTerminalFMV / q.grossTotalCost).toFixed(2))
       : null,
   }));
 }
