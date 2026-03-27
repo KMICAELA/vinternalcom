@@ -205,6 +205,8 @@ export default function FundsPage() {
           <TableBody>
             {activeFunds.map((fund: any) => {
               const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
+              const registryNav = qData?.fundNAVs[fund.fund_name] ?? null;
+              const registryTvpi = qData?.fundTVPIs[fund.fund_name] ?? null;
 
               return (
                 <FundRow
@@ -215,6 +217,8 @@ export default function FundsPage() {
                   onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
                   fsStatus={hasActiveQuarterFS ? "uploaded" : "pending"}
                   fsLabel={hasActiveQuarterFS ? activeQuarter.quarter : "Pending"}
+                  registryNav={registryNav}
+                  registryTvpi={registryTvpi}
                 />
               );
             })}
