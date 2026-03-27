@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import { useActiveQuarter, useQuarterlyHistory } from "@/hooks/usePortfolioData";
+import { useActiveQuarter } from "@/hooks/usePortfolioData";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
+import { getQuarterData, getChartData } from "@/data/quarterRegistry";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatMultiple, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -9,8 +10,8 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 export default function ConsolidatedPage() {
   const activeQuarter = useActiveQuarter();
-  const { data: quarterlyHistory = [] } = useQuarterlyHistory();
   const cm = useConsolidatedMetrics();
+  const qData = getQuarterData(activeQuarter.quarter);
 
   // Fetch LP-level cashflows for ledger display (actual wires)
   const { data: lpCashflows = [] } = useQuery({
@@ -22,7 +23,7 @@ export default function ConsolidatedPage() {
     },
   });
 
-  // Build ledger from LP-level wires
+  // Build ledger from LP-level wires, filtered to selected quarter
   const ledger = useMemo(() => {
     const entries: any[] = [];
     for (const cf of (lpCashflows as any[]).filter((c: any) => c.cashflow_date <= activeQuarter.date)) {
@@ -41,13 +42,23 @@ export default function ConsolidatedPage() {
     return entries;
   }, [lpCashflows, activeQuarter.date]);
 
-  // Chart data from quarterly history — only show locked quarters with real data
-  const lockedQuarters = quarterlyHistory.filter((q: any) => q.locked);
-  const chartData = lockedQuarters.map((q: any) => ({
-    quarter: q.quarter,
-    netTvpi: Number(q.net_tvpi),
-    grossTvpi: Number(q.gross_tvpi),
-  }));
+  // Chart data from registry
+  const chartData = getChartData();
+
+  // Custom tooltip for chart — 2 decimal places
+  const ChartTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      return (
+        <div style={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12, padding: '6px 10px', borderRadius: 4 }}>
+          <p style={{ fontWeight: 600, marginBottom: 2 }}>{label}</p>
+          {payload.map((p: any) => (
+            <p key={p.name} style={{ color: p.color }}>{p.name}: {p.value != null ? `${p.value.toFixed(2)}x` : 'N/A'}</p>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
@@ -59,10 +70,10 @@ export default function ConsolidatedPage() {
       {/* Performance Metrics Header */}
       <div className="grid grid-cols-4 md:grid-cols-8 gap-4">
         {[
-          { label: "Net TVPI", value: formatMultiple(cm.netTvpi), highlight: true },
-          { label: "Net IRR", value: formatIrr(cm.netIrr), highlight: true },
-          { label: "Gross TVPI", value: formatMultiple(cm.grossTvpi) },
-          { label: "Gross IRR", value: formatIrr(cm.grossIrr) },
+          { label: "Net TVPI", value: cm.netTvpi > 0 ? formatMultiple(cm.netTvpi) : "—", highlight: true },
+          { label: "Net IRR", value: cm.netIrr != null ? formatIrr(cm.netIrr) : "N/A", highlight: true },
+          { label: "Gross TVPI", value: cm.grossTvpi > 0 ? formatMultiple(cm.grossTvpi) : "—" },
+          { label: "Gross IRR", value: cm.grossIrr != null ? formatIrr(cm.grossIrr) : "N/A" },
           { label: "Total Contributed", value: formatCurrency(cm.totalCapitalCalls) },
           { label: "Total Distributions", value: formatCurrency(cm.totalDistributions) },
           { label: "Total NAV", value: formatCurrency(cm.totalNav) },
@@ -83,8 +94,8 @@ export default function ConsolidatedPage() {
             <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
               <XAxis dataKey="quarter" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-              <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-              <Tooltip contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} domain={[0, 'auto']} />
+              <Tooltip content={<ChartTooltip />} />
               <Legend />
               <Line type="monotone" dataKey="netTvpi" stroke="hsl(var(--primary))" name="Net TVPI" strokeWidth={2} dot={{ r: 3 }} />
               <Line type="monotone" dataKey="grossTvpi" stroke="hsl(var(--info))" name="Gross TVPI" strokeWidth={2} dot={{ r: 3 }} />
