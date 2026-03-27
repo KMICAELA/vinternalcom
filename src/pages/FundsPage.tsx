@@ -25,6 +25,7 @@ export default function FundsPage() {
   const qc = useQueryClient();
   const { data: funds = [], isLoading } = useFunds();
   const activeQuarter = useActiveQuarter();
+  const { defaultQuarter } = useQuarterContext();
   const cm = useConsolidatedMetrics();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
   const [addReportsOpen, setAddReportsOpen] = useState(false);
