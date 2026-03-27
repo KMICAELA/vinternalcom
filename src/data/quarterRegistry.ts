@@ -10,6 +10,11 @@ export interface NetCashflow {
   amount: number;
 }
 
+export interface GrossCashflow {
+  date: string;
+  amount: number;
+}
+
 export interface QuarterData {
   label: string;
   quarterEndDate: string;
@@ -30,6 +35,7 @@ export interface QuarterData {
   directsCost: number;
   directsFMV: number;
   netCashflows: NetCashflow[];
+  grossCashflows?: GrossCashflow[];
 }
 
 export const QUARTER_REGISTRY: Record<string, QuarterData> = {
