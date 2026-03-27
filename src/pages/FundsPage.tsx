@@ -59,18 +59,30 @@ export default function FundsPage() {
     },
   });
 
-  // Compute next quarter after active quarter
-  const nextQuarter = useMemo(() => {
-    const d = new Date(activeQuarter.date);
-    d.setMonth(d.getMonth() + 3);
-    const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
-    d.setMonth(qMonth);
-    d.setDate(new Date(d.getFullYear(), qMonth + 1, 0).getDate());
-    const qNum = Math.floor(qMonth / 3) + 1;
-    const label = `Q${qNum} ${d.getFullYear()}`;
-    const dateStr = d.toISOString().split("T")[0];
-    return { label, date: dateStr };
-  }, [activeQuarter.date]);
+  // Compute available quarters: next quarter + 3 retroactive from active
+  const availableQuarters = useMemo(() => {
+    const quarters: { label: string; date: string }[] = [];
+    const makeQuarter = (d: Date) => {
+      const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+      d.setMonth(qMonth);
+      d.setDate(new Date(d.getFullYear(), qMonth + 1, 0).getDate());
+      const qNum = Math.floor(qMonth / 3) + 1;
+      return { label: `Q${qNum} ${d.getFullYear()}`, date: d.toISOString().split("T")[0] };
+    };
+    // 3 quarters back
+    for (let i = 3; i >= 1; i--) {
+      const d = new Date(activeQuarter.date);
+      d.setMonth(d.getMonth() - 3 * i);
+      quarters.push(makeQuarter(d));
+    }
+    // Active quarter
+    quarters.push({ label: activeQuarter.quarter, date: activeQuarter.date });
+    // Next quarter
+    const nd = new Date(activeQuarter.date);
+    nd.setMonth(nd.getMonth() + 3);
+    quarters.push(makeQuarter(nd));
+    return quarters;
+  }, [activeQuarter.date, activeQuarter.quarter]);
 
   // FS status per fund
   const fsStatusMap = useMemo(() => {
@@ -212,8 +224,8 @@ export default function FundsPage() {
       {addReportsOpen && (
         <AddReportsDialog
           funds={funds}
-          quarterLabel={nextQuarter.label}
-          quarterDate={nextQuarter.date}
+          availableQuarters={availableQuarters}
+          defaultQuarterDate={activeQuarter.date}
           onClose={() => setAddReportsOpen(false)}
         />
       )}
@@ -470,15 +482,25 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel }:
 
 // ─── Add Reports Dialog — upload FS for all funds for next quarter ──
 
-function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
-  funds: any[]; quarterLabel: string; quarterDate: string; onClose: () => void;
+function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClose }: {
+  funds: any[]; availableQuarters: { label: string; date: string }[]; defaultQuarterDate: string; onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [selectedQuarterDate, setSelectedQuarterDate] = useState(defaultQuarterDate);
+  const selectedQuarter = availableQuarters.find(q => q.date === selectedQuarterDate) || availableQuarters[0];
   const [uploadingFundId, setUploadingFundId] = useState<string | null>(null);
   const [files, setFiles] = useState<Record<string, File>>({});
   const [extractedMap, setExtractedMap] = useState<Record<string, any>>({});
   const [confirmedSet, setConfirmedSet] = useState<Set<string>>(new Set());
   const [extracting, setExtracting] = useState<string | null>(null);
+
+  // Reset state when quarter changes
+  const handleQuarterChange = (date: string) => {
+    setSelectedQuarterDate(date);
+    setFiles({});
+    setExtractedMap({});
+    setConfirmedSet(new Set());
+  };
 
   const handleFileSelect = (fundId: string, file: File) => {
     setFiles(prev => ({ ...prev, [fundId]: file }));
@@ -489,7 +511,7 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
     if (!file) return;
     setExtracting(fundId);
     try {
-      const filePath = `${quarterDate}/${fundId}/${file.name}`;
+      const filePath = `${selectedQuarterDate}/${fundId}/${file.name}`;
       const { error: uploadError } = await supabase.storage.from("fund-reports").upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
 
@@ -513,7 +535,7 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
     if (!extractedData) return;
     const { error } = await supabase.from("fund_financial_statements").upsert({
       fund_id: fundId,
-      quarter_date: quarterDate,
+      quarter_date: selectedQuarterDate,
       extracted_data: extractedData,
       confirmed: true,
       file_path: files[fundId]?.name || null,
@@ -531,9 +553,21 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" /> Add Reports — {quarterLabel}
+            <FileText className="h-5 w-5" /> Add Reports
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">Upload financial statements for each fund for {quarterLabel} ({quarterDate})</p>
+          <div className="flex items-center gap-3 pt-2">
+            <span className="text-sm text-muted-foreground">Quarter:</span>
+            <Select value={selectedQuarterDate} onValueChange={handleQuarterChange}>
+              <SelectTrigger className="h-8 w-40 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableQuarters.map(q => (
+                  <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </DialogHeader>
 
         <div className="space-y-3">
