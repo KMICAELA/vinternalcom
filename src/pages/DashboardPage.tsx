@@ -89,9 +89,18 @@ export default function DashboardPage() {
     enabled: !!activeQuarter.date,
   });
 
+  // Filter funds and directs by quarter
+  const activeFunds = useMemo(() => {
+    return funds.filter((f: any) => f.start_date && f.start_date <= activeQuarter.date);
+  }, [funds, activeQuarter.date]);
+
+  const activeDirects = useMemo(() => {
+    return directs.filter((d: any) => d.investment_date && d.investment_date <= activeQuarter.date);
+  }, [directs, activeQuarter.date]);
+
   // Per-fund metrics (for fund table only)
   const fundMetrics = useMemo(() => {
-    return funds.map((fund: any) => {
+    return activeFunds.map((fund: any) => {
       const fs = allFS.find((f: any) => f.fund_id === fund.id);
       const fqr = fundQuarterlyReports.find((r: any) => r.fund_id === fund.id);
       const fsData = (fs?.extracted_data as any) || {};
