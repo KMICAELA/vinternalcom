@@ -171,17 +171,8 @@ export function useAppSettings() {
 }
 
 export function useActiveQuarter() {
-  // If QuarterContext is available, use it; otherwise fall back to app_settings
-  try {
-    const { useQuarterContext } = require("@/contexts/QuarterContext");
-    const ctx = useQuarterContext();
-    if (ctx) return ctx.selectedQuarter;
-  } catch {
-    // Context not available (e.g. outside provider)
-  }
-  const { data: settings } = useAppSettings();
-  const activeQuarter = settings?.active_quarter as { quarter: string; date: string } | undefined;
-  return activeQuarter || { quarter: "3Q25", date: "2025-09-30" };
+  const ctx = useQuarterContext();
+  return ctx.selectedQuarter;
 }
 
 // ─── Available Quarters ───────────────────────────────────────────
