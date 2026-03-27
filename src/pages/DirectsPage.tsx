@@ -83,9 +83,17 @@ export default function DirectsPage() {
     setEditingId(null);
   };
 
-  const totalCost = directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
-  const totalFmv = directs.reduce((s: number, d: any) => s + (valMap.get(d.id)?.fmv || 0), 0);
-  const totalProceeds = directs.reduce((s: number, d: any) => s + (valMap.get(d.id)?.proceeds || 0), 0);
+  // Filter directs by quarter
+  const activeDirects = useMemo(() => {
+    return directs.filter((d: any) => {
+      if (!d.investment_date) return false;
+      return d.investment_date <= activeQuarter.date;
+    });
+  }, [directs, activeQuarter.date]);
+
+  const totalCost = activeDirects.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
+  const totalFmv = activeDirects.reduce((s: number, d: any) => s + (valMap.get(d.id)?.fmv || 0), 0);
+  const totalProceeds = activeDirects.reduce((s: number, d: any) => s + (valMap.get(d.id)?.proceeds || 0), 0);
   const blendedMoic = totalCost > 0 ? (totalFmv + totalProceeds) / totalCost : 0;
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
