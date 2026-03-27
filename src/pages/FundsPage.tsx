@@ -100,18 +100,17 @@ export default function FundsPage() {
     return { confirmedSet, latestMap };
   }, [allFsForQuarter, latestFsPerFund]);
 
-  const activeFunds = funds; // All funds are considered active for now
+  const activeFunds = useMemo(() => {
+    return funds.filter((fund: any) => {
+      if (!fund.start_date) return false;
+      return fund.start_date <= activeQuarter.date;
+    });
+  }, [funds, activeQuarter.date]);
+
   const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
   const totalActive = activeFunds.length;
   const allUploaded = uploadedCount === totalActive && totalActive > 0;
   const completionPct = totalActive > 0 ? (uploadedCount / totalActive) * 100 : 0;
-
-  // Quarter label helper
-  const quarterDateToLabel = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const q = Math.floor(d.getMonth() / 3) + 1;
-    return `${q}Q${d.getFullYear().toString().slice(2)}`;
-  };
 
   // Lock quarter handler
   const handleLockQuarter = async () => {
@@ -155,7 +154,6 @@ export default function FundsPage() {
         </div>
       </div>
 
-      {/* Quarter Completion Banner */}
       <div className="border border-border rounded-lg p-4 bg-card space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -177,7 +175,6 @@ export default function FundsPage() {
             Generate Metrics for {activeQuarter.quarter}
           </Button>
         </div>
-        {/* Progress bar */}
         <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-500"
@@ -189,7 +186,6 @@ export default function FundsPage() {
         </div>
       </div>
 
-      {/* Fund Registry Table */}
       <div className="border border-border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
@@ -207,11 +203,8 @@ export default function FundsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {funds.map((fund: any) => {
+            {activeFunds.map((fund: any) => {
               const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
-              const latestFsDate = fsStatusMap.latestMap.get(fund.id);
-              const latestFsLabel = latestFsDate ? quarterDateToLabel(latestFsDate) : null;
-              const isStale = !hasActiveQuarterFS && latestFsLabel;
 
               return (
                 <FundRow
