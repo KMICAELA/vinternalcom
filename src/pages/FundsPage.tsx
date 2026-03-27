@@ -220,8 +220,8 @@ export default function FundsPage() {
                   quarterDate={activeQuarter.date}
                   isExpanded={expandedFund === fund.id}
                   onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
-                  fsStatus={hasActiveQuarterFS ? "uploaded" : latestFsLabel ? "stale" : "pending"}
-                  fsLabel={hasActiveQuarterFS ? activeQuarter.quarter : isStale ? `Last FS: ${latestFsLabel}` : "Pending"}
+                  fsStatus={hasActiveQuarterFS ? "uploaded" : "pending"}
+                  fsLabel={hasActiveQuarterFS ? activeQuarter.quarter : "Pending"}
                 />
               );
             })}
