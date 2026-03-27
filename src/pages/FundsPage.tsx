@@ -100,118 +100,21 @@ export default function FundsPage() {
     return { confirmedSet, latestMap };
   }, [allFsForQuarter, latestFsPerFund]);
 
-  const activeFunds = funds; // All funds are considered active for now
+  const activeFunds = useMemo(() => {
+    return funds.filter((fund: any) => {
+      if (!fund.start_date) return false;
+      return fund.start_date <= activeQuarter.date;
+    });
+  }, [funds, activeQuarter.date]);
+
   const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
   const totalActive = activeFunds.length;
   const allUploaded = uploadedCount === totalActive && totalActive > 0;
   const completionPct = totalActive > 0 ? (uploadedCount / totalActive) * 100 : 0;
-
-  // Quarter label helper
-  const quarterDateToLabel = (dateStr: string) => {
-    const d = new Date(dateStr);
-    const q = Math.floor(d.getMonth() / 3) + 1;
-    return `${q}Q${d.getFullYear().toString().slice(2)}`;
-  };
-
-  // Lock quarter handler
-  const handleLockQuarter = async () => {
-    const { error } = await supabase.from("quarterly_history").upsert(
-      {
-        quarter: activeQuarter.quarter,
-        quarter_date: activeQuarter.date,
-        locked: true,
-        nav: cm.totalNav,
-        contribution: cm.totalCapitalCalls,
-        distribution: cm.totalDistributions,
-        net_tvpi: cm.netTvpi,
-        net_irr: cm.netIrr || 0,
-        gross_tvpi: cm.grossTvpi,
-        gross_irr: cm.grossIrr || 0,
-      } as any,
-      { onConflict: "quarter_date" }
-    );
-    if (error) { toast.error(error.message); return; }
-    toast.success(`${activeQuarter.quarter} metrics locked and saved to historical record.`);
-    setLockModalOpen(false);
-    qc.invalidateQueries({ queryKey: ["quarterly-history"] });
-  };
-
-  if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
-
-  return (
-    <div className="p-6 max-w-[1400px] mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold text-foreground">Funds</h1>
-          <p className="text-sm text-muted-foreground">Fund registry & financial statement management</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
-            <Plus className="h-3.5 w-3.5" /> Add Fund
-          </Button>
-          <Button size="sm" onClick={() => setAddReportsOpen(true)} className="gap-2">
-            <Upload className="h-3.5 w-3.5" /> Add Reports
-          </Button>
-        </div>
-      </div>
-
-      {/* Quarter Completion Banner */}
-      <div className="border border-border rounded-lg p-4 bg-card space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-foreground">{activeQuarter.quarter} Reports:</span>
-            <span className="text-sm text-muted-foreground">{uploadedCount} / {totalActive} uploaded</span>
-          </div>
-          <Button
-            size="sm"
-            disabled={!allUploaded}
-            onClick={() => setLockModalOpen(true)}
-            className={cn(
-              "gap-2 transition-colors",
-              allUploaded
-                ? "bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
-                : "bg-muted text-muted-foreground cursor-not-allowed"
-            )}
-          >
-            <Lock className="h-3.5 w-3.5" />
-            Generate Metrics for {activeQuarter.quarter}
-          </Button>
-        </div>
-        {/* Progress bar */}
-        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${completionPct}%`,
-              backgroundColor: allUploaded ? "hsl(var(--gold))" : "hsl(var(--gold) / 0.6)",
-            }}
-          />
-        </div>
-      </div>
-
-      {/* Fund Registry Table */}
-      <div className="border border-border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-surface-1">
-              <TableHead className="w-8" />
-              <TableHead>Fund Name</TableHead>
-              <TableHead>Start Date</TableHead>
-              <TableHead className="text-center">FS Status</TableHead>
-              <TableHead className="text-right">TWH Commitment</TableHead>
-              <TableHead>Currency</TableHead>
-              <TableHead className="text-right">TWH %</TableHead>
-              <TableHead className="text-right">TWH NAV</TableHead>
-              <TableHead className="text-right">TVPI</TableHead>
-              <TableHead className="text-right">IRR</TableHead>
-            </TableRow>
-          </TableHeader>
+...
           <TableBody>
-            {funds.map((fund: any) => {
+            {activeFunds.map((fund: any) => {
               const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
-              const latestFsDate = fsStatusMap.latestMap.get(fund.id);
-              const latestFsLabel = latestFsDate ? quarterDateToLabel(latestFsDate) : null;
-              const isStale = !hasActiveQuarterFS && latestFsLabel;
 
               return (
                 <FundRow
