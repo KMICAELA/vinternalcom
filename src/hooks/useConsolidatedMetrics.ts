@@ -34,6 +34,16 @@ export function useConsolidatedMetrics() {
       };
     }
 
+    // Compute grossIRR from grossCashflows if not hardcoded
+    let grossIrr = qData.grossIRR;
+    if (grossIrr == null && qData.grossCashflows && qData.grossCashflows.length > 0) {
+      const cfs = qData.grossCashflows.map(cf => ({
+        date: new Date(cf.date),
+        amount: cf.amount,
+      }));
+      grossIrr = computeXIRR(cfs);
+    }
+
     return {
       twhNavFromFunds: Object.values(qData.fundNAVs).reduce((s, v) => s + v, 0),
       twhCostFromFunds: 0,
@@ -47,7 +57,7 @@ export function useConsolidatedMetrics() {
       grossTvpi: qData.grossTVPI,
       netTvpi: qData.netTVPI,
       netIrr: qData.netIRR,
-      grossIrr: qData.grossIRR,
+      grossIrr,
       totalNav: qData.netTerminalNAV,
       grossFmv: qData.grossTerminalFMV,
       activeQuarter,

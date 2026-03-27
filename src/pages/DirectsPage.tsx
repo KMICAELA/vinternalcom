@@ -161,9 +161,9 @@ export default function DirectsPage() {
               const isEditing = editingId === d.id;
               const data = isEditing ? editData : d;
               const val = valMap.get(d.id);
-              const fmv = isEditing ? (editData.current_fmv || 0) : (val?.fmv || 0);
+              const fmv = isEditing ? (editData.current_fmv || 0) : getFmv(d);
               const proceeds = isEditing ? (editData.current_proceeds || 0) : (val?.proceeds || 0);
-              const cost = Number(data.cost_basis || 0);
+              const cost = isEditing ? Number(data.cost_basis || 0) : getCost(d);
               const moic = cost > 0 ? (fmv + proceeds) / cost : 0;
 
               return (
