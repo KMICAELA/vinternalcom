@@ -145,9 +145,14 @@ export default function FundsPage() {
           <h1 className="text-xl font-semibold text-foreground">Funds</h1>
           <p className="text-sm text-muted-foreground">Fund registry & financial statement management</p>
         </div>
-        <Button size="sm" onClick={() => setAddReportsOpen(true)} className="gap-2">
-          <Upload className="h-3.5 w-3.5" /> Add Reports
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
+            <Plus className="h-3.5 w-3.5" /> Add Fund
+          </Button>
+          <Button size="sm" onClick={() => setAddReportsOpen(true)} className="gap-2">
+            <Upload className="h-3.5 w-3.5" /> Add Reports
+          </Button>
+        </div>
       </div>
 
       {/* Quarter Completion Banner */}
