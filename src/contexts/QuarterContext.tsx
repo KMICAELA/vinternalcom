@@ -24,7 +24,7 @@ function makeQuarter(date: Date): Quarter {
   const qNum = Math.floor(qMonth / 3) + 1;
   return {
     quarter: `${qNum}Q${date.getFullYear().toString().slice(2)}`,
-    date: date.toISOString().split("T")[0],
+    date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`,
   };
 }
 
