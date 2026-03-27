@@ -333,7 +333,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...directs].sort((a: any, b: any) => (a.investment_date || 'zzzz').localeCompare(b.investment_date || 'zzzz')).map((d: any) => (
+                {[...activeDirects].sort((a: any, b: any) => (a.investment_date || 'zzzz').localeCompare(b.investment_date || 'zzzz')).map((d: any) => (
                   <tr key={d.id} className="border-t border-border table-row-hover">
                     <td className="px-4 py-2 font-medium text-foreground">{d.company_name}</td>
                     <td className="px-4 py-2 text-muted-foreground font-mono text-xs">{d.investment_date || '—'}</td>
