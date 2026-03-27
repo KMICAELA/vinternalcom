@@ -201,6 +201,15 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     totalCommitment: 17886587,
     directsCost: 4820000,
     directsFMV: 4820000,
+    netCashflows: [
+      { date: "2024-05-08", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1868605.98 },
+      { date: "2024-08-16", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1728971.64 },
+      { date: "2024-12-19", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2050584.99 },
+      { date: "2025-02-20", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1000000.00 },
+      { date: "2025-05-28", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2710000.00 },
+      { date: "2025-07-11", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1400000.00 },
+      { date: "2025-09-10", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1350000.00 },
+    ],
   },
 };
 
