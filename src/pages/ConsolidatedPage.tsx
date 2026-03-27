@@ -2,10 +2,8 @@ import { useMemo } from "react";
 import { useActiveQuarter } from "@/hooks/usePortfolioData";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { getQuarterData, getChartData } from "@/data/quarterRegistry";
-import { supabase } from "@/integrations/supabase/client";
 import { formatCurrency, formatMultiple, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useQuery } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 
@@ -14,34 +12,18 @@ export default function ConsolidatedPage() {
   const cm = useConsolidatedMetrics();
   const qData = getQuarterData(activeQuarter.quarter);
 
-  // Fetch LP-level cashflows for ledger display (actual wires)
-  const { data: lpCashflows = [] } = useQuery({
-    queryKey: ["lp-cashflows"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("fund_level_cashflows").select("*").order("cashflow_date");
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Build ledger from LP-level wires, filtered to selected quarter
+  // Build ledger from registry cashflows
   const ledger = useMemo(() => {
-    const entries: any[] = [];
-    for (const cf of (lpCashflows as any[]).filter((c: any) => c.cashflow_date <= activeQuarter.date)) {
-      const isCall = cf.type === "capital_call";
-      const amount = Number(cf.amount || 0);
-      entries.push({
-        date: cf.cashflow_date,
-        source: cf.portfolio_name || cf.description || '—',
-        type: isCall ? 'Capital Call' : 'Distribution',
-        contribution: isCall ? amount : 0,
-        distribution: !isCall ? amount : 0,
-        net_cf: isCall ? -amount : amount,
-      });
-    }
-    entries.sort((a, b) => a.date.localeCompare(b.date));
-    return entries;
-  }, [lpCashflows, activeQuarter.date]);
+    if (!qData) return [];
+    return qData.netCashflows.map(cf => ({
+      date: cf.date,
+      source: cf.portfolio,
+      type: cf.type,
+      contribution: cf.type === 'Capital Call' ? cf.amount : 0,
+      distribution: cf.type !== 'Capital Call' ? cf.amount : 0,
+      net_cf: cf.type === 'Capital Call' ? -cf.amount : cf.amount,
+    }));
+  }, [qData]);
 
   // Chart data from registry
   const chartData = getChartData();

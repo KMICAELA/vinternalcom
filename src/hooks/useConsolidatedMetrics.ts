@@ -46,7 +46,7 @@ export function useConsolidatedMetrics() {
       directsProceeds: 0,
       totalCapitalCalls: qData.netTotalContributions,
       totalDistributions: qData.netTotalDistributions,
-      grossTvpi: 0,
+      grossTvpi: qData.grossTotalCost > 0 ? Number((qData.grossTerminalFMV / qData.grossTotalCost).toFixed(4)) : 0,
       netTvpi: qData.netTVPI,
       netIrr: qData.netIRR,
       grossIrr: null as number | null,
