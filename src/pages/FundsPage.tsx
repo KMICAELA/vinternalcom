@@ -482,15 +482,25 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel }:
 
 // ─── Add Reports Dialog — upload FS for all funds for next quarter ──
 
-function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
-  funds: any[]; quarterLabel: string; quarterDate: string; onClose: () => void;
+function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClose }: {
+  funds: any[]; availableQuarters: { label: string; date: string }[]; defaultQuarterDate: string; onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const [selectedQuarterDate, setSelectedQuarterDate] = useState(defaultQuarterDate);
+  const selectedQuarter = availableQuarters.find(q => q.date === selectedQuarterDate) || availableQuarters[0];
   const [uploadingFundId, setUploadingFundId] = useState<string | null>(null);
   const [files, setFiles] = useState<Record<string, File>>({});
   const [extractedMap, setExtractedMap] = useState<Record<string, any>>({});
   const [confirmedSet, setConfirmedSet] = useState<Set<string>>(new Set());
   const [extracting, setExtracting] = useState<string | null>(null);
+
+  // Reset state when quarter changes
+  const handleQuarterChange = (date: string) => {
+    setSelectedQuarterDate(date);
+    setFiles({});
+    setExtractedMap({});
+    setConfirmedSet(new Set());
+  };
 
   const handleFileSelect = (fundId: string, file: File) => {
     setFiles(prev => ({ ...prev, [fundId]: file }));
@@ -501,7 +511,7 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
     if (!file) return;
     setExtracting(fundId);
     try {
-      const filePath = `${quarterDate}/${fundId}/${file.name}`;
+      const filePath = `${selectedQuarterDate}/${fundId}/${file.name}`;
       const { error: uploadError } = await supabase.storage.from("fund-reports").upload(filePath, file, { upsert: true });
       if (uploadError) throw uploadError;
 
@@ -525,7 +535,7 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
     if (!extractedData) return;
     const { error } = await supabase.from("fund_financial_statements").upsert({
       fund_id: fundId,
-      quarter_date: quarterDate,
+      quarter_date: selectedQuarterDate,
       extracted_data: extractedData,
       confirmed: true,
       file_path: files[fundId]?.name || null,
@@ -543,9 +553,21 @@ function AddReportsDialog({ funds, quarterLabel, quarterDate, onClose }: {
       <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" /> Add Reports — {quarterLabel}
+            <FileText className="h-5 w-5" /> Add Reports
           </DialogTitle>
-          <p className="text-sm text-muted-foreground">Upload financial statements for each fund for {quarterLabel} ({quarterDate})</p>
+          <div className="flex items-center gap-3 pt-2">
+            <span className="text-sm text-muted-foreground">Quarter:</span>
+            <Select value={selectedQuarterDate} onValueChange={handleQuarterChange}>
+              <SelectTrigger className="h-8 w-40 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {availableQuarters.map(q => (
+                  <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </DialogHeader>
 
         <div className="space-y-3">
