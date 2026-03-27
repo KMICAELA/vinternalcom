@@ -74,6 +74,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     totalCommitment: 8170000,
     directsCost: 1170000,
     directsFMV: 1170000,
+    netCashflows: [
+      { date: "2024-05-03", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1868605.98 },
+      { date: "2024-08-14", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1728971.64 },
+    ],
   },
 
   "2Q25": {
@@ -82,8 +86,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTerminalNAV: 10503968.64,
     netTotalContributions: 9358162.61,
     netTotalDistributions: 0,
-    netTVPI: 1.12,
+    netTVPI: 1.1224,
     netIRR: 0.2183,
+    grossTerminalFMV: 8625952 + 4070000,
+    grossTotalCost: 9358163,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
