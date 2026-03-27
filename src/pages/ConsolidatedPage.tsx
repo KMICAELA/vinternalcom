@@ -25,7 +25,7 @@ export default function ConsolidatedPage() {
   // Build ledger from LP-level wires
   const ledger = useMemo(() => {
     const entries: any[] = [];
-    for (const cf of lpCashflows as any[]) {
+    for (const cf of (lpCashflows as any[]).filter((c: any) => c.cashflow_date <= activeQuarter.date)) {
       const isCall = cf.type === "capital_call";
       const amount = Number(cf.amount || 0);
       entries.push({
