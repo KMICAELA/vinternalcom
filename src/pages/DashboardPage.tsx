@@ -349,7 +349,7 @@ export default function DashboardPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border bg-surface-1 font-medium">
-                  <td className="px-4 py-2">Total ({directs.length} directs)</td>
+                  <td className="px-4 py-2">Total ({activeDirects.length} directs)</td>
                   <td colSpan={5} />
                   <td className="px-4 py-2 text-right font-mono">{formatCurrency(cm.directsCost)}</td>
                   <td colSpan={2} />

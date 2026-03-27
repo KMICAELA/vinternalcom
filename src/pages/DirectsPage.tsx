@@ -142,7 +142,7 @@ export default function DirectsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {directs.map((d: any) => {
+            {activeDirects.map((d: any) => {
               const isEditing = editingId === d.id;
               const data = isEditing ? editData : d;
               const val = valMap.get(d.id);
