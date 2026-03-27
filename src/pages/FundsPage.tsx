@@ -69,8 +69,8 @@ export default function FundsPage() {
       const qNum = Math.floor(qMonth / 3) + 1;
       return { label: `Q${qNum} ${d.getFullYear()}`, date: d.toISOString().split("T")[0] };
     };
-    // 3 quarters back
-    for (let i = 3; i >= 1; i--) {
+    // 2 quarters back
+    for (let i = 2; i >= 1; i--) {
       const d = new Date(activeQuarter.date);
       d.setMonth(d.getMonth() - 3 * i);
       quarters.push(makeQuarter(d));
