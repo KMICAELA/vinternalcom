@@ -144,7 +144,7 @@ export default function DashboardPage() {
   // Build breakdown helper
   const buildBreakdown = (field: string) => {
     const map: Record<string, number> = {};
-    for (const f of funds) {
+    for (const f of activeFunds) {
       const val = (f as any)[field] || "Other";
       map[val] = (map[val] || 0) + Number(f.commitment_amount);
     }
