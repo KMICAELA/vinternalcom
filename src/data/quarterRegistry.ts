@@ -10,6 +10,11 @@ export interface NetCashflow {
   amount: number;
 }
 
+export interface GrossCashflow {
+  date: string;
+  amount: number;
+}
+
 export interface QuarterData {
   label: string;
   quarterEndDate: string;
@@ -30,6 +35,7 @@ export interface QuarterData {
   directsCost: number;
   directsFMV: number;
   netCashflows: NetCashflow[];
+  grossCashflows?: GrossCashflow[];
 }
 
 export const QUARTER_REGISTRY: Record<string, QuarterData> = {
@@ -92,7 +98,7 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTotalDistributions: 0,
     netTVPI: 1.1224,
     netIRR: 0.2183,
-    grossTerminalFMV: 12695952,
+    grossTerminalFMV: 14573969,
     grossTotalCost: 9358163,
     grossTVPI: 1.357,
     grossIRR: null,
@@ -145,6 +151,27 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
       { date: "2024-12-19", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2050584.99 },
       { date: "2025-02-20", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1000000.00 },
       { date: "2025-05-28", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2710000.00 },
+    ],
+    grossCashflows: [
+      { date: "2024-05-20", amount: -420000 },
+      { date: "2024-06-30", amount: -101300 },
+      { date: "2024-07-27", amount: -750000 },
+      { date: "2024-08-01", amount: -750000 },
+      { date: "2024-10-30", amount: -300000 },
+      { date: "2024-11-14", amount: -300000 },
+      { date: "2024-12-17", amount: -250000 },
+      { date: "2024-12-19", amount: -350000 },
+      { date: "2025-01-04", amount: -150000 },
+      { date: "2025-01-10", amount: -100000 },
+      { date: "2025-01-27", amount: -250000 },
+      { date: "2025-02-21", amount: -750000 },
+      { date: "2025-04-24", amount: -680000 },
+      { date: "2025-05-01", amount: -650000 },
+      { date: "2025-05-05", amount: -700000 },
+      { date: "2025-05-28", amount: -400000 },
+      { date: "2025-06-11", amount: -250000 },
+      { date: "2025-06-27", amount: -100000 },
+      { date: "2025-06-30", amount: 14573969 },
     ],
   },
 

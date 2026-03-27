@@ -206,7 +206,8 @@ export default function FundsPage() {
             {activeFunds.map((fund: any) => {
               const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
               const registryNav = qData?.fundNAVs[fund.fund_name] ?? null;
-              const registryTvpi = qData?.fundTVPIs[fund.fund_name] ?? null;
+              const hasTvpiEntry = qData?.fundTVPIs ? fund.fund_name in qData.fundTVPIs : false;
+              const registryTvpi = hasTvpiEntry ? (qData!.fundTVPIs[fund.fund_name] ?? null) : undefined;
 
               return (
                 <FundRow
@@ -368,7 +369,7 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
         <TableCell className="text-muted-foreground">{(fund as any).currency || 'USD'}</TableCell>
         <TableCell className="text-right font-mono">{metrics.twhPct > 0 ? formatPercent(metrics.twhPct) : '—'}</TableCell>
         <TableCell className="text-right font-mono">{registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')}</TableCell>
-        <TableCell className="text-right font-mono">{registryTvpi != null ? formatMultiple(registryTvpi) : (metrics.tvpi > 0 ? formatMultiple(metrics.tvpi) : '—')}</TableCell>
+        <TableCell className="text-right font-mono">{registryTvpi !== undefined ? (registryTvpi != null ? formatMultiple(registryTvpi) : '—') : (metrics.tvpi > 0 ? formatMultiple(metrics.tvpi) : '—')}</TableCell>
         <TableCell className="text-right font-mono">{formatIrr(metrics.irr)}</TableCell>
       </TableRow>
 
