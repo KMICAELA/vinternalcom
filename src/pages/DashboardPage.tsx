@@ -137,9 +137,9 @@ export default function DashboardPage() {
   }, [activeFunds, allFS, allCashflows, fundQuarterlyReports, activeQuarter.date]);
 
   // Use consolidated metrics for top-level numbers
-  const totalCommitment = funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
-  const numFunds = funds.length;
-  const numDirects = directs.length;
+  const totalCommitment = activeFunds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
+  const numFunds = activeFunds.length;
+  const numDirects = activeDirects.length;
 
   // Build breakdown helper
   const buildBreakdown = (field: string) => {
