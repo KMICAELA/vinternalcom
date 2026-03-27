@@ -133,6 +133,13 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     totalCommitment: 17136143,
     directsCost: 4070000,
     directsFMV: 4070000,
+    netCashflows: [
+      { date: "2024-05-03", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1868605.98 },
+      { date: "2024-08-14", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1728971.64 },
+      { date: "2024-12-19", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2050584.99 },
+      { date: "2025-02-20", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 1000000.00 },
+      { date: "2025-05-28", portfolio: "TWH Americas Fund I, LP", type: "Capital Call", amount: 2710000.00 },
+    ],
   },
 
   "3Q25": {
@@ -141,8 +148,10 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netTerminalNAV: 12096611.35,
     netTotalContributions: 12108162.61,
     netTotalDistributions: 0,
-    netTVPI: 1.00,
+    netTVPI: 0.9990,
     netIRR: -0.00143,
+    grossTerminalFMV: 7716342 + 4820000,
+    grossTotalCost: 12108163,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
