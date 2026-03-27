@@ -110,6 +110,8 @@ export default function FundsPage() {
   const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
   const totalActive = activeFunds.length;
   const allUploaded = uploadedCount === totalActive && totalActive > 0;
+  const completionPct = totalActive > 0 ? (uploadedCount / totalActive) * 100 : 0;
+
   // Lock quarter handler
   const handleLockQuarter = async () => {
     const { error } = await supabase.from("quarterly_history").upsert(
