@@ -86,14 +86,28 @@ export default function DirectsPage() {
 
   // Filter directs by quarter
   const qData = getQuarterData(activeQuarter.quarter);
+  // Build registry map for cost/fmv overrides
+  const registryDirectsMap = useMemo(() => {
+    if (!qData) return new Map<string, { cost: number; fmv: number }>();
+    const map = new Map<string, { cost: number; fmv: number }>();
+    for (const d of qData.activeDirects) {
+      map.set(d.name, { cost: d.cost, fmv: d.fmv });
+    }
+    return map;
+  }, [qData]);
+
   const activeDirects = useMemo(() => {
     if (!qData) return [];
     const activeNames = new Set(qData.activeDirects.map(d => d.name));
     return directs.filter((d: any) => activeNames.has(d.company_name));
   }, [directs, qData]);
 
-  const totalCost = activeDirects.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
-  const totalFmv = activeDirects.reduce((s: number, d: any) => s + (valMap.get(d.id)?.fmv || 0), 0);
+  // Use registry cost/fmv when available
+  const getCost = (d: any) => registryDirectsMap.get(d.company_name)?.cost ?? Number(d.cost_basis);
+  const getFmv = (d: any) => registryDirectsMap.get(d.company_name)?.fmv ?? (valMap.get(d.id)?.fmv || 0);
+
+  const totalCost = activeDirects.reduce((s: number, d: any) => s + getCost(d), 0);
+  const totalFmv = activeDirects.reduce((s: number, d: any) => s + getFmv(d), 0);
   const totalProceeds = activeDirects.reduce((s: number, d: any) => s + (valMap.get(d.id)?.proceeds || 0), 0);
   const blendedMoic = totalCost > 0 ? (totalFmv + totalProceeds) / totalCost : 0;
 
