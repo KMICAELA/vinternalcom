@@ -20,6 +20,8 @@ export interface QuarterData {
   netIRR: number | null;
   grossTerminalFMV: number;
   grossTotalCost: number;
+  grossTVPI: number;
+  grossIRR: number | null;
   activeFunds: string[];
   fundNAVs: Record<string, number>;
   fundTVPIs: Record<string, number | null>;
