@@ -251,7 +251,7 @@ export default function DashboardPage() {
       {/* Fund Investments */}
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-medium">Fund Investments ({funds.length})</h3>
+          <h3 className="text-sm font-medium">Fund Investments ({activeFunds.length})</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
