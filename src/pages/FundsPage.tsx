@@ -271,9 +271,10 @@ export default function FundsPage() {
 
 // ─── Fund Row with expandable capital activity + FS status badge ────
 
-function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel }: {
+function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, registryNav, registryTvpi }: {
   fund: any; quarterDate: string; isExpanded: boolean; onToggle: () => void;
   fsStatus: "uploaded" | "stale" | "pending"; fsLabel: string;
+  registryNav?: number | null; registryTvpi?: number | null;
 }) {
   const { data: fs } = useFundFinancialStatement(fund.id, quarterDate);
   const { data: allFundReports = [] } = useFundReports(quarterDate);
