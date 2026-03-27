@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useActiveQuarter } from "@/hooks/usePortfolioData";
 import { getQuarterData } from "@/data/quarterRegistry";
+import { computeXIRR } from "@/lib/calcEngine";
 
 /**
  * Single source of truth for consolidated portfolio metrics.
