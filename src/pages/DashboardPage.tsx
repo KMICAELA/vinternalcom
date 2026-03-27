@@ -151,10 +151,10 @@ export default function DashboardPage() {
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   };
 
-  const themeData = useMemo(() => buildBreakdown("theme"), [funds]);
-  const companyIndData = useMemo(() => buildBreakdown("company_industries"), [funds]);
-  const targetIndData = useMemo(() => buildBreakdown("target_industries"), [funds]);
-  const geoData = useMemo(() => buildBreakdown("geography"), [funds]);
+  const themeData = useMemo(() => buildBreakdown("theme"), [activeFunds]);
+  const companyIndData = useMemo(() => buildBreakdown("company_industries"), [activeFunds]);
+  const targetIndData = useMemo(() => buildBreakdown("target_industries"), [activeFunds]);
+  const geoData = useMemo(() => buildBreakdown("geography"), [activeFunds]);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
