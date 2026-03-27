@@ -224,8 +224,8 @@ export default function FundsPage() {
       {addReportsOpen && (
         <AddReportsDialog
           funds={funds}
-          quarterLabel={nextQuarter.label}
-          quarterDate={nextQuarter.date}
+          availableQuarters={availableQuarters}
+          defaultQuarterDate={activeQuarter.date}
           onClose={() => setAddReportsOpen(false)}
         />
       )}
