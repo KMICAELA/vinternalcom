@@ -85,12 +85,12 @@ export default function DirectsPage() {
   };
 
   // Filter directs by quarter
+  const qData = getQuarterData(activeQuarter.quarter);
   const activeDirects = useMemo(() => {
-    return directs.filter((d: any) => {
-      if (!d.investment_date) return false;
-      return d.investment_date <= activeQuarter.date;
-    });
-  }, [directs, activeQuarter.date]);
+    if (!qData) return [];
+    const activeNames = new Set(qData.activeDirects.map(d => d.name));
+    return directs.filter((d: any) => activeNames.has(d.company_name));
+  }, [directs, qData]);
 
   const totalCost = activeDirects.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
   const totalFmv = activeDirects.reduce((s: number, d: any) => s + (valMap.get(d.id)?.fmv || 0), 0);
