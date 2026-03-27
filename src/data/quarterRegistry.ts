@@ -222,9 +222,9 @@ export function getQuarterData(quarterLabel: string): QuarterData | null {
 export function getChartData() {
   return Object.values(QUARTER_REGISTRY).map(q => ({
     quarter: q.label,
-    netTvpi: q.netTVPI,
-    grossTvpi: q.netTotalContributions > q.directsCost
-      ? Number((q.netTerminalNAV / (q.netTotalContributions - q.directsCost)).toFixed(2))
+    netTvpi: Number(q.netTVPI.toFixed(2)),
+    grossTvpi: q.grossTotalCost > 0
+      ? Number((q.grossTerminalFMV / q.grossTotalCost).toFixed(2))
       : null,
   }));
 }
