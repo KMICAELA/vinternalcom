@@ -229,6 +229,11 @@ export default function FundsPage() {
         </Table>
       </div>
 
+      {/* Add Fund Dialog */}
+      {addFundOpen && (
+        <AddFundDialog onClose={() => setAddFundOpen(false)} />
+      )}
+
       {/* Add Reports Dialog */}
       {addReportsOpen && (
         <AddReportsDialog
