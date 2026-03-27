@@ -314,9 +314,9 @@ export default function DashboardPage() {
       {/* Direct Investments */}
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-medium">Direct Investments ({directs.length})</h3>
+          <h3 className="text-sm font-medium">Direct Investments ({activeDirects.length})</h3>
         </div>
-        {directs.length > 0 ? (
+        {activeDirects.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
