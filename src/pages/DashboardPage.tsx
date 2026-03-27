@@ -134,7 +134,7 @@ export default function DashboardPage() {
 
       return { fund, metrics, hasFS: !!fs?.confirmed || !!fqr };
     });
-  }, [funds, allFS, allCashflows, fundQuarterlyReports, activeQuarter.date]);
+  }, [activeFunds, allFS, allCashflows, fundQuarterlyReports, activeQuarter.date]);
 
   // Use consolidated metrics for top-level numbers
   const totalCommitment = funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
