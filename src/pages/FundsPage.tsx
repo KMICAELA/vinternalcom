@@ -29,6 +29,7 @@ export default function FundsPage() {
   const cm = useConsolidatedMetrics();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
   const [addReportsOpen, setAddReportsOpen] = useState(false);
+  const [addFundOpen, setAddFundOpen] = useState(false);
   const [lockModalOpen, setLockModalOpen] = useState(false);
 
   // Fetch all FS for active quarter to compute completion
