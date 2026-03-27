@@ -638,3 +638,140 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
     </Dialog>
   );
 }
+
+// ─── Add Fund Dialog ────────────────────────────────────────────────
+
+function AddFundDialog({ onClose }: { onClose: () => void }) {
+  const qc = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    fund_name: "",
+    commitment_amount: "",
+    ownership_percentage: "",
+    vintage_year: "",
+    start_date: "",
+    strategy: "",
+    geography: "",
+    currency: "USD",
+    theme: "",
+    company_industries: "",
+    target_industries: "",
+    management_fee_rate: "2.0",
+    carry_percentage: "20.0",
+    hurdle_rate: "8.0",
+  });
+
+  const update = (field: string, value: string) => setForm(p => ({ ...p, [field]: value }));
+
+  const handleSave = async () => {
+    if (!form.fund_name.trim()) { toast.error("Fund name is required"); return; }
+    setSaving(true);
+    const { error } = await supabase.from("funds").insert({
+      fund_name: form.fund_name.trim(),
+      commitment_amount: Number(form.commitment_amount) || 0,
+      ownership_percentage: Number(form.ownership_percentage) || 0,
+      vintage_year: form.vintage_year ? Number(form.vintage_year) : null,
+      start_date: form.start_date || null,
+      strategy: form.strategy || null,
+      geography: form.geography || null,
+      currency: form.currency || "USD",
+      theme: form.theme || null,
+      company_industries: form.company_industries || null,
+      target_industries: form.target_industries || null,
+      management_fee_rate: Number(form.management_fee_rate) / 100 || 0.02,
+      carry_percentage: Number(form.carry_percentage) / 100 || 0.20,
+      hurdle_rate: Number(form.hurdle_rate) / 100 || 0.08,
+    } as any);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`${form.fund_name} added to portfolio`);
+    qc.invalidateQueries({ queryKey: ["funds"] });
+    onClose();
+  };
+
+  return (
+    <Dialog open onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5" /> Add New Fund
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <label className="text-xs text-muted-foreground">Fund Name *</label>
+              <Input className="h-8 mt-1" value={form.fund_name} onChange={e => update("fund_name", e.target.value)} placeholder="e.g. Sequoia Capital Fund XV" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">TWH Commitment ($)</label>
+              <Input type="number" className="h-8 mt-1" value={form.commitment_amount} onChange={e => update("commitment_amount", e.target.value)} placeholder="1000000" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">TWH Ownership %</label>
+              <Input type="number" className="h-8 mt-1" value={form.ownership_percentage} onChange={e => update("ownership_percentage", e.target.value)} placeholder="e.g. 5.0" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Vintage Year</label>
+              <Input type="number" className="h-8 mt-1" value={form.vintage_year} onChange={e => update("vintage_year", e.target.value)} placeholder="2024" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Start Date</label>
+              <Input type="date" className="h-8 mt-1" value={form.start_date} onChange={e => update("start_date", e.target.value)} />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Strategy</label>
+              <Input className="h-8 mt-1" value={form.strategy} onChange={e => update("strategy", e.target.value)} placeholder="e.g. Venture" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Geography</label>
+              <Input className="h-8 mt-1" value={form.geography} onChange={e => update("geography", e.target.value)} placeholder="e.g. North America" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Currency</label>
+              <Select value={form.currency} onValueChange={v => update("currency", v)}>
+                <SelectTrigger className="h-8 mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="EUR">EUR</SelectItem>
+                  <SelectItem value="GBP">GBP</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Theme</label>
+              <Input className="h-8 mt-1" value={form.theme} onChange={e => update("theme", e.target.value)} placeholder="e.g. AI/ML" />
+            </div>
+          </div>
+
+          <div className="border-t border-border pt-3">
+            <p className="text-xs text-muted-foreground font-medium mb-2">Fee Terms</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-muted-foreground">Mgmt Fee %</label>
+                <Input type="number" className="h-8 mt-1" value={form.management_fee_rate} onChange={e => update("management_fee_rate", e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Carry %</label>
+                <Input type="number" className="h-8 mt-1" value={form.carry_percentage} onChange={e => update("carry_percentage", e.target.value)} />
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Hurdle %</label>
+                <Input type="number" className="h-8 mt-1" value={form.hurdle_rate} onChange={e => update("hurdle_rate", e.target.value)} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving} className="gap-2">
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+            Add Fund
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
