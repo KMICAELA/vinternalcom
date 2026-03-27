@@ -43,6 +43,8 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     netIRR: null,
     grossTerminalFMV: 4206101,
     grossTotalCost: 3597578,
+    grossTVPI: 1.169,
+    grossIRR: null,
     activeFunds: [
       "Lowercarbon 421.0 Parallel Fund, LP",
       "Third Sphere Fund IV, LP",
