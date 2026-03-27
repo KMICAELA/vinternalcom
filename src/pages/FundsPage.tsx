@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
 import { useQuarterContext } from "@/contexts/QuarterContext";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
+import { getQuarterData } from "@/data/quarterRegistry";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
