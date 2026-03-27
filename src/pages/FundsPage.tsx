@@ -61,7 +61,7 @@ export default function FundsPage() {
     },
   });
 
-  // Compute available quarters: next quarter + 3 retroactive from active
+  // Compute Add Reports quarter options from the backend's default/current quarter
   const availableQuarters = useMemo(() => {
     const quarters: { label: string; date: string }[] = [];
     const makeQuarter = (d: Date) => {
@@ -71,20 +71,21 @@ export default function FundsPage() {
       const qNum = Math.floor(qMonth / 3) + 1;
       return { label: `Q${qNum} ${d.getFullYear()}`, date: d.toISOString().split("T")[0] };
     };
-    // 2 quarters back
+
     for (let i = 2; i >= 1; i--) {
-      const d = new Date(activeQuarter.date);
+      const d = new Date(defaultQuarter.date);
       d.setMonth(d.getMonth() - 3 * i);
       quarters.push(makeQuarter(d));
     }
-    // Active quarter
-    quarters.push({ label: activeQuarter.quarter, date: activeQuarter.date });
-    // Next quarter
-    const nd = new Date(activeQuarter.date);
+
+    quarters.push({ label: `Q${defaultQuarter.quarter[0]} ${defaultQuarter.date.slice(0, 4)}`, date: defaultQuarter.date });
+
+    const nd = new Date(defaultQuarter.date);
     nd.setMonth(nd.getMonth() + 3);
     quarters.push(makeQuarter(nd));
+
     return quarters;
-  }, [activeQuarter.date, activeQuarter.quarter]);
+  }, [defaultQuarter.date, defaultQuarter.quarter]);
 
   // FS status per fund
   const fsStatusMap = useMemo(() => {
