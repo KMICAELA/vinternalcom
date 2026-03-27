@@ -25,7 +25,7 @@ export default function ConsolidatedPage() {
   // Build ledger from LP-level wires
   const ledger = useMemo(() => {
     const entries: any[] = [];
-    for (const cf of lpCashflows as any[]) {
+    for (const cf of (lpCashflows as any[]).filter((c: any) => c.cashflow_date <= activeQuarter.date)) {
       const isCall = cf.type === "capital_call";
       const amount = Number(cf.amount || 0);
       entries.push({
@@ -39,7 +39,7 @@ export default function ConsolidatedPage() {
     }
     entries.sort((a, b) => a.date.localeCompare(b.date));
     return entries;
-  }, [lpCashflows]);
+  }, [lpCashflows, activeQuarter.date]);
 
   // Chart data from quarterly history — only show locked quarters with real data
   const lockedQuarters = quarterlyHistory.filter((q: any) => q.locked);

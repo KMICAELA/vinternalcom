@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useDirectInvestments, useActiveQuarter } from "@/hooks/usePortfolioData";
@@ -83,9 +83,17 @@ export default function DirectsPage() {
     setEditingId(null);
   };
 
-  const totalCost = directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
-  const totalFmv = directs.reduce((s: number, d: any) => s + (valMap.get(d.id)?.fmv || 0), 0);
-  const totalProceeds = directs.reduce((s: number, d: any) => s + (valMap.get(d.id)?.proceeds || 0), 0);
+  // Filter directs by quarter
+  const activeDirects = useMemo(() => {
+    return directs.filter((d: any) => {
+      if (!d.investment_date) return false;
+      return d.investment_date <= activeQuarter.date;
+    });
+  }, [directs, activeQuarter.date]);
+
+  const totalCost = activeDirects.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
+  const totalFmv = activeDirects.reduce((s: number, d: any) => s + (valMap.get(d.id)?.fmv || 0), 0);
+  const totalProceeds = activeDirects.reduce((s: number, d: any) => s + (valMap.get(d.id)?.proceeds || 0), 0);
   const blendedMoic = totalCost > 0 ? (totalFmv + totalProceeds) / totalCost : 0;
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
@@ -134,7 +142,7 @@ export default function DirectsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {directs.map((d: any) => {
+            {activeDirects.map((d: any) => {
               const isEditing = editingId === d.id;
               const data = isEditing ? editData : d;
               const val = valMap.get(d.id);

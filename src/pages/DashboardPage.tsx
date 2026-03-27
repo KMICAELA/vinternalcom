@@ -89,9 +89,18 @@ export default function DashboardPage() {
     enabled: !!activeQuarter.date,
   });
 
+  // Filter funds and directs by quarter
+  const activeFunds = useMemo(() => {
+    return funds.filter((f: any) => f.start_date && f.start_date <= activeQuarter.date);
+  }, [funds, activeQuarter.date]);
+
+  const activeDirects = useMemo(() => {
+    return directs.filter((d: any) => d.investment_date && d.investment_date <= activeQuarter.date);
+  }, [directs, activeQuarter.date]);
+
   // Per-fund metrics (for fund table only)
   const fundMetrics = useMemo(() => {
-    return funds.map((fund: any) => {
+    return activeFunds.map((fund: any) => {
       const fs = allFS.find((f: any) => f.fund_id === fund.id);
       const fqr = fundQuarterlyReports.find((r: any) => r.fund_id === fund.id);
       const fsData = (fs?.extracted_data as any) || {};
@@ -125,27 +134,27 @@ export default function DashboardPage() {
 
       return { fund, metrics, hasFS: !!fs?.confirmed || !!fqr };
     });
-  }, [funds, allFS, allCashflows, fundQuarterlyReports, activeQuarter.date]);
+  }, [activeFunds, allFS, allCashflows, fundQuarterlyReports, activeQuarter.date]);
 
   // Use consolidated metrics for top-level numbers
-  const totalCommitment = funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
-  const numFunds = funds.length;
-  const numDirects = directs.length;
+  const totalCommitment = activeFunds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
+  const numFunds = activeFunds.length;
+  const numDirects = activeDirects.length;
 
   // Build breakdown helper
   const buildBreakdown = (field: string) => {
     const map: Record<string, number> = {};
-    for (const f of funds) {
+    for (const f of activeFunds) {
       const val = (f as any)[field] || "Other";
       map[val] = (map[val] || 0) + Number(f.commitment_amount);
     }
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   };
 
-  const themeData = useMemo(() => buildBreakdown("theme"), [funds]);
-  const companyIndData = useMemo(() => buildBreakdown("company_industries"), [funds]);
-  const targetIndData = useMemo(() => buildBreakdown("target_industries"), [funds]);
-  const geoData = useMemo(() => buildBreakdown("geography"), [funds]);
+  const themeData = useMemo(() => buildBreakdown("theme"), [activeFunds]);
+  const companyIndData = useMemo(() => buildBreakdown("company_industries"), [activeFunds]);
+  const targetIndData = useMemo(() => buildBreakdown("target_industries"), [activeFunds]);
+  const geoData = useMemo(() => buildBreakdown("geography"), [activeFunds]);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
@@ -242,7 +251,7 @@ export default function DashboardPage() {
       {/* Fund Investments */}
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-medium">Fund Investments ({funds.length})</h3>
+          <h3 className="text-sm font-medium">Fund Investments ({activeFunds.length})</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
@@ -289,7 +298,7 @@ export default function DashboardPage() {
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-border bg-surface-1 font-medium">
-                <td className="px-4 py-2">Total ({funds.length} funds)</td>
+                <td className="px-4 py-2">Total ({activeFunds.length} funds)</td>
                 <td colSpan={4} />
                 <td className="px-4 py-2 text-right font-mono">{formatCurrency(totalCommitment)}</td>
                 <td />
@@ -305,9 +314,9 @@ export default function DashboardPage() {
       {/* Direct Investments */}
       <div className="border border-border rounded-lg overflow-hidden bg-card">
         <div className="px-4 py-3 border-b border-border">
-          <h3 className="text-sm font-medium">Direct Investments ({directs.length})</h3>
+          <h3 className="text-sm font-medium">Direct Investments ({activeDirects.length})</h3>
         </div>
-        {directs.length > 0 ? (
+        {activeDirects.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -324,7 +333,7 @@ export default function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {[...directs].sort((a: any, b: any) => (a.investment_date || 'zzzz').localeCompare(b.investment_date || 'zzzz')).map((d: any) => (
+                {[...activeDirects].sort((a: any, b: any) => (a.investment_date || 'zzzz').localeCompare(b.investment_date || 'zzzz')).map((d: any) => (
                   <tr key={d.id} className="border-t border-border table-row-hover">
                     <td className="px-4 py-2 font-medium text-foreground">{d.company_name}</td>
                     <td className="px-4 py-2 text-muted-foreground font-mono text-xs">{d.investment_date || '—'}</td>
@@ -340,7 +349,7 @@ export default function DashboardPage() {
               </tbody>
               <tfoot>
                 <tr className="border-t-2 border-border bg-surface-1 font-medium">
-                  <td className="px-4 py-2">Total ({directs.length} directs)</td>
+                  <td className="px-4 py-2">Total ({activeDirects.length} directs)</td>
                   <td colSpan={5} />
                   <td className="px-4 py-2 text-right font-mono">{formatCurrency(cm.directsCost)}</td>
                   <td colSpan={2} />
