@@ -3,6 +3,13 @@
  * for consolidated performance across the platform.
  */
 
+export interface NetCashflow {
+  date: string;
+  portfolio: string;
+  type: string;
+  amount: number;
+}
+
 export interface QuarterData {
   label: string;
   quarterEndDate: string;
@@ -11,6 +18,8 @@ export interface QuarterData {
   netTotalDistributions: number;
   netTVPI: number;
   netIRR: number | null;
+  grossTerminalFMV: number;
+  grossTotalCost: number;
   activeFunds: string[];
   fundNAVs: Record<string, number>;
   fundTVPIs: Record<string, number | null>;
@@ -18,6 +27,7 @@ export interface QuarterData {
   totalCommitment: number;
   directsCost: number;
   directsFMV: number;
+  netCashflows: NetCashflow[];
 }
 
 export const QUARTER_REGISTRY: Record<string, QuarterData> = {
