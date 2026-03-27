@@ -137,7 +137,7 @@ export const QUARTER_REGISTRY: Record<string, QuarterData> = {
     activeDirects: [
       { name: "101OBEX, CORP", cost: 420000, fmv: 420000 },
       { name: "Earth AI, Inc.", cost: 1000000, fmv: 1000000 },
-      { name: "GENERATIONAL PARTNERS X VL SPV1", cost: 650000, fmv: 650000 },
+      { name: "Generational Partners X VL SPV1", cost: 650000, fmv: 650000 },
       { name: "BRK Health Solutions", cost: 1000000, fmv: 1000000 },
       { name: "Canto of Arcadia, LP", cost: 500000, fmv: 500000 },
       { name: "Ares Materials, Inc.", cost: 500000, fmv: 500000 },
