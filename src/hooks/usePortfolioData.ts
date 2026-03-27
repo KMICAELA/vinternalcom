@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useQuarterContext } from "@/contexts/QuarterContext";
 
 // ─── Funds ───────────────────────────────────────────────────────────
 
@@ -170,9 +171,8 @@ export function useAppSettings() {
 }
 
 export function useActiveQuarter() {
-  const { data: settings } = useAppSettings();
-  const activeQuarter = settings?.active_quarter as { quarter: string; date: string } | undefined;
-  return activeQuarter || { quarter: "3Q25", date: "2025-09-30" };
+  const ctx = useQuarterContext();
+  return ctx.selectedQuarter;
 }
 
 // ─── Available Quarters ───────────────────────────────────────────

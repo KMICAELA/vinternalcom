@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight } from "lucide-react";
+import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ChatWidget from "./ChatWidget";
 import LogoMark from "./LogoMark";
+import { useQuarterContext } from "@/contexts/QuarterContext";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
@@ -17,6 +19,7 @@ const navItems = [
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
+  const { selectedQuarter, availableQuarters, setSelectedDate } = useQuarterContext();
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -45,6 +48,30 @@ export default function AppLayout() {
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
         </div>
+
+        {/* Quarter Selector */}
+        {!collapsed ? (
+          <div className="px-3 py-3 border-b border-border">
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1 block">Reporting Period</label>
+            <Select value={selectedQuarter.date} onValueChange={setSelectedDate}>
+              <SelectTrigger className="h-8 text-xs w-full">
+                <div className="flex items-center gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                  <SelectValue />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {availableQuarters.map(q => (
+                  <SelectItem key={q.date} value={q.date}>{q.quarter}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : (
+          <div className="px-2 py-3 border-b border-border flex justify-center">
+            <span className="text-[10px] font-medium text-muted-foreground">{selectedQuarter.quarter}</span>
+          </div>
+        )}
 
         <nav className="flex-1 p-2 space-y-1">
           {navItems.map(({ to, icon: Icon, label }) => (

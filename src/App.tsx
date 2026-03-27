@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { QuarterProvider } from "./contexts/QuarterContext";
 import AppLayout from "./components/AppLayout";
 import DashboardPage from "./pages/DashboardPage";
 import FundsPage from "./pages/FundsPage";
@@ -22,19 +23,21 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/funds" element={<FundsPage />} />
-            <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
-            <Route path="/portfolio" element={<PortfolioPage />} />
-            <Route path="/directs" element={<DirectsPage />} />
-            <Route path="/consolidated" element={<ConsolidatedPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Route>
-          <Route path="/add-quarterly-data" element={<AddQuarterlyData />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <QuarterProvider>
+          <Routes>
+            <Route element={<AppLayout />}>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/funds" element={<FundsPage />} />
+              <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
+              <Route path="/portfolio" element={<PortfolioPage />} />
+              <Route path="/directs" element={<DirectsPage />} />
+              <Route path="/consolidated" element={<ConsolidatedPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
+            <Route path="/add-quarterly-data" element={<AddQuarterlyData />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </QuarterProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
