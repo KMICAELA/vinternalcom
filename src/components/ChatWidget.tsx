@@ -131,7 +131,7 @@ const ChatWidget = () => {
       const registryNav = qData?.fundNAVs?.[f.fund_name];
       
       let tvpiStr: string;
-      let navStr: string;
+      let navStr: string = "—";
       
       if (registryTvpi !== undefined && registryTvpi !== null) {
         tvpiStr = formatMultiple(registryTvpi);
@@ -160,9 +160,6 @@ const ChatWidget = () => {
       
       if (registryNav !== undefined) {
         navStr = formatCurrency(registryNav);
-      }
-      if (!navStr!) {
-        navStr = "—";
       }
       
       return `${f.fund_name}: TWH Commitment ${formatCurrency(f.commitment_amount)}, TWH NAV ${navStr}, TVPI ${tvpiStr}, Geography: ${f.geography || "—"}, Theme: ${f.theme || "—"}`;
