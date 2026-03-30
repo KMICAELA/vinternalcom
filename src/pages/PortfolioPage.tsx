@@ -168,19 +168,47 @@ export default function PortfolioPage() {
           <h1 className="text-xl font-semibold text-foreground">Portfolio Companies</h1>
           <p className="text-sm text-muted-foreground">Company intelligence database · {filtered.length} companies</p>
         </div>
-        <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
-          <button
-            onClick={() => setViewMode("card")}
-            className={cn("p-1.5 rounded", viewMode === "card" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const rows = filtered.map(c => ({
+                Company: c.company,
+                Fund: c.fund,
+                Status: c.status,
+                Region: c.region || "",
+                Innovation: c.innovation || "",
+                Theme: c.theme || "",
+                Stage: c.stage || "",
+                "What They Do": c.whatTheyDo || "",
+                "Target Market": c.targetMarket || "",
+                Tailwinds: c.tailwinds || "",
+                Challenges: c.challenges || "",
+                "TWH Cost": c.twhCost,
+                "TWH FMV": c.twhFmv,
+                MOIC: c.moic,
+              }));
+              exportToExcel(rows, `Portfolio_Companies_${activeQuarter.quarter}`);
+            }}
           >
-            <LayoutGrid className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setViewMode("table")}
-            className={cn("p-1.5 rounded", viewMode === "table" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
-          >
-            <List className="h-4 w-4" />
-          </button>
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+          <div className="flex items-center gap-1 border border-border rounded-md p-0.5">
+            <button
+              onClick={() => setViewMode("card")}
+              className={cn("p-1.5 rounded", viewMode === "card" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode("table")}
+              className={cn("p-1.5 rounded", viewMode === "table" ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground")}
+            >
+              <List className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 

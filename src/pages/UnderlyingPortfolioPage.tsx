@@ -134,9 +134,37 @@ export default function UnderlyingPortfolioPage() {
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold text-foreground">Underlying Portfolio</h1>
-        <p className="text-sm text-muted-foreground">Company-level view across all funds · {activeQuarter.quarter}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Underlying Portfolio</h1>
+          <p className="text-sm text-muted-foreground">Company-level view across all funds · {activeQuarter.quarter}</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            const rows = filtered.map(c => ({
+              Company: c.company_name,
+              Fund: c.fund_name,
+              Status: c.status,
+              Date: c.investment_date || "",
+              Instrument: c.instrument || "",
+              Round: c.round || "",
+              "Inv. Cost": c.investment_cost,
+              FMV: c.fmv,
+              Proceeds: c.proceeds,
+              MOIC: c.moic,
+              "TWH %": c.twh_pct,
+              "TWH Cost": c.twh_cost,
+              "TWH FMV": c.twh_fmv,
+              "TWH MOIC": c.twh_moic,
+            }));
+            exportToExcel(rows, `Underlying_Portfolio_${activeQuarter.quarter}`);
+          }}
+        >
+          <Download className="h-4 w-4" />
+          Export
+        </Button>
       </div>
 
       <div className="flex items-center gap-3">
