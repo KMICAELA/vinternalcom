@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useFunds, useDirectInvestments, useActiveQuarter, useUnderlyingPortfolio } from "@/hooks/usePortfolioData";
+import { getQuarterData } from "@/data/quarterRegistry";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
@@ -123,27 +124,45 @@ const ChatWidget = () => {
 
   // Build dynamic system prompt
   const portfolioContext = useMemo(() => {
+    const qData = getQuarterData(activeQuarter.quarter);
     const fundSummary = funds.map((f: any) => {
-      const cashflows = allCashflows.filter((c: any) => c.fund_id === f.id);
-      const fqr = fundQuarterlyReports.find((r: any) => r.fund_id === f.id);
-      const metrics = computeFundMetrics({
-        twhCommitment: Number(f.commitment_amount),
-        totalFundCommitment: 0,
-        totalInvestmentCost: 0,
-        totalPortfolioFmv: 0,
-        fundNav: 0,
-        capitalActivity: cashflows.map((c: any) => ({
-          date: c.cashflow_date,
-          type: c.cashflow_type || "Capital Call — Investment",
-          amount: Number(c.capital_deployed || 0) + Number(c.distribution_received || 0),
-        })),
-        reportDate: activeQuarter.date,
-        reportNav: Number(fqr?.reported_nav || 0),
-        reportCalled: Number(fqr?.capital_called_to_date || 0),
-        reportDist: Number(fqr?.distributions_to_date || 0),
-        ownershipPct: Number(f.ownership_percentage || 0),
-      });
-      return `${f.fund_name}: TWH Commitment ${formatCurrency(f.commitment_amount)}, TWH NAV ${formatCurrency(metrics.twhNav)}, TVPI ${formatMultiple(metrics.tvpi)}, Geography: ${f.geography || "—"}, Theme: ${f.theme || "—"}`;
+      // Use registry TVPIs when available (verified values), fall back to dynamic computation
+      const registryTvpi = qData?.fundTVPIs?.[f.fund_name];
+      const registryNav = qData?.fundNAVs?.[f.fund_name];
+      
+      let tvpiStr: string;
+      let navStr: string = "—";
+      
+      if (registryTvpi !== undefined && registryTvpi !== null) {
+        tvpiStr = formatMultiple(registryTvpi);
+      } else if (registryTvpi === null) {
+        tvpiStr = "N/A";
+      } else {
+        const cashflows = allCashflows.filter((c: any) => c.fund_id === f.id);
+        const fqr = fundQuarterlyReports.find((r: any) => r.fund_id === f.id);
+        const metrics = computeFundMetrics({
+          twhCommitment: Number(f.commitment_amount),
+          totalFundCommitment: 0, totalInvestmentCost: 0, totalPortfolioFmv: 0, fundNav: 0,
+          capitalActivity: cashflows.map((c: any) => ({
+            date: c.cashflow_date,
+            type: c.cashflow_type || "Capital Call — Investment",
+            amount: Number(c.capital_deployed || 0) + Number(c.distribution_received || 0),
+          })),
+          reportDate: activeQuarter.date,
+          reportNav: Number(fqr?.reported_nav || 0),
+          reportCalled: Number(fqr?.capital_called_to_date || 0),
+          reportDist: Number(fqr?.distributions_to_date || 0),
+          ownershipPct: Number(f.ownership_percentage || 0),
+        });
+        tvpiStr = formatMultiple(metrics.tvpi);
+        navStr = formatCurrency(metrics.twhNav);
+      }
+      
+      if (registryNav !== undefined) {
+        navStr = formatCurrency(registryNav);
+      }
+      
+      return `${f.fund_name}: TWH Commitment ${formatCurrency(f.commitment_amount)}, TWH NAV ${navStr}, TVPI ${tvpiStr}, Geography: ${f.geography || "—"}, Theme: ${f.theme || "—"}`;
     }).join("\n");
 
     const companySummary = holdings.slice(0, 80).map((h: any) => {
