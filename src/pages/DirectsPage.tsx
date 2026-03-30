@@ -98,13 +98,46 @@ export default function DirectsPage() {
 
   const activeDirects = useMemo(() => {
     if (!qData) return [];
-    const activeNames = new Set(qData.activeDirects.map(d => d.name));
-    return directs.filter((d: any) => activeNames.has(d.company_name));
+    // Match DB records to registry entries (case-insensitive, partial match)
+    const matched = new Set<string>();
+    const result: any[] = [];
+    for (const regDirect of qData.activeDirects) {
+      const dbMatch = directs.find((d: any) =>
+        d.company_name === regDirect.name ||
+        d.company_name.toUpperCase().includes(regDirect.name.toUpperCase()) ||
+        regDirect.name.toUpperCase().includes(d.company_name.toUpperCase())
+      );
+      if (dbMatch) {
+        matched.add(dbMatch.id);
+        result.push(dbMatch);
+      } else {
+        // Create a synthetic row from registry data
+        result.push({
+          id: `registry-${regDirect.name}`,
+          company_name: regDirect.name,
+          cost_basis: regDirect.cost,
+          investment_date: null,
+          instrument: null,
+          round: null,
+          co_investors: null,
+          _fromRegistry: true,
+        });
+      }
+    }
+    return result;
   }, [directs, qData]);
 
-  // Use registry cost/fmv when available
-  const getCost = (d: any) => registryDirectsMap.get(d.company_name)?.cost ?? Number(d.cost_basis);
-  const getFmv = (d: any) => registryDirectsMap.get(d.company_name)?.fmv ?? (valMap.get(d.id)?.fmv || 0);
+  // Use registry cost/fmv when available (fuzzy match)
+  const findRegistryEntry = (name: string) => {
+    const direct = registryDirectsMap.get(name);
+    if (direct) return direct;
+    for (const [key, val] of registryDirectsMap.entries()) {
+      if (name.toUpperCase().includes(key.toUpperCase()) || key.toUpperCase().includes(name.toUpperCase())) return val;
+    }
+    return null;
+  };
+  const getCost = (d: any) => findRegistryEntry(d.company_name)?.cost ?? Number(d.cost_basis);
+  const getFmv = (d: any) => findRegistryEntry(d.company_name)?.fmv ?? (valMap.get(d.id)?.fmv || 0);
 
   const totalCost = activeDirects.reduce((s: number, d: any) => s + getCost(d), 0);
   const totalFmv = activeDirects.reduce((s: number, d: any) => s + getFmv(d), 0);
