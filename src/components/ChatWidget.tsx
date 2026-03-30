@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 import { useFunds, useDirectInvestments, useActiveQuarter, useUnderlyingPortfolio } from "@/hooks/usePortfolioData";
+import { getQuarterData } from "@/data/quarterRegistry";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
