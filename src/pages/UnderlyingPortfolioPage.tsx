@@ -4,8 +4,10 @@ import { formatCurrency, formatMultiple, formatPercent } from "@/lib/calcEngine"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, Download } from "lucide-react";
 import { underlyingPortfolioSeed, fundTwhPct } from "@/data/underlyingPortfolioSeed";
+import { exportToExcel } from "@/lib/exportToExcel";
+import { Button } from "@/components/ui/button";
 
 export default function UnderlyingPortfolioPage() {
   const activeQuarter = useActiveQuarter();
