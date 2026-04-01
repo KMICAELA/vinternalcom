@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { to: "/highlights", icon: Sparkles, label: "Highlights" },
   { to: "/funds", icon: Building2, label: "Funds" },
   { to: "/directs", icon: Target, label: "Directs" },
   { to: "/underlying", icon: Layers, label: "Underlying Portfolio" },
