@@ -84,6 +84,17 @@ export default function DashboardPage() {
   const targetIndData = useMemo(() => buildBreakdown("target_industries"), [activeFunds]);
   const geoData = useMemo(() => buildBreakdown("geography"), [activeFunds]);
 
+  // Type breakdown from underlying holdings
+  const typeData = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const h of holdings) {
+      const t = h.type || "Other";
+      map[t] = (map[t] || 0) + Number(h.twh_fmv);
+    }
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+  }, [holdings]);
+  const typeFmvTotal = typeData.reduce((s, d) => s + d.value, 0);
+
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
   const CustomTooltip = ({ active, payload }: any) => {
