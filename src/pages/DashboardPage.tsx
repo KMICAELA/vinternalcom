@@ -1,5 +1,5 @@
 import { useMemo } from "react"; // dashboard v2
-import { useFunds, useDirectInvestments, useActiveQuarter } from "@/hooks/usePortfolioData";
+import { useFunds, useDirectInvestments, useActiveQuarter, useUnderlyingPortfolio } from "@/hooks/usePortfolioData";
 import { formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { getQuarterData } from "@/data/quarterRegistry";
