@@ -138,11 +138,10 @@ export default function DashboardPage() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Donut charts: Type, Theme, Geography */}
         {[
           { title: "Type", data: typeData, offset: 0 },
           { title: "Theme", data: themeData, offset: 2 },
-          { title: "Company Industry(ies) - WHAT IS?", data: companyIndData, offset: 4 },
-          { title: "Target Industry(ies) - TO WHOM?", data: targetIndData, offset: 6 },
           { title: "Geography Allocation", data: geoData, offset: 8 },
         ].map(({ title, data, offset }) => {
           const total = data.reduce((s, d) => s + d.value, 0);
@@ -170,6 +169,57 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : <p className="text-xs text-muted-foreground">No data</p>}
+            </div>
+          );
+        })}
+
+        {/* Horizontal bar charts: Company Industry, Target Industry */}
+        {[
+          { title: "Company Industry(ies) - WHAT IS?", data: companyIndData, offset: 4 },
+          { title: "Target Industry(ies) - TO WHOM?", data: targetIndData, offset: 6 },
+        ].map(({ title, data, offset }) => {
+          const total = data.reduce((s, d) => s + d.value, 0);
+          // Apply 80/20 rule: show top categories up to 80% cumulative, rest as "Others"
+          let cumulative = 0;
+          const threshold = total * 0.8;
+          const topItems: { name: string; value: number }[] = [];
+          let othersValue = 0;
+          for (const item of data) {
+            if (cumulative < threshold) {
+              topItems.push(item);
+              cumulative += item.value;
+            } else {
+              othersValue += item.value;
+            }
+          }
+          if (othersValue > 0) {
+            topItems.push({ name: "Others", value: othersValue });
+          }
+          const barData = topItems.map((item, i) => ({
+            ...item,
+            pct: total > 0 ? (item.value / total) * 100 : 0,
+            fill: item.name === "Others" ? "hsl(var(--muted-foreground))" : COLORS[(i + offset) % COLORS.length],
+          }));
+
+          return (
+            <div key={title} className="border border-border rounded-lg p-4 bg-card">
+              <h3 className="text-sm font-medium mb-3">{title}</h3>
+              {barData.length > 0 ? (
+                <div className="w-full space-y-1">
+                  {barData.map((item, i) => (
+                    <div key={item.name} className="flex items-center gap-2 text-[10px]">
+                      <span className="text-muted-foreground w-[70px] truncate shrink-0 text-right">{item.name}</span>
+                      <div className="flex-1 h-4 bg-muted/30 rounded overflow-hidden relative">
+                        <div
+                          className="h-full rounded"
+                          style={{ width: `${item.pct}%`, backgroundColor: item.fill }}
+                        />
+                      </div>
+                      <span className="font-mono text-foreground w-[36px] text-right shrink-0">{item.pct.toFixed(0)}%</span>
+                    </div>
+                  ))}
                 </div>
               ) : <p className="text-xs text-muted-foreground">No data</p>}
             </div>
