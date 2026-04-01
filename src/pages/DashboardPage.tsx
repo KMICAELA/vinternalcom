@@ -3,7 +3,7 @@ import { useFunds, useDirectInvestments, useActiveQuarter, useUnderlyingPortfoli
 import { formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { getQuarterData } from "@/data/quarterRegistry";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
 import { Building2, Target, TrendingUp, DollarSign, Layers, Plus } from "lucide-react";
 import LogoMark from "@/components/LogoMark";
 import { useNavigate } from "react-router-dom";
