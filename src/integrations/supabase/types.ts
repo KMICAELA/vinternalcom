@@ -334,6 +334,39 @@ export type Database = {
         }
         Relationships: []
       }
+      highlight_entries: {
+        Row: {
+          body: string
+          created_at: string
+          entity_name: string
+          id: string
+          quarter_date: string
+          update_type: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          entity_name: string
+          id?: string
+          quarter_date: string
+          update_type?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          entity_name?: string
+          id?: string
+          quarter_date?: string
+          update_type?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
       portfolio_snapshots: {
         Row: {
           created_at: string
