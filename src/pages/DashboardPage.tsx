@@ -142,7 +142,46 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Type chart - uses holdings FMV totals */}
+        <div className="border border-border rounded-lg p-4 bg-card">
+          <h3 className="text-sm font-medium mb-3">Type</h3>
+          {typeData.length > 0 ? (
+            <div className="flex flex-col items-center gap-3">
+              <ResponsiveContainer width={130} height={130}>
+                <PieChart>
+                  <Pie data={typeData} cx="50%" cy="50%" innerRadius={30} outerRadius={58} dataKey="value" stroke="hsl(var(--background))" strokeWidth={2}>
+                    {typeData.map((_, i) => (
+                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={({ active, payload }: any) => {
+                    if (active && payload && payload.length) {
+                      return (
+                        <div className="bg-card border border-border rounded px-3 py-2 text-xs">
+                          <p className="font-medium">{payload[0].name}</p>
+                          <p className="font-mono text-muted-foreground">{formatCurrency(payload[0].value)}</p>
+                          <p className="text-muted-foreground">{formatPercent(payload[0].value / (typeFmvTotal || 1))}</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="w-full space-y-1.5">
+                {typeData.map((s, i) => (
+                  <div key={s.name} className="flex items-center gap-2 text-xs">
+                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                    <span className="text-muted-foreground truncate flex-1">{s.name}</span>
+                    <span className="font-mono text-foreground">{formatPercent(s.value / (typeFmvTotal || 1))}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : <p className="text-xs text-muted-foreground">No data</p>}
+        </div>
+        {/* Existing charts */}
         {[
           { title: "Theme", data: themeData, offset: 0 },
           { title: "Company Industry(ies)", data: companyIndData, offset: 3 },
