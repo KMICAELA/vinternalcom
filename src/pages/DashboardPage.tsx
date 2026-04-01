@@ -47,6 +47,7 @@ export default function DashboardPage() {
   const activeQuarter = useActiveQuarter();
   const { data: funds = [], isLoading } = useFunds();
   const { data: directs = [] } = useDirectInvestments();
+  const { data: holdings = [] } = useUnderlyingPortfolio(activeQuarter.date);
   const cm = useConsolidatedMetrics();
   const qData = getQuarterData(activeQuarter.quarter);
 
