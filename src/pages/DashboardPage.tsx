@@ -183,7 +183,7 @@ export default function DashboardPage() {
                   <div key={s.name} className="flex items-center gap-2 text-xs">
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                     <span className="text-muted-foreground truncate flex-1">{s.name}</span>
-                    <span className="font-mono text-foreground">{formatPercent(s.value / (typeFmvTotal || 1))}</span>
+                    <span className="font-mono text-foreground">{formatPercent(s.value / (holdingsFmvTotal || 1))}</span>
                   </div>
                 ))}
               </div>
