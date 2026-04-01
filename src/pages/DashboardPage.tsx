@@ -181,7 +181,7 @@ export default function DashboardPage() {
           { title: "Target Industry(ies) - TO WHOM?", data: targetIndData, offset: 6 },
         ].map(({ title, data, offset }) => {
           const total = data.reduce((s, d) => s + d.value, 0);
-          // Apply 80/20 rule: show top categories up to 80% cumulative, rest as "Others"
+          // Apply 80/20 rule
           let cumulative = 0;
           const threshold = total * 0.8;
           const topItems: { name: string; value: number }[] = [];
@@ -207,17 +207,19 @@ export default function DashboardPage() {
             <div key={title} className="border border-border rounded-lg p-4 bg-card">
               <h3 className="text-sm font-medium mb-3">{title}</h3>
               {barData.length > 0 ? (
-                <div className="w-full space-y-1">
-                  {barData.map((item, i) => (
-                    <div key={item.name} className="flex items-center gap-2 text-[10px]">
-                      <span className="text-muted-foreground w-[70px] truncate shrink-0 text-right">{item.name}</span>
-                      <div className="flex-1 h-4 bg-muted/30 rounded overflow-hidden relative">
-                        <div
-                          className="h-full rounded"
-                          style={{ width: `${item.pct}%`, backgroundColor: item.fill }}
-                        />
+                <div className="w-full space-y-2">
+                  {barData.map((item) => (
+                    <div key={item.name}>
+                      <div className="text-[11px] text-muted-foreground mb-1 whitespace-normal break-words">{item.name}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-5 bg-muted/30 rounded overflow-hidden">
+                          <div
+                            className="h-full rounded"
+                            style={{ width: `${Math.max(item.pct, 2)}%`, backgroundColor: item.fill }}
+                          />
+                        </div>
+                        <span className="font-mono text-[11px] text-foreground w-[36px] text-right shrink-0">{item.pct.toFixed(0)}%</span>
                       </div>
-                      <span className="font-mono text-foreground w-[36px] text-right shrink-0">{item.pct.toFixed(0)}%</span>
                     </div>
                   ))}
                 </div>
