@@ -68,50 +68,36 @@ export default function DashboardPage() {
   const numFunds = activeFunds.length;
   const numDirects = qData?.activeDirects.length ?? 0;
 
-  // Build fund-level breakdown (for geography which stays fund-level)
-  const buildFundBreakdown = (field: string) => {
-    const map: Record<string, number> = {};
-    for (const f of activeFunds) {
-      const val = (f as any)[field] || "Other";
-      map[val] = (map[val] || 0) + Number(f.commitment_amount);
-    }
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  };
-
-  // Build holdings-level breakdown with multi-value splitting (weighted by TWH FMV)
-  const buildHoldingsBreakdown = (field: string) => {
+  // Build holdings-level breakdown by counting occurrences (split multi-value fields)
+  const buildHoldingsCount = (field: string) => {
     const map: Record<string, number> = {};
     for (const h of holdings) {
       const raw = (h as any)[field] as string;
       if (!raw) continue;
       const parts = raw.split(",").map((s: string) => s.trim()).filter(Boolean);
-      const share = Number(h.twh_fmv) / (parts.length || 1);
       for (const part of parts) {
-        map[part] = (map[part] || 0) + share;
+        map[part] = (map[part] || 0) + 1;
       }
     }
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   };
 
+  const typeData = useMemo(() => buildHoldingsCount("type"), [holdings]);
+  const themeData = useMemo(() => buildHoldingsCount("theme"), [holdings]);
+  const companyIndData = useMemo(() => buildHoldingsCount("company_industries"), [holdings]);
+  const targetIndData = useMemo(() => buildHoldingsCount("target_industries"), [holdings]);
+  const geoData = useMemo(() => buildHoldingsCount("region"), [holdings]);
+
   const fundCommitmentTotal = activeFunds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
-  const themeData = useMemo(() => buildHoldingsBreakdown("theme"), [holdings]);
-  const companyIndData = useMemo(() => buildHoldingsBreakdown("company_industries"), [holdings]);
-  const targetIndData = useMemo(() => buildHoldingsBreakdown("target_industries"), [holdings]);
-  const geoData = useMemo(() => buildFundBreakdown("geography"), [activeFunds]);
-
-  // Type breakdown from underlying holdings
-  const typeData = useMemo(() => buildHoldingsBreakdown("type"), [holdings]);
-
-  const holdingsFmvTotal = holdings.reduce((s: number, h: any) => s + Number(h.twh_fmv), 0);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
-  const makeTooltip = (total: number) => ({ active, payload }: any) => {
+  const makeCountTooltip = (total: number) => ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-card border border-border rounded px-3 py-2 text-xs">
           <p className="font-medium">{payload[0].name}</p>
-          <p className="font-mono text-muted-foreground">{formatCurrency(payload[0].value)}</p>
+          <p className="font-mono text-muted-foreground">{payload[0].value} occurrences</p>
           <p className="text-muted-foreground">{formatPercent(payload[0].value / (total || 1))}</p>
         </div>
       );
@@ -152,87 +138,43 @@ export default function DashboardPage() {
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Type chart - uses holdings FMV totals */}
-        <div className="border border-border rounded-lg p-4 bg-card">
-          <h3 className="text-sm font-medium mb-3">Type</h3>
-          {typeData.length > 0 ? (
-            <div className="flex flex-col items-center gap-3">
-              <ResponsiveContainer width={130} height={130}>
-                <PieChart>
-                  <Pie data={typeData} cx="50%" cy="50%" innerRadius={30} outerRadius={58} dataKey="value" stroke="hsl(var(--background))" strokeWidth={2}>
-                    {typeData.map((_, i) => (
-                      <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={({ active, payload }: any) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-card border border-border rounded px-3 py-2 text-xs">
-                          <p className="font-medium">{payload[0].name}</p>
-                          <p className="font-mono text-muted-foreground">{formatCurrency(payload[0].value)}</p>
-                          <p className="text-muted-foreground">{formatPercent(payload[0].value / (holdingsFmvTotal || 1))}</p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="w-full space-y-1.5">
-                {typeData.map((s, i) => (
-                  <div key={s.name} className="flex items-center gap-2 text-xs">
-                    <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                    <span className="text-muted-foreground truncate flex-1">{s.name}</span>
-                    <span className="font-mono text-foreground">{formatPercent(s.value / (holdingsFmvTotal || 1))}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : <p className="text-xs text-muted-foreground">No data</p>}
-        </div>
-        {/* Existing charts */}
         {[
-          { title: "Theme", data: themeData, offset: 0, total: holdingsFmvTotal },
-          { title: "Company Industry(ies) - WHAT IS?", data: companyIndData, offset: 3, total: holdingsFmvTotal },
-          { title: "Target Industry(ies) - TO WHOM?", data: targetIndData, offset: 6, total: holdingsFmvTotal },
-          { title: "Geography Allocation", data: geoData, offset: 9, total: fundCommitmentTotal },
-        ].map(({ title, data, offset, total }) => (
-          <div key={title} className="border border-border rounded-lg p-4 bg-card">
-            <h3 className="text-sm font-medium mb-3">{title}</h3>
-            {data.length > 0 ? (
-              <div className="flex flex-col items-center gap-3">
-                <ResponsiveContainer width={130} height={130}>
-                  <PieChart>
-                    <Pie
-                      data={data}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={30}
-                      outerRadius={58}
-                      dataKey="value"
-                      stroke="hsl(var(--background))"
-                      strokeWidth={2}
-                    >
-                      {data.map((_, i) => (
-                        <Cell key={i} fill={COLORS[(i + offset) % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={makeTooltip(total)} />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="w-full space-y-1.5">
-                  {data.map((s, i) => (
-                    <div key={s.name} className="flex items-center gap-2 text-xs">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[(i + offset) % COLORS.length] }} />
-                      <span className="text-muted-foreground truncate flex-1">{s.name}</span>
-                      <span className="font-mono text-foreground">{formatPercent(s.value / (total || 1))}</span>
-                    </div>
-                  ))}
+          { title: "Type", data: typeData, offset: 0 },
+          { title: "Theme", data: themeData, offset: 2 },
+          { title: "Company Industry(ies) - WHAT IS?", data: companyIndData, offset: 4 },
+          { title: "Target Industry(ies) - TO WHOM?", data: targetIndData, offset: 6 },
+          { title: "Geography Allocation", data: geoData, offset: 8 },
+        ].map(({ title, data, offset }) => {
+          const total = data.reduce((s, d) => s + d.value, 0);
+          return (
+            <div key={title} className="border border-border rounded-lg p-4 bg-card">
+              <h3 className="text-sm font-medium mb-3">{title}</h3>
+              {data.length > 0 ? (
+                <div className="flex flex-col items-center gap-3">
+                  <ResponsiveContainer width={130} height={130}>
+                    <PieChart>
+                      <Pie data={data} cx="50%" cy="50%" innerRadius={30} outerRadius={58} dataKey="value" stroke="hsl(var(--background))" strokeWidth={2}>
+                        {data.map((_, i) => (
+                          <Cell key={i} fill={COLORS[(i + offset) % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={makeCountTooltip(total)} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="w-full space-y-1.5">
+                    {data.map((s, i) => (
+                      <div key={s.name} className="flex items-center gap-2 text-xs">
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[(i + offset) % COLORS.length] }} />
+                        <span className="text-muted-foreground truncate flex-1">{s.name}</span>
+                        <span className="font-mono text-foreground">{formatPercent(s.value / (total || 1))}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ) : <p className="text-xs text-muted-foreground">No data</p>}
-          </div>
-        ))}
+              ) : <p className="text-xs text-muted-foreground">No data</p>}
+            </div>
+          );
+        })}
       </div>
 
       {/* Fund Investments */}
