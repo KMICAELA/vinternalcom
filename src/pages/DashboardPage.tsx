@@ -170,7 +170,7 @@ export default function DashboardPage() {
                         <div className="bg-card border border-border rounded px-3 py-2 text-xs">
                           <p className="font-medium">{payload[0].name}</p>
                           <p className="font-mono text-muted-foreground">{formatCurrency(payload[0].value)}</p>
-                          <p className="text-muted-foreground">{formatPercent(payload[0].value / (typeFmvTotal || 1))}</p>
+                          <p className="text-muted-foreground">{formatPercent(payload[0].value / (holdingsFmvTotal || 1))}</p>
                         </div>
                       );
                     }
