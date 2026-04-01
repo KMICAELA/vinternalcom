@@ -192,11 +192,11 @@ export default function DashboardPage() {
         </div>
         {/* Existing charts */}
         {[
-          { title: "Theme", data: themeData, offset: 0 },
-          { title: "Company Industry(ies)", data: companyIndData, offset: 3 },
-          { title: "Target Industry(ies)", data: targetIndData, offset: 6 },
-          { title: "Geography Allocation", data: geoData, offset: 9 },
-        ].map(({ title, data, offset }) => (
+          { title: "Theme", data: themeData, offset: 0, total: holdingsFmvTotal },
+          { title: "Company Industry(ies) - WHAT IS?", data: companyIndData, offset: 3, total: holdingsFmvTotal },
+          { title: "Target Industry(ies) - TO WHOM?", data: targetIndData, offset: 6, total: holdingsFmvTotal },
+          { title: "Geography Allocation", data: geoData, offset: 9, total: fundCommitmentTotal },
+        ].map(({ title, data, offset, total }) => (
           <div key={title} className="border border-border rounded-lg p-4 bg-card">
             <h3 className="text-sm font-medium mb-3">{title}</h3>
             {data.length > 0 ? (
@@ -217,7 +217,7 @@ export default function DashboardPage() {
                         <Cell key={i} fill={COLORS[(i + offset) % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip content={makeTooltip(total)} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="w-full space-y-1.5">
@@ -225,7 +225,7 @@ export default function DashboardPage() {
                     <div key={s.name} className="flex items-center gap-2 text-xs">
                       <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[(i + offset) % COLORS.length] }} />
                       <span className="text-muted-foreground truncate flex-1">{s.name}</span>
-                      <span className="font-mono text-foreground">{formatPercent(s.value / (fundCommitmentTotal || 1))}</span>
+                      <span className="font-mono text-foreground">{formatPercent(s.value / (total || 1))}</span>
                     </div>
                   ))}
                 </div>
