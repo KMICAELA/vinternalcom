@@ -12,6 +12,7 @@ import PortfolioPage from "./pages/PortfolioPage";
 import DirectsPage from "./pages/DirectsPage";
 import ConsolidatedPage from "./pages/ConsolidatedPage";
 import SettingsPage from "./pages/SettingsPage";
+import HighlightsPage from "./pages/HighlightsPage";
 import NotFound from "./pages/NotFound";
 import AddQuarterlyData from "./pages/AddQuarterlyData";
 
@@ -27,6 +28,7 @@ const App = () => (
           <Routes>
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />
+              <Route path="/highlights" element={<HighlightsPage />} />
               <Route path="/funds" element={<FundsPage />} />
               <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
