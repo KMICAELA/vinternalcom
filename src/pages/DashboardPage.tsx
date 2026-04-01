@@ -68,41 +68,27 @@ export default function DashboardPage() {
   const numFunds = activeFunds.length;
   const numDirects = qData?.activeDirects.length ?? 0;
 
-  // Build fund-level breakdown (for geography which stays fund-level)
-  const buildFundBreakdown = (field: string) => {
-    const map: Record<string, number> = {};
-    for (const f of activeFunds) {
-      const val = (f as any)[field] || "Other";
-      map[val] = (map[val] || 0) + Number(f.commitment_amount);
-    }
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  };
-
-  // Build holdings-level breakdown with multi-value splitting (weighted by TWH FMV)
-  const buildHoldingsBreakdown = (field: string) => {
+  // Build holdings-level breakdown by counting occurrences (split multi-value fields)
+  const buildHoldingsCount = (field: string) => {
     const map: Record<string, number> = {};
     for (const h of holdings) {
       const raw = (h as any)[field] as string;
       if (!raw) continue;
       const parts = raw.split(",").map((s: string) => s.trim()).filter(Boolean);
-      const share = Number(h.twh_fmv) / (parts.length || 1);
       for (const part of parts) {
-        map[part] = (map[part] || 0) + share;
+        map[part] = (map[part] || 0) + 1;
       }
     }
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   };
 
+  const typeData = useMemo(() => buildHoldingsCount("type"), [holdings]);
+  const themeData = useMemo(() => buildHoldingsCount("theme"), [holdings]);
+  const companyIndData = useMemo(() => buildHoldingsCount("company_industries"), [holdings]);
+  const targetIndData = useMemo(() => buildHoldingsCount("target_industries"), [holdings]);
+  const geoData = useMemo(() => buildHoldingsCount("region"), [holdings]);
+
   const fundCommitmentTotal = activeFunds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
-  const themeData = useMemo(() => buildHoldingsBreakdown("theme"), [holdings]);
-  const companyIndData = useMemo(() => buildHoldingsBreakdown("company_industries"), [holdings]);
-  const targetIndData = useMemo(() => buildHoldingsBreakdown("target_industries"), [holdings]);
-  const geoData = useMemo(() => buildFundBreakdown("geography"), [activeFunds]);
-
-  // Type breakdown from underlying holdings
-  const typeData = useMemo(() => buildHoldingsBreakdown("type"), [holdings]);
-
-  const holdingsFmvTotal = holdings.reduce((s: number, h: any) => s + Number(h.twh_fmv), 0);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
