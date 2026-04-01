@@ -106,13 +106,13 @@ export default function DashboardPage() {
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const makeTooltip = (total: number) => ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-card border border-border rounded px-3 py-2 text-xs">
           <p className="font-medium">{payload[0].name}</p>
           <p className="font-mono text-muted-foreground">{formatCurrency(payload[0].value)}</p>
-          <p className="text-muted-foreground">{formatPercent(payload[0].value / (fundCommitmentTotal || 1))}</p>
+          <p className="text-muted-foreground">{formatPercent(payload[0].value / (total || 1))}</p>
         </div>
       );
     }
