@@ -68,8 +68,8 @@ export default function DashboardPage() {
   const numFunds = activeFunds.length;
   const numDirects = qData?.activeDirects.length ?? 0;
 
-  // Build breakdown helper (only from active funds)
-  const buildBreakdown = (field: string) => {
+  // Build fund-level breakdown (for geography which stays fund-level)
+  const buildFundBreakdown = (field: string) => {
     const map: Record<string, number> = {};
     for (const f of activeFunds) {
       const val = (f as any)[field] || "Other";
@@ -78,32 +78,41 @@ export default function DashboardPage() {
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   };
 
-  const fundCommitmentTotal = activeFunds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
-  const themeData = useMemo(() => buildBreakdown("theme"), [activeFunds]);
-  const companyIndData = useMemo(() => buildBreakdown("company_industries"), [activeFunds]);
-  const targetIndData = useMemo(() => buildBreakdown("target_industries"), [activeFunds]);
-  const geoData = useMemo(() => buildBreakdown("geography"), [activeFunds]);
-
-  // Type breakdown from underlying holdings
-  const typeData = useMemo(() => {
+  // Build holdings-level breakdown with multi-value splitting (weighted by TWH FMV)
+  const buildHoldingsBreakdown = (field: string) => {
     const map: Record<string, number> = {};
     for (const h of holdings) {
-      const t = h.type || "Other";
-      map[t] = (map[t] || 0) + Number(h.twh_fmv);
+      const raw = (h as any)[field] as string;
+      if (!raw) continue;
+      const parts = raw.split(",").map((s: string) => s.trim()).filter(Boolean);
+      const share = Number(h.twh_fmv) / (parts.length || 1);
+      for (const part of parts) {
+        map[part] = (map[part] || 0) + share;
+      }
     }
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [holdings]);
-  const typeFmvTotal = typeData.reduce((s, d) => s + d.value, 0);
+  };
+
+  const fundCommitmentTotal = activeFunds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0);
+  const themeData = useMemo(() => buildHoldingsBreakdown("theme"), [holdings]);
+  const companyIndData = useMemo(() => buildHoldingsBreakdown("company_industries"), [holdings]);
+  const targetIndData = useMemo(() => buildHoldingsBreakdown("target_industries"), [holdings]);
+  const geoData = useMemo(() => buildFundBreakdown("geography"), [activeFunds]);
+
+  // Type breakdown from underlying holdings
+  const typeData = useMemo(() => buildHoldingsBreakdown("type"), [holdings]);
+
+  const holdingsFmvTotal = holdings.reduce((s: number, h: any) => s + Number(h.twh_fmv), 0);
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const makeTooltip = (total: number) => ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
         <div className="bg-card border border-border rounded px-3 py-2 text-xs">
           <p className="font-medium">{payload[0].name}</p>
           <p className="font-mono text-muted-foreground">{formatCurrency(payload[0].value)}</p>
-          <p className="text-muted-foreground">{formatPercent(payload[0].value / (fundCommitmentTotal || 1))}</p>
+          <p className="text-muted-foreground">{formatPercent(payload[0].value / (total || 1))}</p>
         </div>
       );
     }
@@ -161,7 +170,7 @@ export default function DashboardPage() {
                         <div className="bg-card border border-border rounded px-3 py-2 text-xs">
                           <p className="font-medium">{payload[0].name}</p>
                           <p className="font-mono text-muted-foreground">{formatCurrency(payload[0].value)}</p>
-                          <p className="text-muted-foreground">{formatPercent(payload[0].value / (typeFmvTotal || 1))}</p>
+                          <p className="text-muted-foreground">{formatPercent(payload[0].value / (holdingsFmvTotal || 1))}</p>
                         </div>
                       );
                     }
@@ -174,7 +183,7 @@ export default function DashboardPage() {
                   <div key={s.name} className="flex items-center gap-2 text-xs">
                     <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                     <span className="text-muted-foreground truncate flex-1">{s.name}</span>
-                    <span className="font-mono text-foreground">{formatPercent(s.value / (typeFmvTotal || 1))}</span>
+                    <span className="font-mono text-foreground">{formatPercent(s.value / (holdingsFmvTotal || 1))}</span>
                   </div>
                 ))}
               </div>
@@ -183,11 +192,11 @@ export default function DashboardPage() {
         </div>
         {/* Existing charts */}
         {[
-          { title: "Theme", data: themeData, offset: 0 },
-          { title: "Company Industry(ies)", data: companyIndData, offset: 3 },
-          { title: "Target Industry(ies)", data: targetIndData, offset: 6 },
-          { title: "Geography Allocation", data: geoData, offset: 9 },
-        ].map(({ title, data, offset }) => (
+          { title: "Theme", data: themeData, offset: 0, total: holdingsFmvTotal },
+          { title: "Company Industry(ies) - WHAT IS?", data: companyIndData, offset: 3, total: holdingsFmvTotal },
+          { title: "Target Industry(ies) - TO WHOM?", data: targetIndData, offset: 6, total: holdingsFmvTotal },
+          { title: "Geography Allocation", data: geoData, offset: 9, total: fundCommitmentTotal },
+        ].map(({ title, data, offset, total }) => (
           <div key={title} className="border border-border rounded-lg p-4 bg-card">
             <h3 className="text-sm font-medium mb-3">{title}</h3>
             {data.length > 0 ? (
@@ -208,7 +217,7 @@ export default function DashboardPage() {
                         <Cell key={i} fill={COLORS[(i + offset) % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip content={makeTooltip(total)} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="w-full space-y-1.5">
@@ -216,7 +225,7 @@ export default function DashboardPage() {
                     <div key={s.name} className="flex items-center gap-2 text-xs">
                       <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[(i + offset) % COLORS.length] }} />
                       <span className="text-muted-foreground truncate flex-1">{s.name}</span>
-                      <span className="font-mono text-foreground">{formatPercent(s.value / (fundCommitmentTotal || 1))}</span>
+                      <span className="font-mono text-foreground">{formatPercent(s.value / (total || 1))}</span>
                     </div>
                   ))}
                 </div>
