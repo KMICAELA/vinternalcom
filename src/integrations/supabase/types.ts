@@ -405,6 +405,7 @@ export type Database = {
       }
       underlying_portfolio_holdings: {
         Row: {
+          company_industries: string | null
           company_name: string
           created_at: string
           fmv: number
@@ -416,12 +417,15 @@ export type Database = {
           quarter_date: string
           region: string | null
           sector: string | null
+          target_industries: string | null
+          theme: string | null
           twh_cost: number
           twh_fmv: number
           twh_proceeds: number
           type: string | null
         }
         Insert: {
+          company_industries?: string | null
           company_name: string
           created_at?: string
           fmv?: number
@@ -433,12 +437,15 @@ export type Database = {
           quarter_date: string
           region?: string | null
           sector?: string | null
+          target_industries?: string | null
+          theme?: string | null
           twh_cost?: number
           twh_fmv?: number
           twh_proceeds?: number
           type?: string | null
         }
         Update: {
+          company_industries?: string | null
           company_name?: string
           created_at?: string
           fmv?: number
@@ -450,6 +457,8 @@ export type Database = {
           quarter_date?: string
           region?: string | null
           sector?: string | null
+          target_industries?: string | null
+          theme?: string | null
           twh_cost?: number
           twh_fmv?: number
           twh_proceeds?: number
