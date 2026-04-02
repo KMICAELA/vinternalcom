@@ -6,7 +6,6 @@ import { ChevronDown, ChevronRight, RefreshCw, ArrowUp, ArrowDown, Sparkles } fr
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
 
 // ─── Helpers ──────────────────────────────────────────────────────────
 
@@ -27,6 +26,108 @@ function moic(cost: number, fmv: number): number {
   return cost > 0 ? fmv / cost : 0;
 }
 
+function titleCase(s: string): string {
+  if (!s) return s;
+  // Detect all-caps entries longer than 5 chars as needing normalization
+  if (s === s.toUpperCase() && s.length > 5) {
+    return s.toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  }
+  return s;
+}
+
+const VEHICLE_KEYWORDS = ["SPV", "LP", "FUND", "PARTNERS", "CAPITAL", "VENTURES", "HOLDINGS"];
+function isVehicle(name: string): boolean {
+  const upper = name.toUpperCase();
+  return VEHICLE_KEYWORDS.filter(k => upper.includes(k)).length >= 2;
+}
+
+function countField(items: any[], field: string): Record<string, number> {
+  const counts: Record<string, number> = {};
+  items.forEach(h => {
+    const val = h[field];
+    if (val) {
+      val.split(",").map((s: string) => s.trim()).filter(Boolean).forEach((v: string) => {
+        counts[v] = (counts[v] || 0) + 1;
+      });
+    }
+  });
+  return counts;
+}
+
+// ─── Stat Tile ────────────────────────────────────────────────────────
+
+function StatTile({ label, value, delta, deltaLabel }: {
+  label: string; value: string | number; delta?: number; deltaLabel?: string;
+}) {
+  const positive = (delta ?? 0) >= 0;
+  return (
+    <div className="flex-1 min-w-0 rounded-xl bg-[hsl(228,15%,13%)] p-4 space-y-1">
+      <p className="text-[11px] text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+      <p className="text-xl font-semibold text-foreground font-mono">{value}</p>
+      {delta !== undefined && (
+        <div className={cn("flex items-center gap-1 text-[11px] font-medium",
+          positive ? "text-teal-400" : "text-[hsl(0,72%,65%)]"
+        )}>
+          {positive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
+          <span>{positive ? "+" : ""}{typeof delta === "number" && !deltaLabel ? delta : ""}{deltaLabel ?? ""}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Stacked Bar ──────────────────────────────────────────────────────
+
+function StackedBar({ label, data }: { label: string; data: { name: string; pct: number; color: string }[] }) {
+  if (data.length === 0) return null;
+  return (
+    <div className="flex-1 min-w-0 space-y-1.5">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      <div className="flex h-5 rounded-md overflow-hidden">
+        {data.map(d => (
+          <div key={d.name} className="relative group" style={{ width: `${d.pct}%`, backgroundColor: d.color, minWidth: d.pct > 0 ? 2 : 0 }}>
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <span className="text-[9px] font-semibold text-white drop-shadow-sm">{d.pct.toFixed(0)}%</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+        {data.map(d => (
+          <span key={d.name} className="text-[10px] text-muted-foreground flex items-center gap-1">
+            <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: d.color }} />
+            {d.name} {d.pct.toFixed(0)}%
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Tag Pills ────────────────────────────────────────────────────────
+
+const TYPE_COLORS: Record<string, string> = {
+  "Deep Tech": "bg-blue-500/15 text-blue-400",
+  "Tech Based": "bg-amber-500/15 text-amber-400",
+  "Tech Enabled": "bg-emerald-500/15 text-emerald-400",
+};
+
+function TypePill({ label }: { label: string }) {
+  return (
+    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", TYPE_COLORS[label] ?? "bg-muted text-muted-foreground")}>
+      {label}
+    </span>
+  );
+}
+
+function ThemePill({ label }: { label: string }) {
+  return (
+    <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted/60 text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
 // ─── Collapsible Section ──────────────────────────────────────────────
 
 function Section({
@@ -36,7 +137,7 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className={cn("rounded-lg border border-border bg-card overflow-hidden border-l-[3px]", accentColor)}>
+    <div className={cn("rounded-xl border border-border/50 bg-card overflow-hidden border-l-[3px]", accentColor)}>
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-muted/30 transition-colors"
@@ -47,26 +148,24 @@ function Section({
           <span className="text-[10px] font-mono bg-muted px-1.5 py-0.5 rounded text-muted-foreground">{count}</span>
         </div>
       </button>
-      {open && <div className="px-4 pb-4 space-y-2">{children}</div>}
+      {open && <div className="px-4 pb-4 space-y-1">{children}</div>}
     </div>
   );
 }
 
-// ─── Badge ────────────────────────────────────────────────────────────
+// ─── Bar colors for stacked bars ──────────────────────────────────────
 
-function Badge({ label, variant = "default" }: { label: string; variant?: "default" | "green" | "red" | "yellow" }) {
-  const colors = {
-    default: "bg-muted text-muted-foreground",
-    green: "bg-emerald-500/15 text-emerald-400",
-    red: "bg-red-500/15 text-red-400",
-    yellow: "bg-amber-500/15 text-amber-400",
-  };
-  return (
-    <span className={cn("text-[10px] font-medium px-1.5 py-0.5 rounded", colors[variant])}>
-      {label}
-    </span>
-  );
-}
+const TYPE_BAR_COLORS: Record<string, string> = {
+  "Deep Tech": "hsl(217, 70%, 55%)",
+  "Tech Based": "hsl(38, 75%, 55%)",
+  "Tech Enabled": "hsl(155, 60%, 45%)",
+};
+
+const THEME_BAR_COLORS: Record<string, string> = {
+  "2·IPI": "hsl(174, 55%, 45%)",
+  "1·FTSF": "hsl(262, 50%, 55%)",
+  "3·CD": "hsl(12, 65%, 55%)",
+};
 
 // ─── Page ─────────────────────────────────────────────────────────────
 
@@ -77,16 +176,15 @@ export default function HighlightsPage() {
   const priorQuarter = availableQuarters.find(q => q.date === priorDate);
   const priorLabel = priorQuarter?.quarter ?? priorDate;
 
-  // Data
   const { data: currentHoldings = [] } = useUnderlyingPortfolio(currentDate);
   const { data: priorHoldings = [] } = useUnderlyingPortfolio(priorDate);
   const { data: currentFS = [] } = useAllFundFS(currentDate);
   const { data: priorFS = [] } = useAllFundFS(priorDate);
   const { data: funds = [] } = useFunds();
 
-  // AI Summary
   const [summary, setSummary] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
+  const [showAllAdditions, setShowAllAdditions] = useState(false);
 
   // ── Computed diffs ──
 
@@ -96,31 +194,20 @@ export default function HighlightsPage() {
     return m;
   }, [priorHoldings]);
 
-  const currentMap = useMemo(() => {
-    const m = new Map<string, typeof currentHoldings[0]>();
-    currentHoldings.forEach(h => m.set(h.company_name, h));
-    return m;
-  }, [currentHoldings]);
-
-  // 1. New additions
   const newAdditions = useMemo(() =>
     currentHoldings.filter(h => !priorMap.has(h.company_name)),
     [currentHoldings, priorMap]
   );
 
-  // 2. Write-offs
   const writeOffs = useMemo(() =>
     currentHoldings.filter(h => {
       const prior = priorMap.get(h.company_name);
       if (!prior) return false;
-      const wasActive = prior.twh_fmv > 0;
-      const nowWrittenOff = h.twh_fmv === 0 && h.twh_cost > 0;
-      return wasActive && nowWrittenOff;
+      return prior.twh_fmv > 0 && h.twh_fmv === 0 && h.twh_cost > 0;
     }),
     [currentHoldings, priorMap]
   );
 
-  // 3. MOIC movers (delta > 0.1x)
   const moicMovers = useMemo(() => {
     const movers: { name: string; priorMoic: number; currentMoic: number; delta: number; type: string; theme: string }[] = [];
     currentHoldings.forEach(h => {
@@ -136,7 +223,6 @@ export default function HighlightsPage() {
     return movers;
   }, [currentHoldings, priorMap]);
 
-  // 4. Fund NAV changes
   const fundNavChanges = useMemo(() => {
     const fundMap = new Map(funds.map(f => [f.id, f.fund_name]));
     const priorFSMap = new Map(priorFS.map((fs: any) => [fs.fund_id, fs]));
@@ -148,16 +234,55 @@ export default function HighlightsPage() {
       const priorFMV = priorEd?.fund_totals?.fmv ?? 0;
       const cost = ed?.fund_totals?.investment_cost ?? 0;
       const deltaPct = priorFMV > 0 ? (currentFMV - priorFMV) / priorFMV : 0;
-      return {
-        fundName: fundMap.get(fs.fund_id) ?? "Unknown",
-        cost,
-        priorFMV,
-        currentFMV,
-        deltaPct,
-        significant: Math.abs(deltaPct) > 0.05,
-      };
+      return { fundName: fundMap.get(fs.fund_id) ?? "Unknown", cost, priorFMV, currentFMV, deltaPct, significant: Math.abs(deltaPct) > 0.05 };
     });
   }, [currentFS, priorFS, funds]);
+
+  // ── Layer 1 stats ──
+
+  const snapshotStats = useMemo(() => {
+    const currentCount = currentHoldings.length;
+    const priorCount = priorHoldings.length;
+    const netChange = currentCount - priorCount;
+    const netPct = priorCount > 0 ? ((netChange / priorCount) * 100) : 0;
+
+    // Theme breakdown
+    const themes = countField(currentHoldings, "theme");
+    const topTheme = Object.entries(themes).sort((a, b) => b[1] - a[1])[0];
+
+    // Geography shift
+    const curGeo = countField(currentHoldings, "region");
+    const priorGeo = countField(priorHoldings, "region");
+    const allGeos = new Set([...Object.keys(curGeo), ...Object.keys(priorGeo)]);
+    let biggestShiftGeo = "";
+    let biggestShiftDelta = 0;
+    allGeos.forEach(g => {
+      const curPct = (curGeo[g] || 0) / (currentCount || 1) * 100;
+      const prPct = (priorGeo[g] || 0) / (priorCount || 1) * 100;
+      const d = curPct - prPct;
+      if (Math.abs(d) > Math.abs(biggestShiftDelta)) { biggestShiftDelta = d; biggestShiftGeo = g; }
+    });
+
+    return { currentCount, priorCount, netChange, netPct, topTheme, biggestShiftGeo, biggestShiftDelta };
+  }, [currentHoldings, priorHoldings]);
+
+  // ── Layer 2 distribution bars ──
+
+  const additionBars = useMemo(() => {
+    const types = countField(newAdditions, "type");
+    const themes = countField(newAdditions, "theme");
+    const total = newAdditions.length || 1;
+
+    const typeData = Object.entries(types).map(([name, count]) => ({
+      name, pct: (count / total) * 100, color: TYPE_BAR_COLORS[name] ?? "hsl(0,0%,40%)",
+    })).sort((a, b) => b.pct - a.pct);
+
+    const themeData = Object.entries(themes).map(([name, count]) => ({
+      name, pct: (count / total) * 100, color: THEME_BAR_COLORS[name] ?? "hsl(0,0%,40%)",
+    })).sort((a, b) => b.pct - a.pct);
+
+    return { typeData, themeData };
+  }, [newAdditions]);
 
   // ── AI Summary ──
 
@@ -169,7 +294,6 @@ export default function HighlightsPage() {
         selectedQuarter, priorLabel, currentHoldings, priorHoldings,
         newAdditions, writeOffs, moicMovers, fundNavChanges,
       });
-
       const { data, error } = await supabase.functions.invoke("portfolio-digest", {
         body: { context },
       });
@@ -183,23 +307,54 @@ export default function HighlightsPage() {
     }
   }, [selectedQuarter, priorLabel, currentHoldings, priorHoldings, newAdditions, writeOffs, moicMovers, fundNavChanges]);
 
-  return (
-    <div className="p-6 max-w-[800px] mx-auto space-y-5">
-      {/* Header */}
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">{selectedQuarter.quarter} Highlights</h1>
-        <p className="text-xs text-muted-foreground">Quarterly portfolio digest</p>
-      </div>
+  // ── Render ──
 
-      {/* Comparison pill */}
-      <div className="flex items-center gap-2">
+  const PREVIEW_COUNT = 3;
+  const visibleAdditions = showAllAdditions ? newAdditions : newAdditions.slice(0, PREVIEW_COUNT);
+
+  return (
+    <div className="p-6 max-w-[860px] mx-auto space-y-5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">{selectedQuarter.quarter} Highlights</h1>
+          <p className="text-xs text-muted-foreground">Quarterly portfolio digest</p>
+        </div>
         <span className="text-[10px] font-mono bg-muted/60 text-muted-foreground px-2 py-1 rounded-full">
           Comparing {selectedQuarter.quarter} vs {priorLabel}
         </span>
       </div>
 
-      {/* AI Summary Card */}
-      <div className="rounded-lg border border-border bg-card/60 p-5 space-y-3" style={{ background: "hsl(var(--card) / 0.7)" }}>
+      {/* ─── Layer 1: Snapshot Bar ─── */}
+      <div className="grid grid-cols-4 gap-3">
+        <StatTile
+          label="New Additions"
+          value={newAdditions.length}
+          delta={newAdditions.length}
+          deltaLabel={`${newAdditions.length} new`}
+        />
+        <StatTile
+          label="Active Themes"
+          value={snapshotStats.topTheme ? snapshotStats.topTheme[0] : "—"}
+          delta={Object.keys(countField(currentHoldings, "theme")).length - Object.keys(countField(priorHoldings, "theme")).length}
+          deltaLabel={`${Object.keys(countField(currentHoldings, "theme")).length} themes`}
+        />
+        <StatTile
+          label="Top Geo Shift"
+          value={snapshotStats.biggestShiftGeo || "—"}
+          delta={snapshotStats.biggestShiftDelta}
+          deltaLabel={`${Math.abs(snapshotStats.biggestShiftDelta).toFixed(1)}%`}
+        />
+        <StatTile
+          label="Net Portfolio Δ"
+          value={`${snapshotStats.netChange >= 0 ? "+" : ""}${snapshotStats.netChange}`}
+          delta={snapshotStats.netPct}
+          deltaLabel={`${Math.abs(snapshotStats.netPct).toFixed(1)}% vs prior`}
+        />
+      </div>
+
+      {/* ─── AI Summary (between Layer 1 & 2) ─── */}
+      <div className="rounded-xl border border-border/40 p-5 space-y-3" style={{ background: "hsl(228, 15%, 14%)" }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
@@ -226,49 +381,83 @@ export default function HighlightsPage() {
         )}
 
         {!summaryLoading && summary && (
-          <div className="text-sm text-foreground/85 leading-relaxed prose prose-sm prose-invert max-w-none">
-            <ReactMarkdown>{summary}</ReactMarkdown>
-          </div>
+          <p className="text-sm text-foreground/85 leading-relaxed">{summary}</p>
         )}
 
         {!summaryLoading && !summary && (
           <p className="text-xs text-muted-foreground/60">
-            Click "Generate" to create an AI-powered summary of this quarter's changes.
+            Click "Generate" for an AI-powered digest of this quarter's changes.
           </p>
         )}
       </div>
 
-      {/* Section 1: New Additions */}
-      <Section title="New Additions" count={newAdditions.length} accentColor="border-l-emerald-500">
+      {/* ─── Layer 2: Type & Theme distribution of new additions ─── */}
+      {newAdditions.length > 0 && (
+        <div className="rounded-xl bg-[hsl(228,15%,13%)] p-4">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-3">New Additions Breakdown</p>
+          <div className="flex gap-6">
+            <StackedBar label="By Type" data={additionBars.typeData} />
+            <StackedBar label="By Theme" data={additionBars.themeData} />
+          </div>
+        </div>
+      )}
+
+      {/* ─── Layer 3: Collapsible company list (new additions) ─── */}
+      <Section title="New Additions" count={newAdditions.length} accentColor="border-l-emerald-500" defaultOpen={false}>
         {newAdditions.length === 0 ? (
           <p className="text-xs text-muted-foreground/60">No new companies this quarter</p>
         ) : (
-          newAdditions.map(h => (
-            <div key={h.id} className="flex items-center gap-2 py-1.5">
-              <span className="text-sm text-foreground">{h.company_name}</span>
-              {h.type && <Badge label={h.type} variant="green" />}
-              {h.theme && <Badge label={h.theme} />}
-            </div>
-          ))
+          <>
+            {visibleAdditions.map(h => {
+              const vehicle = isVehicle(h.company_name);
+              const displayName = vehicle ? "Vehicle" : titleCase(h.company_name);
+              return (
+                <div key={h.id} className="flex items-center gap-2 py-1.5">
+                  <span className={cn("text-sm", vehicle ? "text-muted-foreground italic" : "text-foreground")}>{displayName}</span>
+                  {h.type && <TypePill label={h.type} />}
+                  {h.theme && h.theme.split(",").map((t: string) => t.trim()).filter(Boolean).map((t: string) => (
+                    <ThemePill key={t} label={t} />
+                  ))}
+                  {vehicle && <span className="text-[9px] font-mono text-muted-foreground/50 bg-muted/40 px-1 py-0.5 rounded">Vehicle</span>}
+                </div>
+              );
+            })}
+            {!showAllAdditions && newAdditions.length > PREVIEW_COUNT && (
+              <button
+                onClick={() => setShowAllAdditions(true)}
+                className="text-xs text-primary hover:text-primary/80 transition-colors mt-1 font-medium"
+              >
+                Show all {newAdditions.length} →
+              </button>
+            )}
+            {showAllAdditions && newAdditions.length > PREVIEW_COUNT && (
+              <button
+                onClick={() => setShowAllAdditions(false)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors mt-1"
+              >
+                Collapse
+              </button>
+            )}
+          </>
         )}
       </Section>
 
-      {/* Section 2: Write-offs */}
+      {/* ─── Write-offs ─── */}
       <Section title="Write-offs" count={writeOffs.length} accentColor="border-l-red-500" defaultOpen={writeOffs.length > 0}>
         {writeOffs.length === 0 ? (
           <p className="text-xs text-muted-foreground/60">No write-offs this quarter</p>
         ) : (
           writeOffs.map(h => (
             <div key={h.id} className="flex items-center gap-2 py-1.5">
-              <span className="text-sm text-foreground">{h.company_name}</span>
-              {h.type && <Badge label={h.type} />}
-              <Badge label="Write-off" variant="red" />
+              <span className="text-sm text-foreground">{titleCase(h.company_name)}</span>
+              {h.type && <TypePill label={h.type} />}
+              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-500/15 text-red-400">Write-off</span>
             </div>
           ))
         )}
       </Section>
 
-      {/* Section 3: MOIC Movers */}
+      {/* ─── MOIC Movers ─── */}
       <Section title="MOIC Movers" count={moicMovers.length} accentColor="border-l-amber-500" defaultOpen={moicMovers.length > 0}>
         {moicMovers.length === 0 ? (
           <p className="text-xs text-muted-foreground/60">No significant MOIC changes this quarter</p>
@@ -277,15 +466,15 @@ export default function HighlightsPage() {
             {moicMovers.map(m => (
               <div key={m.name} className="flex items-center justify-between py-1.5">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-foreground">{m.name}</span>
-                  {m.type && <Badge label={m.type} />}
+                  <span className="text-sm text-foreground">{titleCase(m.name)}</span>
+                  {m.type && <TypePill label={m.type} />}
                 </div>
                 <div className="flex items-center gap-2 text-sm font-mono">
                   <span className="text-muted-foreground">{m.priorMoic.toFixed(2)}x</span>
                   <span className="text-muted-foreground/40">→</span>
                   <span className="text-foreground">{m.currentMoic.toFixed(2)}x</span>
                   <span className={cn("flex items-center gap-0.5 text-xs font-semibold",
-                    m.delta > 0 ? "text-emerald-400" : "text-red-400"
+                    m.delta > 0 ? "text-teal-400" : "text-[hsl(0,72%,65%)]"
                   )}>
                     {m.delta > 0 ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                     {m.delta > 0 ? "+" : ""}{m.delta.toFixed(2)}x
@@ -297,7 +486,7 @@ export default function HighlightsPage() {
         )}
       </Section>
 
-      {/* Section 4: Fund NAV Changes */}
+      {/* ─── Fund NAV Changes ─── */}
       <Section title="Fund NAV Changes" count={fundNavChanges.length} accentColor="border-l-yellow-500">
         {fundNavChanges.length === 0 ? (
           <p className="text-xs text-muted-foreground/60">No fund data available</p>
@@ -321,7 +510,7 @@ export default function HighlightsPage() {
                 <span className="text-right text-foreground font-mono text-xs">{fmt(f.currentFMV)}</span>
                 <span className={cn(
                   "text-right font-mono text-xs font-semibold",
-                  f.deltaPct > 0.05 ? "text-emerald-400" : f.deltaPct < -0.05 ? "text-red-400" : "text-muted-foreground"
+                  f.deltaPct > 0.05 ? "text-teal-400" : f.deltaPct < -0.05 ? "text-[hsl(0,72%,65%)]" : "text-muted-foreground"
                 )}>
                   {f.deltaPct > 0 ? "+" : ""}{(f.deltaPct * 100).toFixed(1)}%
                 </span>
@@ -347,34 +536,20 @@ function buildDigestContext(params: {
   fundNavChanges: any[];
 }) {
   const { selectedQuarter, priorLabel, currentHoldings, priorHoldings, newAdditions, writeOffs, moicMovers, fundNavChanges } = params;
-
   const lines: string[] = [];
   lines.push(`Reporting period: ${selectedQuarter.quarter} vs ${priorLabel}`);
   lines.push(`Active companies this quarter: ${currentHoldings.length} (prior: ${priorHoldings.length})`);
-
-  if (newAdditions.length > 0)
-    lines.push(`New additions (${newAdditions.length}): ${newAdditions.map(h => h.company_name).join(", ")}`);
-  else
-    lines.push("No new additions.");
-
-  if (writeOffs.length > 0)
-    lines.push(`Write-offs (${writeOffs.length}): ${writeOffs.map(h => h.company_name).join(", ")}`);
-  else
-    lines.push("No write-offs.");
-
+  if (newAdditions.length > 0) lines.push(`New additions (${newAdditions.length}): ${newAdditions.map(h => h.company_name).join(", ")}`);
+  else lines.push("No new additions.");
+  if (writeOffs.length > 0) lines.push(`Write-offs (${writeOffs.length}): ${writeOffs.map(h => h.company_name).join(", ")}`);
+  else lines.push("No write-offs.");
   if (moicMovers.length > 0) {
     lines.push("Significant MOIC changes:");
-    moicMovers.forEach(m => {
-      lines.push(`  ${m.name}: ${m.priorMoic.toFixed(2)}x → ${m.currentMoic.toFixed(2)}x (${m.delta > 0 ? "+" : ""}${m.delta.toFixed(2)}x)`);
-    });
+    moicMovers.forEach(m => lines.push(`  ${m.name}: ${m.priorMoic.toFixed(2)}x → ${m.currentMoic.toFixed(2)}x (${m.delta > 0 ? "+" : ""}${m.delta.toFixed(2)}x)`));
   }
-
   if (fundNavChanges.length > 0) {
     lines.push("Fund NAV changes:");
-    fundNavChanges.forEach(f => {
-      lines.push(`  ${f.fundName}: FMV ${fmt(f.priorFMV)} → ${fmt(f.currentFMV)} (${f.deltaPct > 0 ? "+" : ""}${(f.deltaPct * 100).toFixed(1)}%)`);
-    });
+    fundNavChanges.forEach(f => lines.push(`  ${f.fundName}: FMV ${fmt(f.priorFMV)} → ${fmt(f.currentFMV)} (${f.deltaPct > 0 ? "+" : ""}${(f.deltaPct * 100).toFixed(1)}%)`));
   }
-
   return lines.join("\n");
 }
