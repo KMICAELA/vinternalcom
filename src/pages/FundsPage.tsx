@@ -530,7 +530,9 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
 
   const getTab = (fundId: string): DocType => activeTab[fundId] || "pdf";
 
-  const handleAdd = (fundId: string) => {
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+
+  const handleAdd = async (fundId: string) => {
     const tab = getTab(fundId);
     const label = inputLabel[fundId]?.trim() || "";
 
@@ -550,11 +552,56 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
       entry.url = url;
     }
 
-    setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
-    setInputLabel(prev => ({ ...prev, [fundId]: "" }));
-    setInputFile(prev => ({ ...prev, [fundId]: null }));
-    setInputContent(prev => ({ ...prev, [fundId]: "" }));
-    setInputUrl(prev => ({ ...prev, [fundId]: "" }));
+    setSaving(prev => ({ ...prev, [fundId]: true }));
+
+    try {
+      let filePath: string | null = null;
+
+      // Upload file to storage if it's a file type
+      if (entry.file) {
+        const fileName = `${Date.now()}_${entry.file.name}`;
+        const storagePath = `${selectedQuarterDate}/${fundId}/${fileName}`;
+        const { error: uploadError } = await supabase.storage
+          .from("fund-reports")
+          .upload(storagePath, entry.file);
+        if (uploadError) { toast.error(`Upload failed: ${uploadError.message}`); return; }
+        filePath = storagePath;
+      }
+
+      // Build extracted_data payload
+      const extractedData: any = {
+        doc_type: tab,
+        label: label || null,
+        added_at: new Date().toISOString(),
+      };
+      if (entry.content) extractedData.email_content = entry.content;
+      if (entry.url) extractedData.link_url = entry.url;
+      if (filePath) extractedData.file_path = filePath;
+
+      // Insert into fund_financial_statements
+      const { error: dbError } = await supabase
+        .from("fund_financial_statements")
+        .insert({
+          fund_id: fundId,
+          quarter_date: selectedQuarterDate,
+          extracted_data: extractedData,
+          file_path: filePath,
+          confirmed: false,
+        });
+      if (dbError) { toast.error(`Save failed: ${dbError.message}`); return; }
+
+      // Add to local state for display
+      setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
+      setInputLabel(prev => ({ ...prev, [fundId]: "" }));
+      setInputFile(prev => ({ ...prev, [fundId]: null }));
+      setInputContent(prev => ({ ...prev, [fundId]: "" }));
+      setInputUrl(prev => ({ ...prev, [fundId]: "" }));
+      toast.success("Document saved");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save document");
+    } finally {
+      setSaving(prev => ({ ...prev, [fundId]: false }));
+    }
   };
 
   const removeDoc = (fundId: string, docId: string) => {
@@ -563,11 +610,6 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
 
   const totalDocs = Object.values(docs).reduce((s, arr) => s + arr.length, 0);
   const fundsWithDocs = Object.values(docs).filter(arr => arr.length > 0).length;
-
-  const handleSave = () => {
-    toast.success(`${totalDocs} document${totalDocs !== 1 ? "s" : ""} saved across ${fundsWithDocs} fund${fundsWithDocs !== 1 ? "s" : ""}`);
-    onClose();
-  };
 
   const docTypeIcon = (type: DocType) => {
     switch (type) {
