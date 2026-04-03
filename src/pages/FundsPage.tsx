@@ -627,6 +627,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
   };
 
   const handleClose = async () => {
+    if (anyUploading || savingAll) return;
     await cleanupPendingUploads();
     resetSession(true);
     onClose();
@@ -788,7 +789,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
   };
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) void handleClose(); }}>
+    <Dialog open onOpenChange={(open) => { if (!open && !anyUploading && !savingAll) void handleClose(); }}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
@@ -796,7 +797,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
           </DialogTitle>
           <div className="flex items-center gap-3 pt-2">
             <span className="text-sm text-muted-foreground">Quarter:</span>
-            <Select value={selectedQuarterDate} onValueChange={(d) => void handleQuarterChange(d)}>
+            <Select value={selectedQuarterDate} onValueChange={(d) => void handleQuarterChange(d)} disabled={anyUploading || savingAll}>
               <SelectTrigger className="h-8 w-40 text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -964,7 +965,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
             {totalDocs > 0 ? `${totalDocs} document${totalDocs !== 1 ? "s" : ""} added across ${fundsWithDocs} fund${fundsWithDocs !== 1 ? "s" : ""}` : "No documents added yet"}
           </span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => void handleClose()} disabled={savingAll}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={() => void handleClose()} disabled={savingAll || anyUploading}>Cancel</Button>
             <Button
               size="sm"
               className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
