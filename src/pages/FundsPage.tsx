@@ -501,18 +501,78 @@ interface DocEntry {
   id: string;
   type: DocType;
   label: string;
-  file?: File;
   content?: string;
   url?: string;
   fileName?: string;
+  storagePath?: string;
+  addedAt: string;
 }
+
+interface StoredDoc {
+  id: string;
+  type: DocType;
+  label: string;
+  file_name: string | null;
+  file_path: string | null;
+  email_content: string | null;
+  link_url: string | null;
+  added_at: string;
+}
+
+const serializeDocEntry = (entry: DocEntry): StoredDoc => ({
+  id: entry.id,
+  type: entry.type,
+  label: entry.label || entry.fileName || entry.type,
+  file_name: entry.fileName || null,
+  file_path: entry.storagePath || null,
+  email_content: entry.content || null,
+  link_url: entry.url || null,
+  added_at: entry.addedAt,
+});
+
+const normalizeStoredDocs = (rawData: any, rowFilePath: string | null): StoredDoc[] => {
+  const documents = Array.isArray(rawData?.documents)
+    ? rawData.documents.filter((doc: unknown): doc is StoredDoc => !!doc && typeof doc === "object")
+    : [];
+
+  if (documents.length > 0) return documents;
+
+  const hasLegacyDoc =
+    rawData?.doc_type ||
+    rawData?.label ||
+    rawData?.email_content ||
+    rawData?.link_url ||
+    rawData?.file_path ||
+    rowFilePath;
+
+  if (!hasLegacyDoc) return [];
+
+  let legacyType: DocType = "pdf";
+  if (rawData?.doc_type === "pdf" || rawData?.doc_type === "word" || rawData?.doc_type === "email" || rawData?.doc_type === "link") {
+    legacyType = rawData.doc_type;
+  } else if (rawData?.link_url) {
+    legacyType = "link";
+  } else if (rawData?.email_content) {
+    legacyType = "email";
+  }
+
+  return [{
+    id: `legacy-${crypto.randomUUID()}`,
+    type: legacyType,
+    label: rawData?.label || rawData?.file_name || "Document",
+    file_name: rawData?.file_name || null,
+    file_path: rawData?.file_path || rowFilePath || null,
+    email_content: rawData?.email_content || null,
+    link_url: rawData?.link_url || null,
+    added_at: rawData?.added_at || new Date().toISOString(),
+  }];
+};
 
 function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClose }: {
   funds: any[]; availableQuarters: { label: string; date: string }[]; defaultQuarterDate: string; onClose: () => void;
 }) {
   const qc = useQueryClient();
   const [selectedQuarterDate, setSelectedQuarterDate] = useState(defaultQuarterDate);
-  const selectedQuarter = availableQuarters.find(q => q.date === selectedQuarterDate) || availableQuarters[0];
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
   const [docs, setDocs] = useState<Record<string, DocEntry[]>>({});
 
@@ -524,57 +584,91 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
   const [inputUrl, setInputUrl] = useState<Record<string, string>>({});
   const [uploading, setUploading] = useState<Record<string, boolean>>({});
   const [uploadSuccess, setUploadSuccess] = useState<Record<string, boolean>>({});
+  const [savingAll, setSavingAll] = useState(false);
 
-  const clearInput = (fundId: string) => {
-    setActiveInput(prev => ({ ...prev, [fundId]: null }));
+  const resetSession = (collapseFunds = false) => {
+    setDocs({});
+    setActiveInput({});
+    setInputLabel({});
+    setInputFile({});
+    setInputContent({});
+    setInputUrl({});
+    setUploading({});
+    setUploadSuccess({});
+    if (collapseFunds) setExpandedFund(null);
+  };
+
+  const pendingUploadPaths = useMemo(
+    () => Object.values(docs).flatMap((entries) => entries.map((entry) => entry.storagePath).filter((path): path is string => !!path)),
+    [docs],
+  );
+
+  const anyUploading = Object.values(uploading).some(Boolean);
+
+  const clearInput = (fundId: string, closeInput = true) => {
+    if (closeInput) {
+      setActiveInput(prev => ({ ...prev, [fundId]: null }));
+    }
     setInputLabel(prev => ({ ...prev, [fundId]: "" }));
     setInputFile(prev => ({ ...prev, [fundId]: null }));
     setInputContent(prev => ({ ...prev, [fundId]: "" }));
     setInputUrl(prev => ({ ...prev, [fundId]: "" }));
   };
 
-  const handleAttachDocument = async (fundId: string) => {
-    const file = inputFile[fundId];
-    if (!file) { toast.error("Please select a file"); return; }
+  const cleanupPendingUploads = async (paths = pendingUploadPaths) => {
+    if (!paths.length) return;
+    await supabase.storage.from("fund-reports").remove(paths);
+  };
+
+  const handleQuarterChange = async (nextQuarterDate: string) => {
+    await cleanupPendingUploads();
+    resetSession(true);
+    setSelectedQuarterDate(nextQuarterDate);
+  };
+
+  const handleClose = async () => {
+    await cleanupPendingUploads();
+    resetSession(true);
+    onClose();
+  };
+
+  const handleAttachDocument = async (fundId: string, file: File | null) => {
+    if (!file) return;
     const label = inputLabel[fundId]?.trim() || file.name;
 
+    setInputFile(prev => ({ ...prev, [fundId]: file }));
     setUploading(prev => ({ ...prev, [fundId]: true }));
     setUploadSuccess(prev => ({ ...prev, [fundId]: false }));
 
     try {
-      const fileName = `${Date.now()}_${file.name}`;
+      const fileName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
       const storagePath = `${selectedQuarterDate}/${fundId}/${fileName}`;
       const { error: uploadError } = await supabase.storage
         .from("fund-reports")
         .upload(storagePath, file);
-      if (uploadError) { toast.error(`Upload failed: ${uploadError.message}`); return; }
+      if (uploadError) throw uploadError;
 
       const docType: DocType = file.name.toLowerCase().endsWith(".pdf") ? "pdf" : "word";
-      const entry: DocEntry = { id: crypto.randomUUID(), type: docType, label, file, fileName: file.name };
-
-      // Persist to DB
-      const extractedData: any = { doc_type: docType, label, file_path: storagePath, added_at: new Date().toISOString() };
-      const { error: dbError } = await supabase
-        .from("fund_financial_statements")
-        .upsert({
-          fund_id: fundId,
-          quarter_date: selectedQuarterDate,
-          extracted_data: extractedData,
-          file_path: storagePath,
-          confirmed: false,
-        }, { onConflict: "fund_id,quarter_date" });
-      if (dbError) { toast.error(`Save failed: ${dbError.message}`); return; }
+      const entry: DocEntry = {
+        id: crypto.randomUUID(),
+        type: docType,
+        label,
+        fileName: file.name,
+        storagePath,
+        addedAt: new Date().toISOString(),
+      };
 
       setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
       setUploadSuccess(prev => ({ ...prev, [fundId]: true }));
       setTimeout(() => {
-        clearInput(fundId);
         setUploadSuccess(prev => ({ ...prev, [fundId]: false }));
       }, 1200);
+      clearInput(fundId, false);
     } catch (err: any) {
       toast.error(err.message || "Upload failed");
     } finally {
       setUploading(prev => ({ ...prev, [fundId]: false }));
+      setInputFile(prev => ({ ...prev, [fundId]: null }));
     }
   };
 
@@ -583,7 +677,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
     if (!content) { toast.error("Please paste email content"); return; }
     const label = inputLabel[fundId]?.trim() || "Email";
 
-    const entry: DocEntry = { id: crypto.randomUUID(), type: "email", label, content };
+    const entry: DocEntry = { id: crypto.randomUUID(), type: "email", label, content, addedAt: new Date().toISOString() };
     setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
     clearInput(fundId);
     toast.success("Email added");
@@ -594,47 +688,91 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
     if (!url) { toast.error("Please enter a URL"); return; }
     const label = inputLabel[fundId]?.trim() || url;
 
-    const entry: DocEntry = { id: crypto.randomUUID(), type: "link", label, url };
+    const entry: DocEntry = { id: crypto.randomUUID(), type: "link", label, url, addedAt: new Date().toISOString() };
     setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
     clearInput(fundId);
     toast.success("Link added");
   };
 
-  const removeDoc = (fundId: string, docId: string) => {
+  const removeDoc = async (fundId: string, docId: string) => {
+    const entry = (docs[fundId] || []).find((doc) => doc.id === docId);
     setDocs(prev => ({ ...prev, [fundId]: (prev[fundId] || []).filter(d => d.id !== docId) }));
+
+    if (entry?.storagePath) {
+      await supabase.storage.from("fund-reports").remove([entry.storagePath]);
+    }
   };
 
   const handleSaveAll = async () => {
-    // Persist email & link entries to DB (files already uploaded on add)
-    let errors = 0;
-    for (const [fundId, entries] of Object.entries(docs)) {
-      for (const entry of entries) {
-        if (entry.type === "email" || entry.type === "link") {
-          const extractedData: any = {
-            doc_type: entry.type,
-            label: entry.label,
-            added_at: new Date().toISOString(),
-          };
-          if (entry.content) extractedData.email_content = entry.content;
-          if (entry.url) extractedData.link_url = entry.url;
+    const docsByFund = Object.entries(docs).filter(([, entries]) => entries.length > 0);
+    if (!docsByFund.length || anyUploading) return;
 
-          const { error } = await supabase
-            .from("fund_financial_statements")
-            .upsert({
-              fund_id: fundId,
-              quarter_date: selectedQuarterDate,
-              extracted_data: extractedData,
-              confirmed: false,
-            }, { onConflict: "fund_id,quarter_date" });
-          if (error) errors++;
-        }
-      }
+    setSavingAll(true);
+
+    try {
+      const fundIds = docsByFund.map(([fundId]) => fundId);
+      const { data: existingRows, error: existingError } = await supabase
+        .from("fund_financial_statements")
+        .select("fund_id, extracted_data, confirmed, file_path")
+        .eq("quarter_date", selectedQuarterDate)
+        .in("fund_id", fundIds);
+
+      if (existingError) throw existingError;
+
+      const existingMap = new Map((existingRows || []).map((row) => [row.fund_id, row]));
+      const rows = docsByFund.map(([fundId, entries]) => {
+        const existing = existingMap.get(fundId);
+        const existingData = (existing?.extracted_data as any) || {};
+        const {
+          documents: _documents,
+          doc_type: _docType,
+          label: _label,
+          file_path: _legacyFilePath,
+          email_content: _legacyEmailContent,
+          link_url: _legacyLinkUrl,
+          added_at: _legacyAddedAt,
+          ...restExistingData
+        } = existingData;
+
+        const mergedDocuments = [
+          ...normalizeStoredDocs(existingData, existing?.file_path || null),
+          ...entries.map(serializeDocEntry),
+        ];
+
+        const latestFilePath =
+          [...entries].reverse().find((entry) => entry.storagePath)?.storagePath ||
+          existing?.file_path ||
+          null;
+
+        return {
+          fund_id: fundId,
+          quarter_date: selectedQuarterDate,
+          extracted_data: {
+            ...restExistingData,
+            documents: mergedDocuments,
+          },
+          file_path: latestFilePath,
+          confirmed: existing?.confirmed ?? false,
+        };
+      });
+
+      const { error: upsertError } = await supabase
+        .from("fund_financial_statements")
+        .upsert(rows, { onConflict: "fund_id,quarter_date" });
+
+      if (upsertError) throw upsertError;
+
+      toast.success("All documents saved");
+      resetSession(true);
+      qc.invalidateQueries({ queryKey: ["all-fund-fs-status"] });
+      qc.invalidateQueries({ queryKey: ["latest-fs-per-fund"] });
+      qc.invalidateQueries({ queryKey: ["fund-fs"] });
+      onClose();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save documents");
+    } finally {
+      setSavingAll(false);
     }
-    if (errors > 0) { toast.error(`${errors} document(s) failed to save`); }
-    else { toast.success("All documents saved"); }
-    qc.invalidateQueries({ queryKey: ["all-fund-fs-status"] });
-    qc.invalidateQueries({ queryKey: ["latest-fs-per-fund"] });
-    onClose();
   };
 
   const totalDocs = Object.values(docs).reduce((s, arr) => s + arr.length, 0);
@@ -650,7 +788,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
   };
 
   return (
-    <Dialog open onOpenChange={() => onClose()}>
+    <Dialog open onOpenChange={(open) => { if (!open) void handleClose(); }}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
@@ -658,7 +796,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
           </DialogTitle>
           <div className="flex items-center gap-3 pt-2">
             <span className="text-sm text-muted-foreground">Quarter:</span>
-            <Select value={selectedQuarterDate} onValueChange={(d) => { setSelectedQuarterDate(d); setDocs({}); setExpandedFund(null); }}>
+            <Select value={selectedQuarterDate} onValueChange={(d) => void handleQuarterChange(d)}>
               <SelectTrigger className="h-8 w-40 text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -728,38 +866,33 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
                     {currentInput === "pdf" && (
                       <div className="rounded-md border border-border bg-surface-1 p-3 space-y-2">
                         <Input
+                          className="h-8 text-xs"
+                          placeholder="Name this document (optional)"
+                          value={inputLabel[fund.id] || ""}
+                          onChange={e => setInputLabel(prev => ({ ...prev, [fund.id]: e.target.value }))}
+                        />
+                        <Input
                           type="file"
                           accept=".pdf,.doc,.docx"
                           className="h-8 text-xs"
-                          onChange={e => setInputFile(prev => ({ ...prev, [fund.id]: e.target.files?.[0] || null }))}
+                          disabled={uploading[fund.id]}
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            void handleAttachDocument(fund.id, file);
+                            e.currentTarget.value = "";
+                          }}
                         />
-                        {inputFile[fund.id] && (
-                          <>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <FileText className="h-3.5 w-3.5" />
-                              <span className="truncate">{inputFile[fund.id]!.name}</span>
-                            </div>
-                            <Input
-                              className="h-8 text-xs"
-                              placeholder="Name this document (optional)"
-                              value={inputLabel[fund.id] || ""}
-                              onChange={e => setInputLabel(prev => ({ ...prev, [fund.id]: e.target.value }))}
-                            />
-                            <Button
-                              size="sm"
-                              className="h-7 text-xs gap-1.5 bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
-                              onClick={() => handleAttachDocument(fund.id)}
-                              disabled={uploading[fund.id]}
-                            >
-                              {uploading[fund.id] ? (
-                                <><Loader2 className="h-3 w-3 animate-spin" /> Uploading...</>
-                              ) : uploadSuccess[fund.id] ? (
-                                <><Check className="h-3 w-3" /> Uploaded</>
-                              ) : (
-                                <><Upload className="h-3 w-3" /> Upload</>
-                              )}
-                            </Button>
-                          </>
+                        {uploading[fund.id] && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <span className="truncate">Uploading {inputFile[fund.id]?.name || "document"}...</span>
+                          </div>
+                        )}
+                        {!uploading[fund.id] && uploadSuccess[fund.id] && (
+                          <div className="flex items-center gap-2 text-xs text-[hsl(var(--gold))]">
+                            <Check className="h-3.5 w-3.5" />
+                            <span>Uploaded and added to this session</span>
+                          </div>
                         )}
                       </div>
                     )}
@@ -812,7 +945,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
                           <div key={doc.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/50 text-xs">
                             {docTypeIcon(doc.type)}
                             <span className="flex-1 truncate text-foreground">{doc.label || doc.fileName || doc.type}</span>
-                            <button onClick={() => removeDoc(fund.id, doc.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                            <button onClick={() => void removeDoc(fund.id, doc.id)} className="text-muted-foreground hover:text-destructive transition-colors">
                               <X className="h-3.5 w-3.5" />
                             </button>
                           </div>
@@ -831,14 +964,14 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
             {totalDocs > 0 ? `${totalDocs} document${totalDocs !== 1 ? "s" : ""} added across ${fundsWithDocs} fund${fundsWithDocs !== 1 ? "s" : ""}` : "No documents added yet"}
           </span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button variant="outline" size="sm" onClick={() => void handleClose()} disabled={savingAll}>Cancel</Button>
             <Button
               size="sm"
               className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
               onClick={handleSaveAll}
-              disabled={totalDocs === 0}
+              disabled={totalDocs === 0 || anyUploading || savingAll}
             >
-              Save All
+              {savingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</> : "Save All"}
             </Button>
           </div>
         </div>
