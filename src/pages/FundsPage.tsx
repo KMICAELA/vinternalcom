@@ -494,84 +494,101 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
   );
 }
 
-// ─── Add Reports Dialog — upload FS for all funds for next quarter ──
+// ─── Add Reports Dialog — multi-type document uploader ──
+
+type DocType = "pdf" | "word" | "email" | "link";
+interface DocEntry {
+  id: string;
+  type: DocType;
+  label: string;
+  file?: File;
+  content?: string;
+  url?: string;
+}
+
+const DOC_TABS: { type: DocType; label: string; icon: React.ReactNode }[] = [
+  { type: "pdf", label: "PDF", icon: <FileText className="h-3.5 w-3.5" /> },
+  { type: "word", label: "Word Doc", icon: <File className="h-3.5 w-3.5" /> },
+  { type: "email", label: "Email", icon: <Mail className="h-3.5 w-3.5" /> },
+  { type: "link", label: "Link", icon: <Link2 className="h-3.5 w-3.5" /> },
+];
 
 function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClose }: {
   funds: any[]; availableQuarters: { label: string; date: string }[]; defaultQuarterDate: string; onClose: () => void;
 }) {
-  const qc = useQueryClient();
   const [selectedQuarterDate, setSelectedQuarterDate] = useState(defaultQuarterDate);
   const selectedQuarter = availableQuarters.find(q => q.date === selectedQuarterDate) || availableQuarters[0];
-  const [uploadingFundId, setUploadingFundId] = useState<string | null>(null);
-  const [files, setFiles] = useState<Record<string, File>>({});
-  const [extractedMap, setExtractedMap] = useState<Record<string, any>>({});
-  const [confirmedSet, setConfirmedSet] = useState<Set<string>>(new Set());
-  const [extracting, setExtracting] = useState<string | null>(null);
+  const [expandedFund, setExpandedFund] = useState<string | null>(null);
+  const [docs, setDocs] = useState<Record<string, DocEntry[]>>({});
 
-  // Reset state when quarter changes
-  const handleQuarterChange = (date: string) => {
-    setSelectedQuarterDate(date);
-    setFiles({});
-    setExtractedMap({});
-    setConfirmedSet(new Set());
-  };
+  // Per-fund input state
+  const [activeTab, setActiveTab] = useState<Record<string, DocType>>({});
+  const [inputLabel, setInputLabel] = useState<Record<string, string>>({});
+  const [inputFile, setInputFile] = useState<Record<string, File | null>>({});
+  const [inputContent, setInputContent] = useState<Record<string, string>>({});
+  const [inputUrl, setInputUrl] = useState<Record<string, string>>({});
 
-  const handleFileSelect = (fundId: string, file: File) => {
-    setFiles(prev => ({ ...prev, [fundId]: file }));
-  };
+  const getTab = (fundId: string): DocType => activeTab[fundId] || "pdf";
 
-  const handleExtract = async (fundId: string) => {
-    const file = files[fundId];
-    if (!file) return;
-    setExtracting(fundId);
-    try {
-      const filePath = `${selectedQuarterDate}/${fundId}/${file.name}`;
-      const { error: uploadError } = await supabase.storage.from("fund-reports").upload(filePath, file, { upsert: true });
-      if (uploadError) throw uploadError;
+  const handleAdd = (fundId: string) => {
+    const tab = getTab(fundId);
+    const label = inputLabel[fundId]?.trim();
+    if (!label) { toast.error("Label is required"); return; }
 
-      const arrayBuffer = await file.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    let entry: DocEntry = { id: crypto.randomUUID(), type: tab, label };
 
-      const { data, error } = await supabase.functions.invoke("extract-fund-fs", {
-        body: { pdf_base64: base64, file_name: file.name },
-      });
-      if (error) throw error;
-      setExtractedMap(prev => ({ ...prev, [fundId]: data }));
-    } catch (err: any) {
-      toast.error(err.message || "Extraction failed");
-    } finally {
-      setExtracting(null);
+    if (tab === "pdf" || tab === "word") {
+      const file = inputFile[fundId];
+      if (!file) { toast.error("Please select a file"); return; }
+      entry.file = file;
+    } else if (tab === "email") {
+      const content = inputContent[fundId]?.trim();
+      if (!content) { toast.error("Please paste email content"); return; }
+      entry.content = content;
+    } else if (tab === "link") {
+      const url = inputUrl[fundId]?.trim();
+      if (!url) { toast.error("Please enter a URL"); return; }
+      entry.url = url;
     }
+
+    setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
+    setInputLabel(prev => ({ ...prev, [fundId]: "" }));
+    setInputFile(prev => ({ ...prev, [fundId]: null }));
+    setInputContent(prev => ({ ...prev, [fundId]: "" }));
+    setInputUrl(prev => ({ ...prev, [fundId]: "" }));
   };
 
-  const handleConfirm = async (fundId: string) => {
-    const extractedData = extractedMap[fundId];
-    if (!extractedData) return;
-    const { error } = await supabase.from("fund_financial_statements").upsert({
-      fund_id: fundId,
-      quarter_date: selectedQuarterDate,
-      extracted_data: extractedData,
-      confirmed: true,
-      file_path: files[fundId]?.name || null,
-    } as any, { onConflict: "fund_id,quarter_date" });
-    if (error) { toast.error(error.message); return; }
-    setConfirmedSet(prev => new Set(prev).add(fundId));
-    toast.success("Report confirmed");
-    qc.invalidateQueries({ queryKey: ["fund-fs"] });
-    qc.invalidateQueries({ queryKey: ["all-fund-fs"] });
-    qc.invalidateQueries({ queryKey: ["all-fund-fs-status"] });
+  const removeDoc = (fundId: string, docId: string) => {
+    setDocs(prev => ({ ...prev, [fundId]: (prev[fundId] || []).filter(d => d.id !== docId) }));
+  };
+
+  const totalDocs = Object.values(docs).reduce((s, arr) => s + arr.length, 0);
+  const fundsWithDocs = Object.values(docs).filter(arr => arr.length > 0).length;
+
+  const handleSave = () => {
+    toast.success(`${totalDocs} document${totalDocs !== 1 ? "s" : ""} saved across ${fundsWithDocs} fund${fundsWithDocs !== 1 ? "s" : ""}`);
+    onClose();
+  };
+
+  const docTypeIcon = (type: DocType) => {
+    switch (type) {
+      case "pdf": return <FileText className="h-3.5 w-3.5 text-red-400" />;
+      case "word": return <File className="h-3.5 w-3.5 text-blue-400" />;
+      case "email": return <Mail className="h-3.5 w-3.5 text-amber-400" />;
+      case "link": return <Link2 className="h-3.5 w-3.5 text-emerald-400" />;
+    }
   };
 
   return (
     <Dialog open onOpenChange={() => onClose()}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
           <DialogTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" /> Add Reports
           </DialogTitle>
           <div className="flex items-center gap-3 pt-2">
             <span className="text-sm text-muted-foreground">Quarter:</span>
-            <Select value={selectedQuarterDate} onValueChange={handleQuarterChange}>
+            <Select value={selectedQuarterDate} onValueChange={(d) => { setSelectedQuarterDate(d); setDocs({}); setExpandedFund(null); }}>
               <SelectTrigger className="h-8 w-40 text-sm">
                 <SelectValue />
               </SelectTrigger>
@@ -584,45 +601,108 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
           </div>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
           {funds.map((fund: any) => {
-            const hasFile = !!files[fund.id];
-            const hasExtracted = !!extractedMap[fund.id];
-            const isConfirmed = confirmedSet.has(fund.id);
-            const isExtracting = extracting === fund.id;
+            const isExpanded = expandedFund === fund.id;
+            const fundDocs = docs[fund.id] || [];
+            const tab = getTab(fund.id);
 
             return (
-              <div key={fund.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{fund.fund_name}</p>
-                  <p className="text-xs text-muted-foreground">{fund.strategy || ""} · {fund.vintage_year || ""}</p>
-                </div>
-
-                {isConfirmed ? (
-                  <div className="flex items-center gap-1.5 text-[hsl(var(--positive))] text-xs font-medium">
-                    <Check className="h-4 w-4" /> Uploaded
+              <div key={fund.id} className="rounded-lg border border-border bg-card overflow-hidden">
+                {/* Fund header — clickable accordion */}
+                <button
+                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-surface-1 transition-colors"
+                  onClick={() => setExpandedFund(isExpanded ? null : fund.id)}
+                >
+                  {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{fund.fund_name}</p>
+                    <p className="text-xs text-muted-foreground">{fund.strategy || ""}{fund.vintage_year ? ` · ${fund.vintage_year}` : ""}</p>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="file"
-                      accept=".pdf"
-                      className="h-8 text-xs w-48"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f) handleFileSelect(fund.id, f);
-                      }}
-                    />
-                    {hasFile && !hasExtracted && (
-                      <Button size="sm" variant="outline" onClick={() => handleExtract(fund.id)} disabled={isExtracting} className="h-8 gap-1 text-xs">
-                        {isExtracting ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
-                        Extract
+                  {fundDocs.length > 0 && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[hsl(var(--gold))]/15 text-[hsl(var(--gold))] font-medium shrink-0">
+                      {fundDocs.length} doc{fundDocs.length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </button>
+
+                {/* Expanded content */}
+                {isExpanded && (
+                  <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
+                    {/* Document type tabs */}
+                    <div className="flex gap-1">
+                      {DOC_TABS.map(t => (
+                        <button
+                          key={t.type}
+                          onClick={() => setActiveTab(prev => ({ ...prev, [fund.id]: t.type }))}
+                          className={cn(
+                            "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-colors",
+                            tab === t.type
+                              ? "bg-[hsl(var(--gold))]/15 text-[hsl(var(--gold))] font-medium"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                          )}
+                        >
+                          {t.icon} {t.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Input area */}
+                    <div className="space-y-2">
+                      <Input
+                        className="h-8 text-xs"
+                        placeholder="Document label (e.g. Q3 2025 Financial Statement)"
+                        value={inputLabel[fund.id] || ""}
+                        onChange={e => setInputLabel(prev => ({ ...prev, [fund.id]: e.target.value }))}
+                      />
+
+                      {(tab === "pdf" || tab === "word") && (
+                        <Input
+                          type="file"
+                          accept={tab === "pdf" ? ".pdf" : ".doc,.docx"}
+                          className="h-8 text-xs"
+                          onChange={e => setInputFile(prev => ({ ...prev, [fund.id]: e.target.files?.[0] || null }))}
+                        />
+                      )}
+
+                      {tab === "email" && (
+                        <Textarea
+                          className="text-xs min-h-[80px] resize-none"
+                          placeholder="Paste email content here..."
+                          value={inputContent[fund.id] || ""}
+                          onChange={e => setInputContent(prev => ({ ...prev, [fund.id]: e.target.value }))}
+                        />
+                      )}
+
+                      {tab === "link" && (
+                        <Input
+                          type="url"
+                          className="h-8 text-xs"
+                          placeholder="https://..."
+                          value={inputUrl[fund.id] || ""}
+                          onChange={e => setInputUrl(prev => ({ ...prev, [fund.id]: e.target.value }))}
+                        />
+                      )}
+
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleAdd(fund.id)}>
+                        <Plus className="h-3 w-3" /> Add
                       </Button>
-                    )}
-                    {hasExtracted && !isConfirmed && (
-                      <Button size="sm" onClick={() => handleConfirm(fund.id)} className="h-8 gap-1 text-xs bg-[hsl(var(--gold))] text-[hsl(var(--background))]">
-                        <Check className="h-3 w-3" /> Confirm
-                      </Button>
+                    </div>
+
+                    {/* Document list */}
+                    {fundDocs.length > 0 && (
+                      <div className="space-y-1.5 pt-1">
+                        {fundDocs.map(doc => (
+                          <div key={doc.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/50 text-xs">
+                            {docTypeIcon(doc.type)}
+                            <span className="flex-1 truncate text-foreground">{doc.label}</span>
+                            <span className="text-[10px] text-muted-foreground uppercase">{doc.type}</span>
+                            <button onClick={() => removeDoc(fund.id, doc.id)} className="text-muted-foreground hover:text-destructive transition-colors">
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
                 )}
@@ -631,8 +711,16 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
           })}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Close</Button>
+        <DialogFooter className="px-6 py-4 border-t border-border flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {totalDocs > 0 ? `${totalDocs} document${totalDocs !== 1 ? "s" : ""} added across ${fundsWithDocs} fund${fundsWithDocs !== 1 ? "s" : ""}` : "No documents added yet"}
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button size="sm" onClick={handleSave} disabled={totalDocs === 0} className="gap-1.5 bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90">
+              <Check className="h-3.5 w-3.5" /> Save
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
