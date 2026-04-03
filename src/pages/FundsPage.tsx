@@ -756,12 +756,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
           <span className="text-xs text-muted-foreground">
             {totalDocs > 0 ? `${totalDocs} document${totalDocs !== 1 ? "s" : ""} added across ${fundsWithDocs} fund${fundsWithDocs !== 1 ? "s" : ""}` : "No documents added yet"}
           </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
-            <Button size="sm" onClick={handleSave} disabled={totalDocs === 0} className="gap-1.5 bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90">
-              <Check className="h-3.5 w-3.5" /> Save
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
