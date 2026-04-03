@@ -532,8 +532,7 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
 
   const handleAdd = (fundId: string) => {
     const tab = getTab(fundId);
-    const label = inputLabel[fundId]?.trim();
-    if (!label) { toast.error("Label is required"); return; }
+    const label = inputLabel[fundId]?.trim() || "";
 
     let entry: DocEntry = { id: crypto.randomUUID(), type: tab, label };
 
