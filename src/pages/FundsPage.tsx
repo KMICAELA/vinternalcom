@@ -725,8 +725,8 @@ function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClos
                         />
                       )}
 
-                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleAdd(fund.id)}>
-                        <Plus className="h-3 w-3" /> Add
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleAdd(fund.id)} disabled={saving[fund.id]}>
+                        {saving[fund.id] ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />} {saving[fund.id] ? "Saving..." : "Add"}
                       </Button>
                     </div>
 
