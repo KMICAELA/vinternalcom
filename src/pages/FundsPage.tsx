@@ -246,6 +246,16 @@ export default function FundsPage() {
         />
       )}
 
+      {/* Bulk Upload Dialog */}
+      {bulkUploadOpen && (
+        <BulkUploadDialog
+          funds={funds}
+          defaultQuarterDate={defaultQuarter.date}
+          availableQuarters={availableQuarters}
+          onClose={() => setBulkUploadOpen(false)}
+        />
+      )}
+
       {/* Lock Quarter Confirmation Modal */}
       <Dialog open={lockModalOpen} onOpenChange={setLockModalOpen}>
         <DialogContent>
