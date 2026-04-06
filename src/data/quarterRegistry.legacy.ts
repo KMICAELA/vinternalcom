@@ -1,6 +1,8 @@
+// LEGACY: Kept as backup. All reads now go through quarterly_history table in Supabase.
+// Only imported by the Settings page migration utility.
 /**
- * Hardcoded quarter-level metrics — the single source of truth
- * for consolidated performance across the platform.
+ * Hardcoded quarter-level metrics — previously the single source of truth.
+ * Now superseded by the quarterly_history database table.
  */
 
 export interface NetCashflow {
