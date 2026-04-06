@@ -35,6 +35,7 @@ const App = () => (
               <Route path="/portfolio" element={<PortfolioPage />} />
               <Route path="/directs" element={<DirectsPage />} />
               <Route path="/consolidated" element={<ConsolidatedPage />} />
+              <Route path="/review" element={<ReviewPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="/add-quarterly-data" element={<AddQuarterlyData />} />

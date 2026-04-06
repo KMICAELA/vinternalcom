@@ -18,6 +18,7 @@ const navItems = [
   { to: "/underlying", icon: Layers, label: "Underlying Portfolio" },
   { to: "/portfolio", icon: Briefcase, label: "Portfolio" },
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },
+  { to: "/review", icon: ClipboardCheck, label: "Review" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
