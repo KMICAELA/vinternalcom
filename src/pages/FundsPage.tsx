@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck, Eye, ArrowRight, Link as LinkIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck, Eye, ArrowRight, Link as LinkIcon, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
