@@ -591,6 +591,78 @@ export type Database = {
         }
         Relationships: []
       }
+      staged_direct_imports: {
+        Row: {
+          co_investors: string | null
+          company_name: string
+          cost_basis: number | null
+          created_at: string | null
+          current_valuation: number | null
+          geography: string | null
+          id: string
+          instrument: string | null
+          investment_date: string | null
+          ownership_percentage: number | null
+          quarter_date: string | null
+          raw_extraction: Json | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          round: string | null
+          source_file_name: string | null
+          source_type: string
+          status: string
+          strategy: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          co_investors?: string | null
+          company_name: string
+          cost_basis?: number | null
+          created_at?: string | null
+          current_valuation?: number | null
+          geography?: string | null
+          id?: string
+          instrument?: string | null
+          investment_date?: string | null
+          ownership_percentage?: number | null
+          quarter_date?: string | null
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          round?: string | null
+          source_file_name?: string | null
+          source_type: string
+          status?: string
+          strategy?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          co_investors?: string | null
+          company_name?: string
+          cost_basis?: number | null
+          created_at?: string | null
+          current_valuation?: number | null
+          geography?: string | null
+          id?: string
+          instrument?: string | null
+          investment_date?: string | null
+          ownership_percentage?: number | null
+          quarter_date?: string | null
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          round?: string | null
+          source_file_name?: string | null
+          source_type?: string
+          status?: string
+          strategy?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       staged_fund_extractions: {
         Row: {
           confidence_score: number | null

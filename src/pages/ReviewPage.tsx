@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Check, X, AlertTriangle, ChevronDown, ChevronRight, Plus, Trash2, ExternalLink, Loader2, FileText } from "lucide-react";
+import { Check, X, AlertTriangle, ChevronDown, ChevronRight, Plus, Trash2, ExternalLink, Loader2, FileText, FileSpreadsheet, Pencil } from "lucide-react";
 import { formatCurrency, formatMultiple, formatPercent } from "@/lib/calcEngine";
 
 export default function ReviewPage() {
@@ -32,6 +32,20 @@ export default function ReviewPage() {
         .select("*, funds!staged_fund_extractions_fund_id_fkey(fund_name)")
         .in("status", ["pending_review", "needs_revision"])
         .order("extracted_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Pending direct imports
+  const { data: pendingDirects = [], isLoading: directsLoading } = useQuery({
+    queryKey: ["staged-direct-imports", "pending"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("staged_direct_imports")
+        .select("*")
+        .in("status", ["pending_review", "needs_revision"])
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -111,7 +125,14 @@ export default function ReviewPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="direct-imports">Direct Imports</TabsTrigger>
+          <TabsTrigger value="direct-imports" className="gap-2">
+            Direct Imports
+            {pendingDirects.length > 0 && (
+              <Badge className="bg-[hsl(var(--gold))]/20 text-[hsl(var(--gold))] border-0 text-[10px] px-1.5">
+                {pendingDirects.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="internal-data">Internal Data</TabsTrigger>
         </TabsList>
 
@@ -141,10 +162,29 @@ export default function ReviewPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="direct-imports" className="mt-4">
-          <div className="text-sm text-muted-foreground p-8 text-center border border-border rounded-lg bg-card">
-            Direct investment review will be available in a future update.
-          </div>
+        <TabsContent value="direct-imports" className="space-y-4 mt-4">
+          {directsLoading ? (
+            <div className="text-sm text-muted-foreground p-8 text-center">Loading imports...</div>
+          ) : pendingDirects.length === 0 ? (
+            <div className="text-sm text-muted-foreground p-8 text-center border border-border rounded-lg bg-card">
+              No pending direct imports to review.
+            </div>
+          ) : (
+            pendingDirects.map((imp: any) => (
+              <DirectImportReviewCard
+                key={imp.id}
+                item={imp}
+                reviewerName={reviewerName}
+                onAction={() => {
+                  qc.invalidateQueries({ queryKey: ["staged-direct-imports"] });
+                  qc.invalidateQueries({ queryKey: ["direct-investments"] });
+                  qc.invalidateQueries({ queryKey: ["direct-valuations"] });
+                  qc.invalidateQueries({ queryKey: ["pending-direct-imports"] });
+                  qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+                }}
+              />
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="internal-data" className="mt-4">
@@ -653,6 +693,265 @@ function ExtractionReviewCard({ extraction, reviewerName, onAction }: {
             onChange={e => setNotes(e.target.value)}
             className="min-h-[100px]"
           />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleReject}>Reject</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ─── Direct Import Review Card ─────────────────────────────────────
+
+function DirectImportReviewCard({ item, reviewerName, onAction }: {
+  item: any; reviewerName: string; onAction: () => void;
+}) {
+  const [approving, setApproving] = useState(false);
+  const [revisionOpen, setRevisionOpen] = useState(false);
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [existingMatch, setExistingMatch] = useState<any>(null);
+  const [notes, setNotes] = useState("");
+
+  const [form, setForm] = useState({
+    company_name: item.company_name || "",
+    cost_basis: item.cost_basis ?? "",
+    instrument: item.instrument || "",
+    round: item.round || "",
+    investment_date: item.investment_date || "",
+    ownership_percentage: item.ownership_percentage ?? "",
+    co_investors: item.co_investors || "",
+    strategy: item.strategy || "",
+    geography: item.geography || "",
+    current_valuation: item.current_valuation ?? "",
+  });
+
+  const sourceIcon = item.source_type === "spreadsheet" ? <FileSpreadsheet className="h-3.5 w-3.5" /> :
+    item.source_type === "deal_doc" ? <FileText className="h-3.5 w-3.5" /> :
+      <Pencil className="h-3.5 w-3.5" />;
+
+  const handleApprove = async () => {
+    if (!reviewerName.trim()) { toast.error("Enter your name in 'Reviewing as'"); return; }
+    setApproving(true);
+    try {
+      // Check for existing company
+      const { data: existing } = await supabase.from("direct_investments")
+        .select("*").ilike("company_name", form.company_name).maybeSingle();
+
+      if (existing) { setExistingMatch(existing); setMergeOpen(true); setApproving(false); return; }
+
+      await insertNewDirect();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const insertNewDirect = async () => {
+    const { error } = await supabase.from("direct_investments").insert({
+      company_name: form.company_name,
+      cost_basis: Number(form.cost_basis) || 0,
+      instrument: form.instrument || null,
+      round: form.round || null,
+      investment_date: form.investment_date || null,
+      ownership_percentage: Number(form.ownership_percentage) || null,
+      co_investors: form.co_investors || null,
+      strategy: form.strategy || null,
+      geography: form.geography || null,
+    } as any);
+    if (error) throw error;
+
+    if (form.current_valuation && item.quarter_date) {
+      const { data: newDirect } = await supabase.from("direct_investments")
+        .select("id").eq("company_name", form.company_name).single();
+      if (newDirect) {
+        await supabase.from("direct_quarterly_valuations").insert({
+          company_id: newDirect.id, quarter_date: item.quarter_date,
+          current_valuation: Number(form.current_valuation) || 0,
+        } as any);
+      }
+    }
+
+    await supabase.from("staged_direct_imports").update({
+      status: "approved", reviewed_by: reviewerName, reviewed_at: new Date().toISOString(),
+    } as any).eq("id", item.id);
+
+    await supabase.from("audit_log").insert({
+      action: "approve_direct_import", target_table: "staged_direct_imports",
+      target_id: item.id, performed_by: reviewerName,
+      details: { company_name: form.company_name, source_type: item.source_type },
+    } as any);
+
+    toast.success(`${form.company_name} added to portfolio`);
+    onAction();
+  };
+
+  const handleMergeAsNew = async () => {
+    setMergeOpen(false); setApproving(true);
+    try { await insertNewDirect(); } catch (err: any) { toast.error(err.message); }
+    finally { setApproving(false); }
+  };
+
+  const handleMergeUpdate = async () => {
+    if (!existingMatch) return;
+    setMergeOpen(false); setApproving(true);
+    try {
+      await supabase.from("direct_investments").update({
+        cost_basis: Number(form.cost_basis) || existingMatch.cost_basis,
+        instrument: form.instrument || existingMatch.instrument,
+        round: form.round || existingMatch.round,
+        investment_date: form.investment_date || existingMatch.investment_date,
+        ownership_percentage: form.ownership_percentage ? Number(form.ownership_percentage) : existingMatch.ownership_percentage,
+        co_investors: form.co_investors || existingMatch.co_investors,
+        strategy: form.strategy || existingMatch.strategy,
+        geography: form.geography || existingMatch.geography,
+      } as any).eq("id", existingMatch.id);
+
+      if (form.current_valuation && item.quarter_date) {
+        await supabase.from("direct_quarterly_valuations").upsert({
+          company_id: existingMatch.id, quarter_date: item.quarter_date,
+          current_valuation: Number(form.current_valuation) || 0,
+        } as any, { onConflict: "company_id,quarter_date" });
+      }
+
+      await supabase.from("staged_direct_imports").update({
+        status: "approved", reviewed_by: reviewerName, reviewed_at: new Date().toISOString(),
+      } as any).eq("id", item.id);
+
+      await supabase.from("audit_log").insert({
+        action: "merge_direct_import", target_table: "direct_investments",
+        target_id: existingMatch.id, performed_by: reviewerName,
+        details: { company_name: form.company_name, merged_into: existingMatch.id },
+      } as any);
+
+      toast.success(`${form.company_name} merged with existing record`);
+      onAction();
+    } catch (err: any) { toast.error(err.message); }
+    finally { setApproving(false); }
+  };
+
+  const handleRevision = async () => {
+    await supabase.from("staged_direct_imports").update({
+      status: "needs_revision", reviewer_notes: notes, reviewed_by: reviewerName || "unknown",
+    } as any).eq("id", item.id);
+    toast.info("Marked for revision"); setRevisionOpen(false); setNotes(""); onAction();
+  };
+
+  const handleReject = async () => {
+    await supabase.from("staged_direct_imports").update({
+      status: "rejected", reviewer_notes: notes, reviewed_by: reviewerName || "unknown",
+      reviewed_at: new Date().toISOString(),
+    } as any).eq("id", item.id);
+    await supabase.from("audit_log").insert({
+      action: "reject_direct_import", target_table: "staged_direct_imports",
+      target_id: item.id, performed_by: reviewerName || "unknown",
+      details: { company_name: form.company_name, reason: notes },
+    } as any);
+    toast.info("Import rejected"); setRejectOpen(false); setNotes(""); onAction();
+  };
+
+  return (
+    <div className="border border-border rounded-lg bg-card p-4 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {sourceIcon}
+          <span className="text-sm font-medium">{form.company_name}</span>
+          <Badge variant="outline" className="text-[10px]">{item.source_type}</Badge>
+          {item.status === "needs_revision" && (
+            <Badge variant="outline" className="border-[hsl(var(--warning))] text-[hsl(var(--warning))] text-[10px]">Needs Revision</Badge>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">{item.source_file_name || "Manual"}</span>
+      </div>
+
+      {item.reviewer_notes && (
+        <div className="rounded-md bg-destructive/5 border border-destructive/20 p-2">
+          <p className="text-xs text-destructive">{item.reviewer_notes}</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-3">
+        {[
+          { label: "Company Name", key: "company_name" },
+          { label: "Cost Basis ($)", key: "cost_basis", type: "number" },
+          { label: "Instrument", key: "instrument" },
+          { label: "Round", key: "round" },
+          { label: "Investment Date", key: "investment_date", type: "date" },
+          { label: "Ownership %", key: "ownership_percentage", type: "number" },
+          { label: "Co-Investors", key: "co_investors" },
+          { label: "Strategy", key: "strategy" },
+          { label: "Geography", key: "geography" },
+          { label: "Current Valuation ($)", key: "current_valuation", type: "number" },
+        ].map(({ label, key, type }) => (
+          <div key={key}>
+            <label className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</label>
+            <Input
+              type={type || "text"}
+              className="h-7 text-xs bg-surface-2 mt-0.5"
+              value={(form as any)[key] ?? ""}
+              onChange={e => setForm(prev => ({ ...prev, [key]: e.target.value }))}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button size="sm" className="bg-[hsl(var(--positive))] text-[hsl(var(--positive-foreground))] hover:bg-[hsl(var(--positive))]/90 gap-1" onClick={handleApprove} disabled={approving}>
+          {approving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />} Approve
+        </Button>
+        <Button size="sm" variant="outline" className="border-[hsl(var(--warning))] text-[hsl(var(--warning))] gap-1" onClick={() => setRevisionOpen(true)}>
+          <AlertTriangle className="h-3.5 w-3.5" /> Revision
+        </Button>
+        <Button size="sm" variant="outline" className="border-destructive text-destructive gap-1" onClick={() => setRejectOpen(true)}>
+          <X className="h-3.5 w-3.5" /> Reject
+        </Button>
+      </div>
+
+      {/* Merge Dialog */}
+      <Dialog open={mergeOpen} onOpenChange={setMergeOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Duplicate Found: {form.company_name}</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">An existing record matches this company. Choose how to proceed:</p>
+          <div className="grid grid-cols-2 gap-4 text-xs">
+            <div className="border border-border rounded p-3 space-y-1">
+              <p className="font-medium text-muted-foreground">Existing Record</p>
+              <p>Cost: {formatCurrency(Number(existingMatch?.cost_basis || 0))}</p>
+              <p>Instrument: {existingMatch?.instrument || "—"}</p>
+              <p>Round: {existingMatch?.round || "—"}</p>
+            </div>
+            <div className="border border-[hsl(var(--gold))]/30 rounded p-3 space-y-1">
+              <p className="font-medium text-[hsl(var(--gold))]">Imported Data</p>
+              <p>Cost: {form.cost_basis ? formatCurrency(Number(form.cost_basis)) : "—"}</p>
+              <p>Instrument: {form.instrument || "—"}</p>
+              <p>Round: {form.round || "—"}</p>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setMergeOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={handleMergeAsNew}>Create Separate Entry</Button>
+            <Button className="bg-[hsl(var(--gold))] text-[hsl(var(--background))]" onClick={handleMergeUpdate}>Update Existing</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={revisionOpen} onOpenChange={setRevisionOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Request Revision</DialogTitle></DialogHeader>
+          <Textarea placeholder="Notes..." value={notes} onChange={e => setNotes(e.target.value)} className="min-h-[80px]" />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRevisionOpen(false)}>Cancel</Button>
+            <Button className="bg-[hsl(var(--warning))] text-background" onClick={handleRevision}>Submit</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Reject Import</DialogTitle></DialogHeader>
+          <Textarea placeholder="Reason..." value={notes} onChange={e => setNotes(e.target.value)} className="min-h-[80px]" />
           <DialogFooter>
             <Button variant="outline" onClick={() => setRejectOpen(false)}>Cancel</Button>
             <Button variant="destructive" onClick={handleReject}>Reject</Button>
