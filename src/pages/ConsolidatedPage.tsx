@@ -177,8 +177,8 @@ export default function ConsolidatedPage() {
               <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} domain={[0, 'auto']} />
               <Tooltip content={<ChartTooltip />} />
               <Legend />
-              <Line type="monotone" dataKey="netTvpi" stroke="hsl(var(--primary))" name="Net TVPI" strokeWidth={2} dot={{ r: 3 }} />
-              <Line type="monotone" dataKey="grossTvpi" stroke="hsl(var(--info))" name="Gross TVPI" strokeWidth={2} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="netTvpi" stroke="hsl(45, 90%, 55%)" name="Net TVPI" strokeWidth={2} dot={{ r: 3 }} connectNulls />
+              <Line type="monotone" dataKey="grossTvpi" stroke="hsl(210, 70%, 55%)" name="Gross TVPI" strokeWidth={2} dot={{ r: 3 }} connectNulls />
             </LineChart>
           </ResponsiveContainer>
         </div>
