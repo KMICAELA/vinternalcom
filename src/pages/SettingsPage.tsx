@@ -221,6 +221,36 @@ export default function SettingsPage() {
         </Button>
       </div>
 
+      {/* Portfolio Comments Migration */}
+      <div className="border border-border rounded-lg p-6 bg-card space-y-4">
+        <h2 className="text-sm font-medium">Portfolio Comments Migration</h2>
+        <p className="text-xs text-muted-foreground">
+          Migrate hardcoded portfolio comments to the quarterly_commentary table.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={async () => {
+            try {
+              const rows = portfolioCommentsSeed.map((c, i) => ({
+                quarter_date: activeQuarter.date,
+                section: "Portfolio Company Notes",
+                body: `**${c.company}**\n\n${c.whatTheyDo || ""}\n\nTarget Market: ${c.targetMarket || "—"}`,
+                sort_order: i,
+              }));
+              const { error } = await supabase.from("quarterly_commentary").insert(rows as any);
+              if (error) throw error;
+              toast.success(`Migrated ${rows.length} portfolio comments`);
+            } catch (err: any) {
+              toast.error(err.message);
+            }
+          }}
+          className="gap-2"
+        >
+          <FileText className="h-3.5 w-3.5" /> Migrate Portfolio Comments
+        </Button>
+      </div>
+
       {/* Quarterly History */}
       <div className="border border-border rounded-lg p-6 bg-card space-y-4">
         <h2 className="text-sm font-medium">Quarterly History</h2>
