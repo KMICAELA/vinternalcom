@@ -721,6 +721,7 @@ export type Database = {
           reviewer_notes: string | null
           source_file_name: string | null
           source_file_path: string | null
+          source_url: string | null
           status: string
           updated_at: string | null
         }
@@ -751,6 +752,7 @@ export type Database = {
           reviewer_notes?: string | null
           source_file_name?: string | null
           source_file_path?: string | null
+          source_url?: string | null
           status?: string
           updated_at?: string | null
         }
@@ -781,6 +783,7 @@ export type Database = {
           reviewer_notes?: string | null
           source_file_name?: string | null
           source_file_path?: string | null
+          source_url?: string | null
           status?: string
           updated_at?: string | null
         }

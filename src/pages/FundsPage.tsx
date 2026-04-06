@@ -1,18 +1,20 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
 import { useQuarterContext } from "@/contexts/QuarterContext";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
+import { useReportCoverage, type FundCoverage } from "@/hooks/useReportCoverage";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck } from "lucide-react";
+import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck, Eye, ArrowRight, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -32,17 +34,61 @@ export default function FundsPage() {
   const { data: fqm } = useFundQuarterMetrics(activeQuarter.date);
   const cm = useConsolidatedMetrics();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
-  const [addReportsOpen, setAddReportsOpen] = useState(false);
   const [addFundOpen, setAddFundOpen] = useState(false);
   const [lockModalOpen, setLockModalOpen] = useState(false);
-  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const navigate = useNavigate();
 
-  // Fetch all FS for active quarter to compute completion
+  // Report Tracker quarter selection
+  const trackerQuarters = useMemo(() => {
+    const qs: { label: string; date: string }[] = [];
+    const makeQ = (d: Date) => {
+      const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+      d.setMonth(qMonth);
+      d.setDate(new Date(d.getFullYear(), qMonth + 1, 0).getDate());
+      const qNum = Math.floor(qMonth / 3) + 1;
+      return {
+        label: `${qNum}Q${String(d.getFullYear()).slice(2)}`,
+        date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+      };
+    };
+    for (let i = 3; i >= 1; i--) {
+      const d = new Date(defaultQuarter.date);
+      d.setMonth(d.getMonth() - 3 * i);
+      qs.push(makeQ(d));
+    }
+    qs.push({ label: defaultQuarter.quarter, date: defaultQuarter.date });
+    return qs;
+  }, [defaultQuarter.date, defaultQuarter.quarter]);
+
+  const [trackerQuarterDate, setTrackerQuarterDate] = useState(defaultQuarter.date);
+  const { data: coverage, isLoading: coverageLoading } = useReportCoverage(trackerQuarterDate);
+
+  // Add Reports quarter options (for existing dialog)
+  const availableQuarters = useMemo(() => {
+    const quarters: { label: string; date: string }[] = [];
+    const makeQuarter = (d: Date) => {
+      const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
+      d.setMonth(qMonth);
+      d.setDate(new Date(d.getFullYear(), qMonth + 1, 0).getDate());
+      const qNum = Math.floor(qMonth / 3) + 1;
+      return { label: `Q${qNum} ${d.getFullYear()}`, date: d.toISOString().split("T")[0] };
+    };
+    for (let i = 2; i >= 1; i--) {
+      const d = new Date(defaultQuarter.date);
+      d.setMonth(d.getMonth() - 3 * i);
+      quarters.push(makeQuarter(d));
+    }
+    quarters.push({ label: `Q${defaultQuarter.quarter[0]} ${defaultQuarter.date.slice(0, 4)}`, date: defaultQuarter.date });
+    const nd = new Date(defaultQuarter.date);
+    nd.setMonth(nd.getMonth() + 3);
+    quarters.push(makeQuarter(nd));
+    return quarters;
+  }, [defaultQuarter.date, defaultQuarter.quarter]);
+
+  // FS status for Fund Details tab
   const { data: allFsForQuarter = [] } = useQuery({
     queryKey: ["all-fund-fs-status", activeQuarter.date],
     queryFn: async () => {
-      if (!activeQuarter.date) return [];
       const { data, error } = await supabase
         .from("fund_financial_statements")
         .select("fund_id, confirmed, quarter_date")
@@ -54,66 +100,14 @@ export default function FundsPage() {
     enabled: !!activeQuarter.date,
   });
 
-  // Fetch latest FS per fund (any quarter) for "Last FS" label
-  const { data: latestFsPerFund = [] } = useQuery({
-    queryKey: ["latest-fs-per-fund"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("fund_financial_statements")
-        .select("fund_id, quarter_date, confirmed")
-        .eq("confirmed", true)
-        .order("quarter_date", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
-  // Compute Add Reports quarter options from the backend's default/current quarter
-  const availableQuarters = useMemo(() => {
-    const quarters: { label: string; date: string }[] = [];
-    const makeQuarter = (d: Date) => {
-      const qMonth = Math.floor(d.getMonth() / 3) * 3 + 2;
-      d.setMonth(qMonth);
-      d.setDate(new Date(d.getFullYear(), qMonth + 1, 0).getDate());
-      const qNum = Math.floor(qMonth / 3) + 1;
-      return { label: `Q${qNum} ${d.getFullYear()}`, date: d.toISOString().split("T")[0] };
-    };
-
-    for (let i = 2; i >= 1; i--) {
-      const d = new Date(defaultQuarter.date);
-      d.setMonth(d.getMonth() - 3 * i);
-      quarters.push(makeQuarter(d));
-    }
-
-    quarters.push({ label: `Q${defaultQuarter.quarter[0]} ${defaultQuarter.date.slice(0, 4)}`, date: defaultQuarter.date });
-
-    const nd = new Date(defaultQuarter.date);
-    nd.setMonth(nd.getMonth() + 3);
-    quarters.push(makeQuarter(nd));
-
-    return quarters;
-  }, [defaultQuarter.date, defaultQuarter.quarter]);
-
-  // FS status per fund
   const fsStatusMap = useMemo(() => {
     const confirmedSet = new Set(allFsForQuarter.map((fs: any) => fs.fund_id));
-    const latestMap = new Map<string, string>();
-    for (const fs of latestFsPerFund as any[]) {
-      if (!latestMap.has(fs.fund_id)) {
-        latestMap.set(fs.fund_id, fs.quarter_date);
-      }
-    }
-    return { confirmedSet, latestMap };
-  }, [allFsForQuarter, latestFsPerFund]);
+    return { confirmedSet };
+  }, [allFsForQuarter]);
 
-  const activeFunds = funds;
+  const uploadedCount = funds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
+  const allUploaded = uploadedCount === funds.length && funds.length > 0;
 
-  const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
-  const totalActive = activeFunds.length;
-  const allUploaded = uploadedCount === totalActive && totalActive > 0;
-  const completionPct = totalActive > 0 ? (uploadedCount / totalActive) * 100 : 0;
-
-  // Lock quarter handler
   const handleLockQuarter = async () => {
     const { error } = await supabase.from("quarterly_history").upsert(
       {
@@ -138,6 +132,10 @@ export default function FundsPage() {
 
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
+  const summary = coverage?.summary;
+  const received = (summary?.complete ?? 0) + (summary?.inReview ?? 0);
+  const totalActive = (summary?.total ?? 0) - (summary?.na ?? 0);
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -149,21 +147,6 @@ export default function FundsPage() {
           <Button size="sm" variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
             <Plus className="h-3.5 w-3.5" /> Add Fund
           </Button>
-          <Button size="sm" variant="outline" onClick={() => setBulkUploadOpen(true)} className="gap-2">
-            <FileStack className="h-3.5 w-3.5" /> Bulk Upload
-          </Button>
-          <Button size="sm" onClick={() => setAddReportsOpen(true)} className="gap-2">
-            <Upload className="h-3.5 w-3.5" /> Add Reports
-          </Button>
-        </div>
-      </div>
-
-      <div className="border border-border rounded-lg p-4 bg-card space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-medium text-foreground">{activeQuarter.quarter} Reports:</span>
-            <span className="text-sm text-muted-foreground">{uploadedCount} / {totalActive} uploaded</span>
-          </div>
           <Button
             size="sm"
             disabled={!allUploaded}
@@ -175,99 +158,55 @@ export default function FundsPage() {
                 : "bg-muted text-muted-foreground cursor-not-allowed"
             )}
           >
-            <Lock className="h-3.5 w-3.5" />
-            Generate Metrics for {activeQuarter.quarter}
+            <Lock className="h-3.5 w-3.5" /> Generate Metrics
           </Button>
         </div>
-        <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${completionPct}%`,
-              backgroundColor: allUploaded ? "hsl(var(--gold))" : "hsl(var(--gold) / 0.6)",
-            }}
+      </div>
+
+      <Tabs defaultValue="tracker" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="tracker">Report Tracker</TabsTrigger>
+          <TabsTrigger value="details">Fund Details</TabsTrigger>
+        </TabsList>
+
+        {/* ── Tab 1: Report Tracker ── */}
+        <TabsContent value="tracker" className="space-y-4">
+          <ReportTrackerView
+            trackerQuarters={trackerQuarters}
+            trackerQuarterDate={trackerQuarterDate}
+            setTrackerQuarterDate={setTrackerQuarterDate}
+            coverage={coverage?.coverage || []}
+            summary={summary}
+            received={received}
+            totalActive={totalActive}
+            coverageLoading={coverageLoading}
+            funds={funds}
+            availableQuarters={availableQuarters}
           />
-        </div>
-      </div>
+        </TabsContent>
 
-      <div className="border border-border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-surface-1">
-              <TableHead className="w-8" />
-              <TableHead>Fund Name</TableHead>
-              <TableHead>Start Date</TableHead>
-              <TableHead className="text-center">FS Status</TableHead>
-              <TableHead className="text-right">TWH Commitment</TableHead>
-              <TableHead>Currency</TableHead>
-              <TableHead className="text-right">TWH %</TableHead>
-              <TableHead className="text-right">TWH NAV</TableHead>
-              <TableHead className="text-right">TVPI</TableHead>
-              <TableHead className="text-right">IRR</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {activeFunds.map((fund: any) => {
-              const hasFS = fsStatusMap.confirmedSet.has(fund.id);
-              const registryNav = fqm?.fundNAVs[fund.fund_name] ?? null;
-              const hasTvpiEntry = fqm?.fundTVPIs ? fund.fund_name in fqm.fundTVPIs : false;
-              const registryTvpi = hasTvpiEntry ? (fqm!.fundTVPIs[fund.fund_name] ?? null) : undefined;
+        {/* ── Tab 2: Fund Details ── */}
+        <TabsContent value="details" className="space-y-4">
+          <FundDetailsView
+            funds={funds}
+            activeQuarter={activeQuarter}
+            fsStatusMap={fsStatusMap}
+            fqm={fqm}
+            expandedFund={expandedFund}
+            setExpandedFund={setExpandedFund}
+          />
+        </TabsContent>
+      </Tabs>
 
-              return (
-                <FundRow
-                  key={fund.id}
-                  fund={fund}
-                  quarterDate={activeQuarter.date}
-                  isExpanded={expandedFund === fund.id}
-                  onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
-                  fsStatus={hasFS ? "uploaded" : "pending"}
-                  fsLabel={hasFS ? activeQuarter.quarter : "Pending"}
-                  registryNav={registryNav}
-                  registryTvpi={registryTvpi}
-                />
-              );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+      {addFundOpen && <AddFundDialog onClose={() => setAddFundOpen(false)} />}
 
-      {/* Add Fund Dialog */}
-      {addFundOpen && (
-        <AddFundDialog onClose={() => setAddFundOpen(false)} />
-      )}
-
-      {/* Add Reports Dialog */}
-      {addReportsOpen && (
-        <AddReportsDialog
-          funds={funds}
-          availableQuarters={availableQuarters}
-          defaultQuarterDate={defaultQuarter.date}
-          onClose={() => setAddReportsOpen(false)}
-        />
-      )}
-
-      {/* Bulk Upload Dialog */}
-      {bulkUploadOpen && (
-        <BulkUploadDialog
-          funds={funds}
-          defaultQuarterDate={defaultQuarter.date}
-          availableQuarters={availableQuarters}
-          onClose={() => setBulkUploadOpen(false)}
-        />
-      )}
-
-      {/* Lock Quarter Confirmation Modal */}
       <Dialog open={lockModalOpen} onOpenChange={setLockModalOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Generate Metrics for {activeQuarter.quarter}?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This will snapshot all current metrics (Net TVPI, Net IRR, Gross TVPI, Gross IRR, NAV, and contributions) into the historical record.
-            The TVPI chart on TWH Consolidated will show this data point.
-          </p>
-          <p className="text-sm text-muted-foreground">
-            After locking, you can advance to the next quarter in Settings.
+            This will snapshot all current metrics into the historical record.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setLockModalOpen(false)}>Cancel</Button>
@@ -280,6 +219,704 @@ export default function FundsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Report Tracker View
+// ═══════════════════════════════════════════════════════════════════
+
+function ReportTrackerView({
+  trackerQuarters,
+  trackerQuarterDate,
+  setTrackerQuarterDate,
+  coverage,
+  summary,
+  received,
+  totalActive,
+  coverageLoading,
+  funds,
+  availableQuarters,
+}: {
+  trackerQuarters: { label: string; date: string }[];
+  trackerQuarterDate: string;
+  setTrackerQuarterDate: (d: string) => void;
+  coverage: FundCoverage[];
+  summary: any;
+  received: number;
+  totalActive: number;
+  coverageLoading: boolean;
+  funds: any[];
+  availableQuarters: { label: string; date: string }[];
+}) {
+  const [openUploadFundId, setOpenUploadFundId] = useState<string | null>(null);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const completionPct = totalActive > 0 ? (received / totalActive) * 100 : 0;
+
+  const missingFunds = coverage.filter((c) => c.status === "missing");
+
+  return (
+    <div className="space-y-4">
+      {/* Controls row */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <label className="text-sm text-muted-foreground">Quarter</label>
+          <Select value={trackerQuarterDate} onValueChange={setTrackerQuarterDate}>
+            <SelectTrigger className="h-9 w-32 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {trackerQuarters.map((q) => (
+                <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Summary chips */}
+          {summary && (
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-card border border-border">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                {summary.complete} Complete
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-card border border-border">
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
+                {summary.inReview} In Review
+              </span>
+              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-card border border-border">
+                <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+                {summary.missing} Missing
+              </span>
+            </div>
+          )}
+          {missingFunds.length > 0 && (
+            <Button size="sm" variant="outline" onClick={() => setBulkUploadOpen(true)} className="gap-2">
+              <FileStack className="h-3.5 w-3.5" /> Bulk Upload Missing
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{
+              width: `${completionPct}%`,
+              background: "linear-gradient(90deg, hsl(var(--gold) / 0.7), hsl(var(--gold)))",
+            }}
+          />
+        </div>
+        <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
+          {received} / {totalActive}
+        </span>
+      </div>
+
+      {/* Fund list */}
+      {coverageLoading ? (
+        <div className="flex items-center gap-2 p-8 justify-center text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {coverage.map((fund) => (
+            <ReportTrackerRow
+              key={fund.fundId}
+              fund={fund}
+              isUploadOpen={openUploadFundId === fund.fundId}
+              onToggleUpload={() =>
+                setOpenUploadFundId(openUploadFundId === fund.fundId ? null : fund.fundId)
+              }
+              quarterDate={trackerQuarterDate}
+            />
+          ))}
+        </div>
+      )}
+
+      {bulkUploadOpen && (
+        <BulkUploadMissingDialog
+          missingFunds={missingFunds}
+          allFunds={funds}
+          quarterDate={trackerQuarterDate}
+          onClose={() => setBulkUploadOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Single fund row in Report Tracker ──────────────────────────────
+
+function ReportTrackerRow({
+  fund,
+  isUploadOpen,
+  onToggleUpload,
+  quarterDate,
+}: {
+  fund: FundCoverage;
+  isUploadOpen: boolean;
+  onToggleUpload: () => void;
+  quarterDate: string;
+}) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [urlValue, setUrlValue] = useState("");
+  const [savingUrl, setSavingUrl] = useState(false);
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const fileName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+      const storagePath = `${quarterDate}/${fund.fundId}/${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from("fund-reports")
+        .upload(storagePath, file);
+      if (uploadError) throw uploadError;
+
+      const arrayBuffer = await file.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+      const { data: template } = await supabase
+        .from("fund_extraction_templates")
+        .select("*")
+        .eq("fund_id", fund.fundId)
+        .maybeSingle();
+
+      const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
+        body: { pdf_base64: base64, file_name: file.name, template: template || undefined },
+      });
+      if (error) throw error;
+
+      const summary = extracted?.fund_summary || {};
+      const companies = extracted?.portfolio_companies || [];
+
+      await supabase.from("staged_fund_extractions").insert({
+        fund_id: fund.fundId,
+        quarter_date: quarterDate,
+        source_file_path: storagePath,
+        source_file_name: file.name,
+        extracted_nav: summary.nav,
+        extracted_capital_called: summary.total_capital_called,
+        extracted_distributions: summary.total_distributions,
+        extracted_gross_irr: summary.gross_irr,
+        extracted_gross_tvpi: summary.gross_tvpi,
+        extracted_net_irr: summary.net_irr,
+        extracted_net_tvpi: summary.net_tvpi,
+        extracted_dpi: summary.dpi,
+        extracted_rvpi: summary.rvpi,
+        extracted_pic: summary.pic,
+        extracted_commitment: summary.commitment,
+        extracted_unfunded: summary.unfunded_commitment,
+        extracted_companies: companies,
+        raw_extraction: extracted,
+        confidence_score: extracted?.extraction_confidence ?? null,
+        extraction_model: "gemini-2.5-pro",
+      } as any);
+
+      toast.success("Report uploaded and extracting...");
+      qc.invalidateQueries({ queryKey: ["report-coverage"] });
+      qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+      onToggleUpload(); // close
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSaveUrl = async () => {
+    if (!urlValue.trim()) return;
+    setSavingUrl(true);
+    try {
+      await supabase.from("staged_fund_extractions").insert({
+        fund_id: fund.fundId,
+        quarter_date: quarterDate,
+        source_file_name: urlValue.trim(),
+        source_url: urlValue.trim(),
+        status: "pending_review",
+      } as any);
+      toast.success("Link saved. Extraction available when PDF URL processing is supported.");
+      qc.invalidateQueries({ queryKey: ["report-coverage"] });
+      setUrlValue("");
+      onToggleUpload();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save link");
+    } finally {
+      setSavingUrl(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file && file.type === "application/pdf") handleFileUpload(file);
+    else toast.error("Please drop a PDF file");
+  };
+
+  const statusBadge = () => {
+    switch (fund.status) {
+      case "complete":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">
+            <Check className="h-3 w-3" /> Complete
+          </span>
+        );
+      case "in_review":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 font-medium">
+            ⏳ In Review
+          </span>
+        );
+      case "na":
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full text-muted-foreground/50 font-medium">
+            — N/A
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">
+            Missing
+          </span>
+        );
+    }
+  };
+
+  const rightAction = () => {
+    switch (fund.status) {
+      case "complete":
+        return (
+          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground">
+            <Eye className="h-3 w-3" /> View
+          </Button>
+        );
+      case "in_review":
+        return (
+          <div className="flex items-center gap-2">
+            {fund.fileName && (
+              <span className="text-xs font-mono text-muted-foreground max-w-[180px] truncate">
+                {fund.fileName}
+              </span>
+            )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 text-xs gap-1.5 text-amber-400 hover:text-amber-300"
+              onClick={() => navigate("/review")}
+            >
+              <ArrowRight className="h-3 w-3" /> Go to Review
+            </Button>
+          </div>
+        );
+      case "missing":
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs gap-1.5 text-[hsl(var(--gold))] hover:text-[hsl(var(--gold))]/80"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleUpload();
+            }}
+          >
+            <Upload className="h-3 w-3" /> Upload Report
+          </Button>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
+        <div className="flex items-center gap-3 min-w-0">
+          <span className="text-sm font-medium text-foreground truncate">{fund.fundName}</span>
+          {fund.strategy && (
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {fund.strategy}{fund.vintageYear ? ` · ${fund.vintageYear}` : ""}
+            </span>
+          )}
+          {statusBadge()}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {rightAction()}
+        </div>
+      </div>
+
+      {/* Inline upload zone */}
+      {isUploadOpen && fund.status === "missing" && (
+        <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
+          <div
+            className="border-2 border-dashed border-[hsl(var(--gold))/0.4] rounded-lg p-6 text-center bg-[hsl(var(--gold))/0.03] hover:bg-[hsl(var(--gold))/0.06] transition-colors cursor-pointer"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? (
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" />
+                Uploading & extracting...
+              </div>
+            ) : (
+              <>
+                <Upload className="h-5 w-5 mx-auto text-[hsl(var(--gold))]/60 mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  Drag & drop PDF here, or <span className="text-[hsl(var(--gold))] underline">browse files</span>
+                </p>
+              </>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFileUpload(file);
+                e.currentTarget.value = "";
+              }}
+            />
+          </div>
+
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <div className="flex-1 h-px bg-border" />
+            <span>or paste a data room link</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <Input
+              className="h-8 text-xs flex-1"
+              placeholder="https://..."
+              value={urlValue}
+              onChange={(e) => setUrlValue(e.target.value)}
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!urlValue.trim() || savingUrl}
+              onClick={handleSaveUrl}
+            >
+              {savingUrl ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Bulk Upload Missing Dialog
+// ═══════════════════════════════════════════════════════════════════
+
+function BulkUploadMissingDialog({
+  missingFunds,
+  allFunds,
+  quarterDate,
+  onClose,
+}: {
+  missingFunds: FundCoverage[];
+  allFunds: any[];
+  quarterDate: string;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+  const [fileMatches, setFileMatches] = useState<{ file: File; fundId: string }[]>([]);
+  const [extracting, setExtracting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [allDone, setAllDone] = useState(false);
+
+  const fuzzyMatch = (fileName: string): string | null => {
+    const clean = fileName.replace(/\.pdf$/i, "").replace(/[_\-\.]/g, " ").toLowerCase();
+    let bestId: string | null = null;
+    let bestScore = 0;
+    for (const f of missingFunds) {
+      const name = f.fundName.toLowerCase();
+      // Simple substring match score
+      const words = name.split(/\s+/);
+      let score = 0;
+      for (const w of words) {
+        if (clean.includes(w) && w.length > 2) score += w.length;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        bestId = f.fundId;
+      }
+    }
+    return bestScore > 3 ? bestId : null;
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type === "application/pdf");
+    const matches = files.map((file) => ({
+      file,
+      fundId: fuzzyMatch(file.name) || missingFunds[0]?.fundId || "",
+    }));
+    setFileMatches((prev) => [...prev, ...matches]);
+  };
+
+  const handleExtractAll = async () => {
+    if (fileMatches.length === 0) return;
+    setExtracting(true);
+    setProgress({ done: 0, total: fileMatches.length });
+    let completed = 0;
+
+    const batchSize = 3;
+    for (let i = 0; i < fileMatches.length; i += batchSize) {
+      const batch = fileMatches.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async ({ file, fundId }) => {
+          try {
+            const fileName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+            const storagePath = `${quarterDate}/${fundId}/${fileName}`;
+            await supabase.storage.from("fund-reports").upload(storagePath, file);
+
+            const arrayBuffer = await file.arrayBuffer();
+            const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+            const { data: template } = await supabase
+              .from("fund_extraction_templates")
+              .select("*")
+              .eq("fund_id", fundId)
+              .maybeSingle();
+
+            const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
+              body: { pdf_base64: base64, file_name: file.name, template: template || undefined },
+            });
+            if (error) throw error;
+
+            const sum = extracted?.fund_summary || {};
+            await supabase.from("staged_fund_extractions").insert({
+              fund_id: fundId,
+              quarter_date: quarterDate,
+              source_file_path: storagePath,
+              source_file_name: file.name,
+              extracted_nav: sum.nav,
+              extracted_capital_called: sum.total_capital_called,
+              extracted_distributions: sum.total_distributions,
+              extracted_gross_irr: sum.gross_irr,
+              extracted_gross_tvpi: sum.gross_tvpi,
+              extracted_net_irr: sum.net_irr,
+              extracted_net_tvpi: sum.net_tvpi,
+              extracted_dpi: sum.dpi,
+              extracted_rvpi: sum.rvpi,
+              extracted_pic: sum.pic,
+              extracted_commitment: sum.commitment,
+              extracted_unfunded: sum.unfunded_commitment,
+              extracted_companies: extracted?.portfolio_companies || [],
+              raw_extraction: extracted,
+              confidence_score: extracted?.extraction_confidence ?? null,
+              extraction_model: "gemini-2.5-pro",
+            } as any);
+          } catch (err: any) {
+            const fund = missingFunds.find((f) => f.fundId === fundId);
+            toast.error(`Failed: ${fund?.fundName || fundId}: ${err.message}`);
+          } finally {
+            completed++;
+            setProgress({ done: completed, total: fileMatches.length });
+          }
+        })
+      );
+    }
+
+    setAllDone(true);
+    setExtracting(false);
+    qc.invalidateQueries({ queryKey: ["report-coverage"] });
+    qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+    toast.success(`Extracted ${completed}/${fileMatches.length} reports. Ready for review.`);
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !extracting) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
+          <DialogTitle className="flex items-center gap-2">
+            <FileStack className="h-5 w-5" /> Bulk Upload Missing Reports
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground mt-1">
+            {missingFunds.length} fund{missingFunds.length !== 1 ? "s" : ""} missing for this quarter
+          </p>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Drop zone */}
+          <div
+            className="border-2 border-dashed border-[hsl(var(--gold))/0.4] rounded-lg p-6 text-center bg-[hsl(var(--gold))/0.03] cursor-pointer"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+          >
+            <Upload className="h-5 w-5 mx-auto text-[hsl(var(--gold))]/60 mb-2" />
+            <p className="text-sm text-muted-foreground">
+              Drag & drop multiple PDFs here
+            </p>
+          </div>
+
+          {extracting && (
+            <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+              <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" />
+              <span className="text-sm text-muted-foreground">
+                Extracting {progress.done}/{progress.total}...
+              </span>
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[hsl(var(--gold))] transition-all"
+                  style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* File → Fund matches */}
+          {fileMatches.map((match, idx) => (
+            <div key={idx} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className="text-xs font-mono text-muted-foreground truncate max-w-[200px]">
+                {match.file.name}
+              </span>
+              <ArrowRight className="h-3 w-3 text-muted-foreground shrink-0" />
+              <Select
+                value={match.fundId}
+                onValueChange={(v) =>
+                  setFileMatches((prev) =>
+                    prev.map((m, i) => (i === idx ? { ...m, fundId: v } : m))
+                  )
+                }
+              >
+                <SelectTrigger className="h-7 text-xs flex-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {missingFunds.map((f) => (
+                    <SelectItem key={f.fundId} value={f.fundId}>
+                      {f.fundName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <button
+                onClick={() => setFileMatches((prev) => prev.filter((_, i) => i !== idx))}
+                className="text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {fileMatches.length} file{fileMatches.length !== 1 ? "s" : ""} matched
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={extracting}>
+              Cancel
+            </Button>
+            {allDone ? (
+              <Button
+                size="sm"
+                className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90 gap-2"
+                onClick={() => {
+                  onClose();
+                  navigate("/review");
+                }}
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" /> Go to Review
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
+                onClick={handleExtractAll}
+                disabled={fileMatches.length === 0 || extracting}
+              >
+                {extracting ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Extracting...
+                  </>
+                ) : (
+                  `Extract All (${fileMatches.length})`
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Fund Details View (existing table, unchanged)
+// ═══════════════════════════════════════════════════════════════════
+
+function FundDetailsView({
+  funds,
+  activeQuarter,
+  fsStatusMap,
+  fqm,
+  expandedFund,
+  setExpandedFund,
+}: {
+  funds: any[];
+  activeQuarter: { quarter: string; date: string };
+  fsStatusMap: { confirmedSet: Set<string> };
+  fqm: any;
+  expandedFund: string | null;
+  setExpandedFund: (id: string | null) => void;
+}) {
+  return (
+    <div className="border border-border rounded-lg overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="bg-surface-1">
+            <TableHead className="w-8" />
+            <TableHead>Fund Name</TableHead>
+            <TableHead>Start Date</TableHead>
+            <TableHead className="text-center">FS Status</TableHead>
+            <TableHead className="text-right">TWH Commitment</TableHead>
+            <TableHead>Currency</TableHead>
+            <TableHead className="text-right">TWH %</TableHead>
+            <TableHead className="text-right">TWH NAV</TableHead>
+            <TableHead className="text-right">TVPI</TableHead>
+            <TableHead className="text-right">IRR</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {funds.map((fund: any) => {
+            const hasFS = fsStatusMap.confirmedSet.has(fund.id);
+            const registryNav = fqm?.fundNAVs[fund.fund_name] ?? null;
+            const hasTvpiEntry = fqm?.fundTVPIs ? fund.fund_name in fqm.fundTVPIs : false;
+            const registryTvpi = hasTvpiEntry ? (fqm!.fundTVPIs[fund.fund_name] ?? null) : undefined;
+            return (
+              <FundRow
+                key={fund.id}
+                fund={fund}
+                quarterDate={activeQuarter.date}
+                isExpanded={expandedFund === fund.id}
+                onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
+                fsStatus={hasFS ? "uploaded" : "pending"}
+                fsLabel={hasFS ? activeQuarter.quarter : "Pending"}
+                registryNav={registryNav}
+                registryTvpi={registryTvpi}
+              />
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 }
@@ -348,16 +985,8 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
   const statusBadge = () => {
     if (fsStatus === "uploaded") {
       return (
-        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[hsl(var(--positive))]/20 text-[hsl(var(--positive))] font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--positive))]" />
-          {fsLabel}
-        </span>
-      );
-    }
-    if (fsStatus === "stale") {
-      return (
-        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-[hsl(var(--warning))]/20 text-[hsl(var(--warning))] font-medium">
-          <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--warning))]" />
+        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
           {fsLabel}
         </span>
       );
@@ -456,7 +1085,7 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
                         <TableCell className="font-mono text-xs">{cf.cashflow_date}</TableCell>
                         <TableCell className="text-xs">{(cf as any).cashflow_type || '—'}</TableCell>
                         <TableCell className={cn("text-right font-mono text-xs",
-                          cf.distribution_received > 0 ? "text-positive" : ""
+                          cf.distribution_received > 0 ? "text-emerald-400" : ""
                         )}>
                           {formatCurrency(Number(cf.capital_deployed || 0) + Number(cf.distribution_received || 0))}
                         </TableCell>
@@ -468,7 +1097,6 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
                         </TableCell>
                       </TableRow>
                     ))}
-                    {/* Add row */}
                     <TableRow>
                       <TableCell>
                         <Input type="date" className="h-7 text-xs w-32" value={newCf.cashflow_date}
@@ -504,493 +1132,6 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
         </TableRow>
       )}
     </>
-  );
-}
-
-// ─── Add Reports Dialog — redesigned multi-type document uploader ──
-
-type DocType = "pdf" | "word" | "email" | "link";
-interface DocEntry {
-  id: string;
-  type: DocType;
-  label: string;
-  content?: string;
-  url?: string;
-  fileName?: string;
-  storagePath?: string;
-  addedAt: string;
-}
-
-interface StoredDoc {
-  id: string;
-  type: DocType;
-  label: string;
-  file_name: string | null;
-  file_path: string | null;
-  email_content: string | null;
-  link_url: string | null;
-  added_at: string;
-}
-
-const serializeDocEntry = (entry: DocEntry): StoredDoc => ({
-  id: entry.id,
-  type: entry.type,
-  label: entry.label || entry.fileName || entry.type,
-  file_name: entry.fileName || null,
-  file_path: entry.storagePath || null,
-  email_content: entry.content || null,
-  link_url: entry.url || null,
-  added_at: entry.addedAt,
-});
-
-const normalizeStoredDocs = (rawData: any, rowFilePath: string | null): StoredDoc[] => {
-  const documents = Array.isArray(rawData?.documents)
-    ? rawData.documents.filter((doc: unknown): doc is StoredDoc => !!doc && typeof doc === "object")
-    : [];
-
-  if (documents.length > 0) return documents;
-
-  const hasLegacyDoc =
-    rawData?.doc_type ||
-    rawData?.label ||
-    rawData?.email_content ||
-    rawData?.link_url ||
-    rawData?.file_path ||
-    rowFilePath;
-
-  if (!hasLegacyDoc) return [];
-
-  let legacyType: DocType = "pdf";
-  if (rawData?.doc_type === "pdf" || rawData?.doc_type === "word" || rawData?.doc_type === "email" || rawData?.doc_type === "link") {
-    legacyType = rawData.doc_type;
-  } else if (rawData?.link_url) {
-    legacyType = "link";
-  } else if (rawData?.email_content) {
-    legacyType = "email";
-  }
-
-  return [{
-    id: `legacy-${crypto.randomUUID()}`,
-    type: legacyType,
-    label: rawData?.label || rawData?.file_name || "Document",
-    file_name: rawData?.file_name || null,
-    file_path: rawData?.file_path || rowFilePath || null,
-    email_content: rawData?.email_content || null,
-    link_url: rawData?.link_url || null,
-    added_at: rawData?.added_at || new Date().toISOString(),
-  }];
-};
-
-function AddReportsDialog({ funds, availableQuarters, defaultQuarterDate, onClose }: {
-  funds: any[]; availableQuarters: { label: string; date: string }[]; defaultQuarterDate: string; onClose: () => void;
-}) {
-  const qc = useQueryClient();
-  const [selectedQuarterDate, setSelectedQuarterDate] = useState(defaultQuarterDate);
-  const [expandedFund, setExpandedFund] = useState<string | null>(null);
-  const [docs, setDocs] = useState<Record<string, DocEntry[]>>({});
-
-  // Per-fund inline form state
-  const [activeInput, setActiveInput] = useState<Record<string, DocType | null>>({});
-  const [inputLabel, setInputLabel] = useState<Record<string, string>>({});
-  const [inputFile, setInputFile] = useState<Record<string, File | null>>({});
-  const [inputContent, setInputContent] = useState<Record<string, string>>({});
-  const [inputUrl, setInputUrl] = useState<Record<string, string>>({});
-  const [uploading, setUploading] = useState<Record<string, boolean>>({});
-  const [uploadSuccess, setUploadSuccess] = useState<Record<string, boolean>>({});
-  const [savingAll, setSavingAll] = useState(false);
-
-  const resetSession = (collapseFunds = false) => {
-    setDocs({});
-    setActiveInput({});
-    setInputLabel({});
-    setInputFile({});
-    setInputContent({});
-    setInputUrl({});
-    setUploading({});
-    setUploadSuccess({});
-    if (collapseFunds) setExpandedFund(null);
-  };
-
-  const pendingUploadPaths = useMemo(
-    () => Object.values(docs).flatMap((entries) => entries.map((entry) => entry.storagePath).filter((path): path is string => !!path)),
-    [docs],
-  );
-
-  const anyUploading = Object.values(uploading).some(Boolean);
-
-  const clearInput = (fundId: string, closeInput = true) => {
-    if (closeInput) {
-      setActiveInput(prev => ({ ...prev, [fundId]: null }));
-    }
-    setInputLabel(prev => ({ ...prev, [fundId]: "" }));
-    setInputFile(prev => ({ ...prev, [fundId]: null }));
-    setInputContent(prev => ({ ...prev, [fundId]: "" }));
-    setInputUrl(prev => ({ ...prev, [fundId]: "" }));
-  };
-
-  const cleanupPendingUploads = async (paths = pendingUploadPaths) => {
-    if (!paths.length) return;
-    await supabase.storage.from("fund-reports").remove(paths);
-  };
-
-  const handleQuarterChange = async (nextQuarterDate: string) => {
-    await cleanupPendingUploads();
-    resetSession(true);
-    setSelectedQuarterDate(nextQuarterDate);
-  };
-
-  const handleClose = async () => {
-    if (anyUploading || savingAll) return;
-    await cleanupPendingUploads();
-    resetSession(true);
-    onClose();
-  };
-
-  const handleAttachDocument = async (fundId: string, file: File | null) => {
-    if (!file) return;
-    const label = inputLabel[fundId]?.trim() || file.name;
-
-    setInputFile(prev => ({ ...prev, [fundId]: file }));
-    setUploading(prev => ({ ...prev, [fundId]: true }));
-    setUploadSuccess(prev => ({ ...prev, [fundId]: false }));
-
-    try {
-      const fileName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
-      const storagePath = `${selectedQuarterDate}/${fundId}/${fileName}`;
-      const { error: uploadError } = await supabase.storage
-        .from("fund-reports")
-        .upload(storagePath, file);
-      if (uploadError) throw uploadError;
-
-      const docType: DocType = file.name.toLowerCase().endsWith(".pdf") ? "pdf" : "word";
-      const entry: DocEntry = {
-        id: crypto.randomUUID(),
-        type: docType,
-        label,
-        fileName: file.name,
-        storagePath,
-        addedAt: new Date().toISOString(),
-      };
-
-      setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
-      setUploadSuccess(prev => ({ ...prev, [fundId]: true }));
-      setTimeout(() => {
-        setUploadSuccess(prev => ({ ...prev, [fundId]: false }));
-      }, 1200);
-      clearInput(fundId, false);
-    } catch (err: any) {
-      toast.error(err.message || "Upload failed");
-    } finally {
-      setUploading(prev => ({ ...prev, [fundId]: false }));
-      setInputFile(prev => ({ ...prev, [fundId]: null }));
-    }
-  };
-
-  const handleAddEmail = async (fundId: string) => {
-    const content = inputContent[fundId]?.trim();
-    if (!content) { toast.error("Please paste email content"); return; }
-    const label = inputLabel[fundId]?.trim() || "Email";
-
-    const entry: DocEntry = { id: crypto.randomUUID(), type: "email", label, content, addedAt: new Date().toISOString() };
-    setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
-    clearInput(fundId);
-    toast.success("Email added");
-  };
-
-  const handleAddLink = async (fundId: string) => {
-    const url = inputUrl[fundId]?.trim();
-    if (!url) { toast.error("Please enter a URL"); return; }
-    const label = inputLabel[fundId]?.trim() || url;
-
-    const entry: DocEntry = { id: crypto.randomUUID(), type: "link", label, url, addedAt: new Date().toISOString() };
-    setDocs(prev => ({ ...prev, [fundId]: [...(prev[fundId] || []), entry] }));
-    clearInput(fundId);
-    toast.success("Link added");
-  };
-
-  const removeDoc = async (fundId: string, docId: string) => {
-    const entry = (docs[fundId] || []).find((doc) => doc.id === docId);
-    setDocs(prev => ({ ...prev, [fundId]: (prev[fundId] || []).filter(d => d.id !== docId) }));
-
-    if (entry?.storagePath) {
-      await supabase.storage.from("fund-reports").remove([entry.storagePath]);
-    }
-  };
-
-  const handleSaveAll = async () => {
-    const docsByFund = Object.entries(docs).filter(([, entries]) => entries.length > 0);
-    if (!docsByFund.length || anyUploading) return;
-
-    setSavingAll(true);
-
-    try {
-      const fundIds = docsByFund.map(([fundId]) => fundId);
-      const { data: existingRows, error: existingError } = await supabase
-        .from("fund_financial_statements")
-        .select("fund_id, extracted_data, confirmed, file_path")
-        .eq("quarter_date", selectedQuarterDate)
-        .in("fund_id", fundIds);
-
-      if (existingError) throw existingError;
-
-      const existingMap = new Map((existingRows || []).map((row) => [row.fund_id, row]));
-      const rows = docsByFund.map(([fundId, entries]) => {
-        const existing = existingMap.get(fundId);
-        const existingData = (existing?.extracted_data as any) || {};
-        const {
-          documents: _documents,
-          doc_type: _docType,
-          label: _label,
-          file_path: _legacyFilePath,
-          email_content: _legacyEmailContent,
-          link_url: _legacyLinkUrl,
-          added_at: _legacyAddedAt,
-          ...restExistingData
-        } = existingData;
-
-        const mergedDocuments = [
-          ...normalizeStoredDocs(existingData, existing?.file_path || null),
-          ...entries.map(serializeDocEntry),
-        ];
-
-        const latestFilePath =
-          [...entries].reverse().find((entry) => entry.storagePath)?.storagePath ||
-          existing?.file_path ||
-          null;
-
-        return {
-          fund_id: fundId,
-          quarter_date: selectedQuarterDate,
-          extracted_data: {
-            ...restExistingData,
-            documents: mergedDocuments,
-          },
-          file_path: latestFilePath,
-          confirmed: existing?.confirmed ?? false,
-        };
-      });
-
-      const { error: upsertError } = await supabase
-        .from("fund_financial_statements")
-        .upsert(rows, { onConflict: "fund_id,quarter_date" });
-
-      if (upsertError) throw upsertError;
-
-      toast.success("All documents saved");
-      resetSession(true);
-      qc.invalidateQueries({ queryKey: ["all-fund-fs-status"] });
-      qc.invalidateQueries({ queryKey: ["latest-fs-per-fund"] });
-      qc.invalidateQueries({ queryKey: ["fund-fs"] });
-      onClose();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save documents");
-    } finally {
-      setSavingAll(false);
-    }
-  };
-
-  const totalDocs = Object.values(docs).reduce((s, arr) => s + arr.length, 0);
-  const fundsWithDocs = Object.values(docs).filter(arr => arr.length > 0).length;
-
-  const docTypeIcon = (type: DocType) => {
-    switch (type) {
-      case "pdf": return <span className="text-sm">📄</span>;
-      case "word": return <span className="text-sm">📝</span>;
-      case "email": return <span className="text-sm">✉️</span>;
-      case "link": return <span className="text-sm">🔗</span>;
-    }
-  };
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open && !anyUploading && !savingAll) void handleClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
-          <DialogTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" /> Add Reports
-          </DialogTitle>
-          <div className="flex items-center gap-3 pt-2">
-            <span className="text-sm text-muted-foreground">Quarter:</span>
-            <Select value={selectedQuarterDate} onValueChange={(d) => void handleQuarterChange(d)} disabled={anyUploading || savingAll}>
-              <SelectTrigger className="h-8 w-40 text-sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {availableQuarters.map(q => (
-                  <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
-          {funds.map((fund: any) => {
-            const isExpanded = expandedFund === fund.id;
-            const fundDocs = docs[fund.id] || [];
-            const currentInput = activeInput[fund.id] || null;
-
-            return (
-              <div key={fund.id} className="rounded-lg border border-border bg-card overflow-hidden">
-                {/* Fund header */}
-                <button
-                  className="w-full flex items-center gap-3 p-3 text-left hover:bg-surface-1 transition-colors"
-                  onClick={() => setExpandedFund(isExpanded ? null : fund.id)}
-                >
-                  {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{fund.fund_name}</p>
-                    <p className="text-xs text-muted-foreground">{fund.strategy || ""}{fund.vintage_year ? ` · ${fund.vintage_year}` : ""}</p>
-                  </div>
-                  {fundDocs.length > 0 && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-[hsl(var(--gold))]/15 text-[hsl(var(--gold))] font-medium shrink-0">
-                      {fundDocs.length}
-                    </span>
-                  )}
-                </button>
-
-                {/* Expanded content */}
-                {isExpanded && (
-                  <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
-                    {/* Action buttons */}
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm" variant="outline"
-                        className={cn("h-7 text-xs gap-1.5", currentInput === "pdf" && "border-[hsl(var(--gold))] text-[hsl(var(--gold))]")}
-                        onClick={() => setActiveInput(prev => ({ ...prev, [fund.id]: prev[fund.id] === "pdf" ? null : "pdf" }))}
-                      >
-                        📎 Attach Document
-                      </Button>
-                      <Button
-                        size="sm" variant="outline"
-                        className={cn("h-7 text-xs gap-1.5", currentInput === "email" && "border-[hsl(var(--gold))] text-[hsl(var(--gold))]")}
-                        onClick={() => setActiveInput(prev => ({ ...prev, [fund.id]: prev[fund.id] === "email" ? null : "email" }))}
-                      >
-                        ✉️ Paste Email
-                      </Button>
-                      <Button
-                        size="sm" variant="outline"
-                        className={cn("h-7 text-xs gap-1.5", currentInput === "link" && "border-[hsl(var(--gold))] text-[hsl(var(--gold))]")}
-                        onClick={() => setActiveInput(prev => ({ ...prev, [fund.id]: prev[fund.id] === "link" ? null : "link" }))}
-                      >
-                        🔗 Add Link
-                      </Button>
-                    </div>
-
-                    {/* Inline input area */}
-                    {currentInput === "pdf" && (
-                      <div className="rounded-md border border-border bg-surface-1 p-3 space-y-2">
-                        <Input
-                          className="h-8 text-xs"
-                          placeholder="Name this document (optional)"
-                          value={inputLabel[fund.id] || ""}
-                          onChange={e => setInputLabel(prev => ({ ...prev, [fund.id]: e.target.value }))}
-                        />
-                        <Input
-                          type="file"
-                          accept=".pdf,.doc,.docx"
-                          className="h-8 text-xs"
-                          disabled={uploading[fund.id]}
-                          onChange={(e) => {
-                            const file = e.target.files?.[0] || null;
-                            void handleAttachDocument(fund.id, file);
-                            e.currentTarget.value = "";
-                          }}
-                        />
-                        {uploading[fund.id] && (
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            <span className="truncate">Uploading {inputFile[fund.id]?.name || "document"}...</span>
-                          </div>
-                        )}
-                        {!uploading[fund.id] && uploadSuccess[fund.id] && (
-                          <div className="flex items-center gap-2 text-xs text-[hsl(var(--gold))]">
-                            <Check className="h-3.5 w-3.5" />
-                            <span>Uploaded and added to this session</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {currentInput === "email" && (
-                      <div className="rounded-md border border-border bg-surface-1 p-3 space-y-2">
-                        <Input
-                          className="h-8 text-xs"
-                          placeholder="Label (optional)"
-                          value={inputLabel[fund.id] || ""}
-                          onChange={e => setInputLabel(prev => ({ ...prev, [fund.id]: e.target.value }))}
-                        />
-                        <Textarea
-                          className="text-xs min-h-[80px] resize-none"
-                          placeholder="Paste email content here..."
-                          value={inputContent[fund.id] || ""}
-                          onChange={e => setInputContent(prev => ({ ...prev, [fund.id]: e.target.value }))}
-                        />
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleAddEmail(fund.id)}>
-                          <Plus className="h-3 w-3" /> Add
-                        </Button>
-                      </div>
-                    )}
-
-                    {currentInput === "link" && (
-                      <div className="rounded-md border border-border bg-surface-1 p-3 space-y-2">
-                        <Input
-                          className="h-8 text-xs"
-                          placeholder="Label (optional)"
-                          value={inputLabel[fund.id] || ""}
-                          onChange={e => setInputLabel(prev => ({ ...prev, [fund.id]: e.target.value }))}
-                        />
-                        <Input
-                          type="url"
-                          className="h-8 text-xs"
-                          placeholder="https://..."
-                          value={inputUrl[fund.id] || ""}
-                          onChange={e => setInputUrl(prev => ({ ...prev, [fund.id]: e.target.value }))}
-                        />
-                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleAddLink(fund.id)}>
-                          <Plus className="h-3 w-3" /> Add
-                        </Button>
-                      </div>
-                    )}
-
-                    {/* Document list */}
-                    {fundDocs.length > 0 && (
-                      <div className="space-y-1.5 pt-1">
-                        {fundDocs.map(doc => (
-                          <div key={doc.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-muted/50 text-xs">
-                            {docTypeIcon(doc.type)}
-                            <span className="flex-1 truncate text-foreground">{doc.label || doc.fileName || doc.type}</span>
-                            <button onClick={() => void removeDoc(fund.id, doc.id)} className="text-muted-foreground hover:text-destructive transition-colors">
-                              <X className="h-3.5 w-3.5" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {totalDocs > 0 ? `${totalDocs} document${totalDocs !== 1 ? "s" : ""} added across ${fundsWithDocs} fund${fundsWithDocs !== 1 ? "s" : ""}` : "No documents added yet"}
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => void handleClose()} disabled={savingAll || anyUploading}>Cancel</Button>
-            <Button
-              size="sm"
-              className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
-              onClick={handleSaveAll}
-              disabled={totalDocs === 0 || anyUploading || savingAll}
-            >
-              {savingAll ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving...</> : "Save All"}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -1126,209 +1267,6 @@ function AddFundDialog({ onClose }: { onClose: () => void }) {
             Add Fund
           </Button>
         </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ─── Bulk Upload Dialog ─────────────────────────────────────────────
-
-function BulkUploadDialog({ funds, defaultQuarterDate, availableQuarters, onClose }: {
-  funds: any[];
-  defaultQuarterDate: string;
-  availableQuarters: { label: string; date: string }[];
-  onClose: () => void;
-}) {
-  const navigate = useNavigate();
-  const qc = useQueryClient();
-  const [quarterDate, setQuarterDate] = useState(defaultQuarterDate);
-  const [files, setFiles] = useState<Record<string, File | null>>({});
-  const [extracting, setExtracting] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [allDone, setAllDone] = useState(false);
-
-  const filledCount = Object.values(files).filter(Boolean).length;
-
-  const handleExtractAll = async () => {
-    const entries = Object.entries(files).filter(([, f]) => f != null) as [string, File][];
-    if (entries.length === 0) return;
-
-    setExtracting(true);
-    setProgress({ done: 0, total: entries.length });
-
-    let completed = 0;
-
-    // Process in parallel (batches of 3 to avoid rate limits)
-    const batchSize = 3;
-    for (let i = 0; i < entries.length; i += batchSize) {
-      const batch = entries.slice(i, i + batchSize);
-      await Promise.all(batch.map(async ([fundId, file]) => {
-        try {
-          // Upload file
-          const fileName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
-          const storagePath = `${quarterDate}/${fundId}/${fileName}`;
-          await supabase.storage.from("fund-reports").upload(storagePath, file);
-
-          // Read file as base64
-          const arrayBuffer = await file.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-          // Fetch template if exists
-          const { data: template } = await supabase
-            .from("fund_extraction_templates")
-            .select("*")
-            .eq("fund_id", fundId)
-            .maybeSingle();
-
-          // Call extraction edge function
-          const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
-            body: { pdf_base64: base64, file_name: file.name, template: template || undefined },
-          });
-
-          if (error) throw error;
-
-          const summary = extracted?.fund_summary || {};
-          const companies = extracted?.portfolio_companies || [];
-
-          // Insert into staged_fund_extractions
-          await supabase.from("staged_fund_extractions").insert({
-            fund_id: fundId,
-            quarter_date: quarterDate,
-            source_file_path: storagePath,
-            source_file_name: file.name,
-            extracted_nav: summary.nav,
-            extracted_capital_called: summary.total_capital_called,
-            extracted_distributions: summary.total_distributions,
-            extracted_gross_irr: summary.gross_irr,
-            extracted_gross_tvpi: summary.gross_tvpi,
-            extracted_net_irr: summary.net_irr,
-            extracted_net_tvpi: summary.net_tvpi,
-            extracted_dpi: summary.dpi,
-            extracted_rvpi: summary.rvpi,
-            extracted_pic: summary.pic,
-            extracted_commitment: summary.commitment,
-            extracted_unfunded: summary.unfunded_commitment,
-            extracted_companies: companies,
-            raw_extraction: extracted,
-            confidence_score: extracted?.extraction_confidence ?? null,
-            extraction_model: "gemini-2.5-pro",
-          } as any);
-
-          completed++;
-          setProgress({ done: completed, total: entries.length });
-        } catch (err: any) {
-          completed++;
-          setProgress({ done: completed, total: entries.length });
-          const fund = funds.find(f => f.id === fundId);
-          toast.error(`Failed: ${fund?.fund_name || fundId}: ${err.message}`);
-        }
-      }));
-    }
-
-    setAllDone(true);
-    setExtracting(false);
-    qc.invalidateQueries({ queryKey: ["staged-extractions"] });
-    qc.invalidateQueries({ queryKey: ["pending-review-count"] });
-    toast.success(`Extracted ${completed}/${entries.length} reports. Ready for review.`);
-  };
-
-  return (
-    <Dialog open onOpenChange={(open) => { if (!open && !extracting) onClose(); }}>
-      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
-        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
-          <DialogTitle className="flex items-center gap-2">
-            <FileStack className="h-5 w-5" /> Bulk Upload Reports
-          </DialogTitle>
-          <div className="flex items-center gap-3 pt-2">
-            <span className="text-sm text-muted-foreground">Quarter:</span>
-            <Select value={quarterDate} onValueChange={setQuarterDate} disabled={extracting}>
-              <SelectTrigger className="h-8 w-40 text-sm"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {availableQuarters.map(q => (
-                  <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </DialogHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
-          {extracting && (
-            <div className="flex items-center gap-3 p-3 bg-surface-1 rounded-lg mb-3">
-              <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" />
-              <span className="text-sm text-muted-foreground">Extracting {progress.done}/{progress.total} funds...</span>
-              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-[hsl(var(--gold))] transition-all"
-                  style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          )}
-
-          {funds.map((fund: any) => (
-            <div key={fund.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{fund.fund_name}</p>
-                <p className="text-xs text-muted-foreground">{fund.strategy || ""}{fund.vintage_year ? ` · ${fund.vintage_year}` : ""}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {files[fund.id] ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-[hsl(var(--gold))] truncate max-w-[150px]">{files[fund.id]!.name}</span>
-                    <button onClick={() => setFiles(prev => ({ ...prev, [fund.id]: null }))} className="text-muted-foreground hover:text-destructive">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <label className="cursor-pointer">
-                    <Input
-                      type="file"
-                      accept=".pdf"
-                      className="hidden"
-                      disabled={extracting}
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        if (file) setFiles(prev => ({ ...prev, [fund.id]: file }));
-                        e.currentTarget.value = "";
-                      }}
-                    />
-                    <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border hover:bg-surface-1 transition-colors cursor-pointer">
-                      <Upload className="h-3 w-3" /> Upload PDF
-                    </span>
-                  </label>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">
-            {filledCount} file{filledCount !== 1 ? "s" : ""} selected
-          </span>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose} disabled={extracting}>Cancel</Button>
-            {allDone ? (
-              <Button
-                size="sm"
-                className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90 gap-2"
-                onClick={() => { onClose(); navigate("/review"); }}
-              >
-                <ClipboardCheck className="h-3.5 w-3.5" /> Go to Review
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
-                onClick={handleExtractAll}
-                disabled={filledCount === 0 || extracting}
-              >
-                {extracting ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Extracting...</> : `Extract All (${filledCount})`}
-              </Button>
-            )}
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
