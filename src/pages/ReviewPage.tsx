@@ -37,6 +37,20 @@ export default function ReviewPage() {
     },
   });
 
+  // Pending direct imports
+  const { data: pendingDirects = [], isLoading: directsLoading } = useQuery({
+    queryKey: ["staged-direct-imports", "pending"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("staged_direct_imports")
+        .select("*")
+        .in("status", ["pending_review", "needs_revision"])
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
   // Reconciliation warnings
   const { data: warnings = [] } = useQuery({
     queryKey: ["reconciliation-warnings"],
