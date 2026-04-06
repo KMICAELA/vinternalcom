@@ -103,10 +103,7 @@ export default function FundsPage() {
     return { confirmedSet, latestMap };
   }, [allFsForQuarter, latestFsPerFund]);
 
-  const activeFunds = useMemo(() => {
-    if (!qData) return [];
-    return funds.filter((fund: any) => qData.activeFunds.includes(fund.fund_name));
-  }, [funds, qData]);
+  const activeFunds = funds;
 
   const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
   const totalActive = activeFunds.length;
