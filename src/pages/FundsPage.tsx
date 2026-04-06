@@ -370,6 +370,64 @@ function ReportTrackerRow({
   const [uploading, setUploading] = useState(false);
   const [urlValue, setUrlValue] = useState("");
   const [savingUrl, setSavingUrl] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"document" | "email" | "link">("document");
+  const [emailText, setEmailText] = useState("");
+  const [submittingEmail, setSubmittingEmail] = useState(false);
+
+  const handleEmailSubmit = async () => {
+    if (!emailText.trim()) return;
+    setSubmittingEmail(true);
+    try {
+      const arrayBuffer = new TextEncoder().encode(emailText);
+      const base64 = btoa(String.fromCharCode(...arrayBuffer));
+
+      const { data: template } = await supabase
+        .from("fund_extraction_templates")
+        .select("*")
+        .eq("fund_id", fund.fundId)
+        .maybeSingle();
+
+      const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
+        body: { pdf_base64: base64, file_name: "email_paste.txt", template: template || undefined },
+      });
+      if (error) throw error;
+
+      const summary = extracted?.fund_summary || {};
+      const companies = extracted?.portfolio_companies || [];
+
+      await supabase.from("staged_fund_extractions").insert({
+        fund_id: fund.fundId,
+        quarter_date: quarterDate,
+        source_file_name: "Email paste",
+        extracted_nav: summary.nav,
+        extracted_capital_called: summary.total_capital_called,
+        extracted_distributions: summary.total_distributions,
+        extracted_gross_irr: summary.gross_irr,
+        extracted_gross_tvpi: summary.gross_tvpi,
+        extracted_net_irr: summary.net_irr,
+        extracted_net_tvpi: summary.net_tvpi,
+        extracted_dpi: summary.dpi,
+        extracted_rvpi: summary.rvpi,
+        extracted_pic: summary.pic,
+        extracted_commitment: summary.commitment,
+        extracted_unfunded: summary.unfunded_commitment,
+        extracted_companies: companies,
+        raw_extraction: extracted,
+        confidence_score: extracted?.extraction_confidence ?? null,
+        extraction_model: "gemini-2.5-pro",
+      } as any);
+
+      toast.success("Email content submitted for extraction.");
+      qc.invalidateQueries({ queryKey: ["report-coverage"] });
+      qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+      setEmailText("");
+      onToggleUpload();
+    } catch (err: any) {
+      toast.error(err.message || "Email extraction failed");
+    } finally {
+      setSubmittingEmail(false);
+    }
+  };
 
   const handleFileUpload = async (file: File) => {
     setUploading(true);
