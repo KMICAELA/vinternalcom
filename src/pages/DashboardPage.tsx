@@ -265,22 +265,16 @@ export default function DashboardPage() {
   const { data: directs = [] } = useDirectInvestments();
   const { data: holdings = [] } = useUnderlyingPortfolio(activeQuarter.date);
   const cm = useConsolidatedMetrics();
-  const qData = getQuarterData(activeQuarter.quarter);
+  const { data: fqm } = useFundQuarterMetrics(activeQuarter.date);
+  const fundNAVs = fqm?.fundNAVs || {};
+  const fundTVPIs = fqm?.fundTVPIs || {};
 
-  const activeFunds = useMemo(() => {
-    if (!qData) return [];
-    return funds.filter((f: any) => qData.activeFunds.includes(f.fund_name));
-  }, [funds, qData]);
-
-  const activeDirects = useMemo(() => {
-    if (!qData) return [];
-    const activeNames = new Set(qData.activeDirects.map(d => d.name));
-    return directs.filter((d: any) => activeNames.has(d.company_name));
-  }, [directs, qData]);
-
-  const totalCommitment = qData?.totalCommitment ?? 0;
+  // All funds are active (no registry filter needed)
+  const activeFunds = funds;
   const numFunds = activeFunds.length;
-  const numDirects = qData?.activeDirects.length ?? 0;
+  const numDirects = directs.length;
+
+  const totalCommitment = cm.totalCommitment > 0 ? cm.totalCommitment : funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0) + directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
 
   const buildHoldingsCount = (field: string) => {
     const map: Record<string, number> = {};
