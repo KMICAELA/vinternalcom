@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Save, Lock, ArrowRight, AlertTriangle } from "lucide-react";
+import { Save, Lock, ArrowRight, AlertTriangle, Database, Loader2, CheckCircle2 } from "lucide-react";
+import { QUARTER_REGISTRY } from "@/data/quarterRegistry.legacy";
 
 const QUARTERS = ["1Q24", "2Q24", "3Q24", "4Q24", "1Q25", "2Q25", "3Q25", "4Q25", "1Q26", "2Q26", "3Q26", "4Q26"];
 const QUARTER_DATES: Record<string, string> = {
