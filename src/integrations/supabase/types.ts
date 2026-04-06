@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          performed_by: string
+          quarter_date: string | null
+          target_id: string | null
+          target_table: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          performed_by: string
+          quarter_date?: string | null
+          target_id?: string | null
+          target_table: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          performed_by?: string
+          quarter_date?: string | null
+          target_id?: string | null
+          target_table?: string
+        }
+        Relationships: []
+      }
       direct_investments: {
         Row: {
           co_investors: string | null
@@ -393,9 +426,13 @@ export type Database = {
       }
       quarterly_history: {
         Row: {
+          computation_source: string
+          confirmed_at: string | null
+          confirmed_by: string | null
           contribution: number
           created_at: string
           distribution: number
+          dpi: number
           gross_irr: number
           gross_tvpi: number
           id: string
@@ -403,13 +440,24 @@ export type Database = {
           nav: number
           net_irr: number
           net_tvpi: number
+          pic: number
           quarter: string
           quarter_date: string
+          rvpi: number
+          total_called: number
+          total_commitment: number
+          total_distributed: number
+          total_nav: number
+          unfunded: number
         }
         Insert: {
+          computation_source?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           contribution?: number
           created_at?: string
           distribution?: number
+          dpi?: number
           gross_irr?: number
           gross_tvpi?: number
           id?: string
@@ -417,13 +465,24 @@ export type Database = {
           nav?: number
           net_irr?: number
           net_tvpi?: number
+          pic?: number
           quarter: string
           quarter_date: string
+          rvpi?: number
+          total_called?: number
+          total_commitment?: number
+          total_distributed?: number
+          total_nav?: number
+          unfunded?: number
         }
         Update: {
+          computation_source?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           contribution?: number
           created_at?: string
           distribution?: number
+          dpi?: number
           gross_irr?: number
           gross_tvpi?: number
           id?: string
@@ -431,8 +490,15 @@ export type Database = {
           nav?: number
           net_irr?: number
           net_tvpi?: number
+          pic?: number
           quarter?: string
           quarter_date?: string
+          rvpi?: number
+          total_called?: number
+          total_commitment?: number
+          total_distributed?: number
+          total_nav?: number
+          unfunded?: number
         }
         Relationships: []
       }

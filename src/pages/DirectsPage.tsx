@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useDirectInvestments, useActiveQuarter } from "@/hooks/usePortfolioData";
-import { getQuarterData } from "@/data/quarterRegistry";
+import { useQuery as useDirectValQuery } from "@tanstack/react-query";
 import { formatCurrency, formatMultiple } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -84,63 +84,11 @@ export default function DirectsPage() {
     setEditingId(null);
   };
 
-  // Filter directs by quarter
-  const qData = getQuarterData(activeQuarter.quarter);
-  // Build registry map for cost/fmv overrides
-  const registryDirectsMap = useMemo(() => {
-    if (!qData) return new Map<string, { cost: number; fmv: number }>();
-    const map = new Map<string, { cost: number; fmv: number }>();
-    for (const d of qData.activeDirects) {
-      map.set(d.name, { cost: d.cost, fmv: d.fmv });
-    }
-    return map;
-  }, [qData]);
+  // All directs are shown (no registry filter)
+  const activeDirects = directs;
 
-  const activeDirects = useMemo(() => {
-    if (!qData) return [];
-    // Match DB records to registry entries (case-insensitive, partial match)
-    // Track matched DB ids to avoid reusing the same DB record for multiple registry entries
-    const matchedDbIds = new Set<string>();
-    const result: any[] = [];
-    for (const regDirect of qData.activeDirects) {
-      const dbMatch = directs.find((d: any) =>
-        !matchedDbIds.has(d.id) && (
-          d.company_name === regDirect.name ||
-          d.company_name.toUpperCase().includes(regDirect.name.toUpperCase()) ||
-          regDirect.name.toUpperCase().includes(d.company_name.toUpperCase())
-        )
-      );
-      if (dbMatch) {
-        matchedDbIds.add(dbMatch.id);
-        // Store the registry entry name so getCost/getFmv use the correct entry
-        result.push({ ...dbMatch, _registryName: regDirect.name });
-      } else {
-        // Create a synthetic row from registry data
-        result.push({
-          id: `registry-${regDirect.name}`,
-          company_name: regDirect.name,
-          cost_basis: regDirect.cost,
-          investment_date: null,
-          instrument: null,
-          round: null,
-          co_investors: null,
-          _fromRegistry: true,
-          _registryName: regDirect.name,
-        });
-      }
-    }
-    return result;
-  }, [directs, qData]);
-
-  // Use registry cost/fmv — always look up by the matched registry name, not DB name
-  const getCost = (d: any) => {
-    const regEntry = d._registryName ? registryDirectsMap.get(d._registryName) : null;
-    return regEntry?.cost ?? Number(d.cost_basis);
-  };
-  const getFmv = (d: any) => {
-    const regEntry = d._registryName ? registryDirectsMap.get(d._registryName) : null;
-    return regEntry?.fmv ?? (valMap.get(d.id)?.fmv || 0);
-  };
+  const getCost = (d: any) => Number(d.cost_basis);
+  const getFmv = (d: any) => valMap.get(d.id)?.fmv || 0;
 
   const totalCost = activeDirects.reduce((s: number, d: any) => s + getCost(d), 0);
   const totalFmv = activeDirects.reduce((s: number, d: any) => s + getFmv(d), 0);

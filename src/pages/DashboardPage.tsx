@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { useFunds, useDirectInvestments, useActiveQuarter, useUnderlyingPortfolio } from "@/hooks/usePortfolioData";
 import { formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
-import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
-import { getQuarterData } from "@/data/quarterRegistry";
+import { useConsolidatedMetrics, useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Building2, Target, TrendingUp, DollarSign, Layers, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import LogoMark from "@/components/LogoMark";
@@ -266,22 +265,16 @@ export default function DashboardPage() {
   const { data: directs = [] } = useDirectInvestments();
   const { data: holdings = [] } = useUnderlyingPortfolio(activeQuarter.date);
   const cm = useConsolidatedMetrics();
-  const qData = getQuarterData(activeQuarter.quarter);
+  const { data: fqm } = useFundQuarterMetrics(activeQuarter.date);
+  const fundNAVs = fqm?.fundNAVs || {};
+  const fundTVPIs = fqm?.fundTVPIs || {};
 
-  const activeFunds = useMemo(() => {
-    if (!qData) return [];
-    return funds.filter((f: any) => qData.activeFunds.includes(f.fund_name));
-  }, [funds, qData]);
-
-  const activeDirects = useMemo(() => {
-    if (!qData) return [];
-    const activeNames = new Set(qData.activeDirects.map(d => d.name));
-    return directs.filter((d: any) => activeNames.has(d.company_name));
-  }, [directs, qData]);
-
-  const totalCommitment = qData?.totalCommitment ?? 0;
+  // All funds are active (no registry filter needed)
+  const activeFunds = funds;
   const numFunds = activeFunds.length;
-  const numDirects = qData?.activeDirects.length ?? 0;
+  const numDirects = directs.length;
+
+  const totalCommitment = cm.totalCommitment > 0 ? cm.totalCommitment : funds.reduce((s: number, f: any) => s + Number(f.commitment_amount), 0) + directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0);
 
   const buildHoldingsCount = (field: string) => {
     const map: Record<string, number> = {};
@@ -326,7 +319,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment)} icon={DollarSign} highlight />
           <MetricCard label="Fund Investments" value={formatCurrency(fundCommitmentTotal)} icon={Building2} sub={`${numFunds} funds`} />
-          <MetricCard label="Direct Investments" value={qData && qData.directsCost > 0 ? formatCurrency(qData.directsCost) : "—"} icon={Target} sub={`${numDirects} companies`} />
+          <MetricCard label="Direct Investments" value={directs.length > 0 ? formatCurrency(directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0)) : "—"} icon={Target} sub={`${numDirects} companies`} />
           <MetricCard label="Net TVPI" value={cm.netTvpi > 0 ? formatMultiple(cm.netTvpi) : "—"} highlight />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -396,9 +389,9 @@ export default function DashboardPage() {
                   const bDate = b.start_date || 'zzzz';
                   return aDate.localeCompare(bDate);
                 }).map((fund: any) => {
-                  const nav = qData?.fundNAVs[fund.fund_name] ?? 0;
-                  const tvpi = qData?.fundTVPIs[fund.fund_name] ?? null;
-                  const isActive = qData?.activeFunds.includes(fund.fund_name);
+                  const nav = fundNAVs[fund.fund_name] ?? 0;
+                  const tvpi = fundTVPIs[fund.fund_name] ?? null;
+                  const isActive = true;
                   return (
                     <tr key={fund.id} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
                       <td className="px-4 py-2.5 font-medium text-foreground">{fund.fund_name}</td>
@@ -441,38 +434,27 @@ export default function DashboardPage() {
           <div className="px-5 py-3.5 border-b border-border/20">
             <h3 className="text-sm font-medium text-foreground">Direct Investments ({numDirects})</h3>
           </div>
-          {qData && qData.activeDirects.length > 0 ? (
+          {directs.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-muted-foreground" style={{ backgroundColor: "#12141C" }}>
                     <th className="text-left px-4 py-2.5 font-medium">Company</th>
                     <th className="text-right px-4 py-2.5 font-medium">TWH Cost</th>
-                    <th className="text-right px-4 py-2.5 font-medium">FMV</th>
-                    <th className="text-right px-4 py-2.5 font-medium">MOIC</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {qData.activeDirects.map((d, i) => {
-                    const moic = d.cost > 0 ? d.fmv / d.cost : 0;
-                    return (
-                      <tr key={i} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
-                        <td className="px-4 py-2.5 font-medium text-foreground">{d.name}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(d.cost)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(d.fmv)}</td>
-                        <td className={cn("px-4 py-2.5 text-right font-mono font-medium", moic >= 1 ? "text-[hsl(var(--positive))]" : "text-[hsl(var(--negative))]")}>
-                          {moic > 0 ? formatMultiple(moic) : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {directs.map((d: any) => (
+                    <tr key={d.id} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-foreground">{d.company_name}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(Number(d.cost_basis))}</td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-border/20 font-medium" style={{ backgroundColor: "#12141C" }}>
                     <td className="px-4 py-2.5">Total ({numDirects} directs)</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(qData.directsCost)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(qData.directsFMV)}</td>
-                    <td />
+                    <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0))}</td>
                   </tr>
                 </tfoot>
               </table>

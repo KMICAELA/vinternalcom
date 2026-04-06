@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
 import { useQuarterContext } from "@/contexts/QuarterContext";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
-import { getQuarterData } from "@/data/quarterRegistry";
+import { useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,7 @@ export default function FundsPage() {
   const { data: funds = [], isLoading } = useFunds();
   const activeQuarter = useActiveQuarter();
   const { defaultQuarter } = useQuarterContext();
-  const qData = getQuarterData(activeQuarter.quarter);
+  const { data: fqm } = useFundQuarterMetrics(activeQuarter.date);
   const cm = useConsolidatedMetrics();
   const [expandedFund, setExpandedFund] = useState<string | null>(null);
   const [addReportsOpen, setAddReportsOpen] = useState(false);
@@ -103,10 +103,7 @@ export default function FundsPage() {
     return { confirmedSet, latestMap };
   }, [allFsForQuarter, latestFsPerFund]);
 
-  const activeFunds = useMemo(() => {
-    if (!qData) return [];
-    return funds.filter((fund: any) => qData.activeFunds.includes(fund.fund_name));
-  }, [funds, qData]);
+  const activeFunds = funds;
 
   const uploadedCount = activeFunds.filter((f: any) => fsStatusMap.confirmedSet.has(f.id)).length;
   const totalActive = activeFunds.length;
@@ -205,10 +202,10 @@ export default function FundsPage() {
           </TableHeader>
           <TableBody>
             {activeFunds.map((fund: any) => {
-              const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
-              const registryNav = qData?.fundNAVs[fund.fund_name] ?? null;
-              const hasTvpiEntry = qData?.fundTVPIs ? fund.fund_name in qData.fundTVPIs : false;
-              const registryTvpi = hasTvpiEntry ? (qData!.fundTVPIs[fund.fund_name] ?? null) : undefined;
+              const hasFS = fsStatusMap.confirmedSet.has(fund.id);
+              const registryNav = fqm?.fundNAVs[fund.fund_name] ?? null;
+              const hasTvpiEntry = fqm?.fundTVPIs ? fund.fund_name in fqm.fundTVPIs : false;
+              const registryTvpi = hasTvpiEntry ? (fqm!.fundTVPIs[fund.fund_name] ?? null) : undefined;
 
               return (
                 <FundRow
@@ -217,8 +214,8 @@ export default function FundsPage() {
                   quarterDate={activeQuarter.date}
                   isExpanded={expandedFund === fund.id}
                   onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
-                  fsStatus={hasActiveQuarterFS ? "uploaded" : "pending"}
-                  fsLabel={hasActiveQuarterFS ? activeQuarter.quarter : "Pending"}
+                  fsStatus={hasFS ? "uploaded" : "pending"}
+                  fsLabel={hasFS ? activeQuarter.quarter : "Pending"}
                   registryNav={registryNav}
                   registryTvpi={registryTvpi}
                 />
