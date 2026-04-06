@@ -62,13 +62,43 @@ serve(async (req) => {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
-    let enhancedPrompt = `Please extract the financial data from this fund financial statement PDF (${file_name || 'document'}).`;
+    // Detect if content is plain text (email paste) vs binary document
+    const isTextContent = file_name?.endsWith('.txt') || file_name === 'email_paste.txt';
+
+    let enhancedPrompt = isTextContent
+      ? `Please extract the financial data from this fund communication/email (${file_name || 'text'}).`
+      : `Please extract the financial data from this fund financial statement PDF (${file_name || 'document'}).`;
 
     if (template && template.field_mappings) {
       enhancedPrompt += `\n\nThis fund has known field mappings from previous extractions. Use these as hints for where to find data:\n${JSON.stringify(template.field_mappings, null, 2)}`;
     }
     if (template && template.sample_extraction) {
       enhancedPrompt += `\n\nHere is a sample of previously extracted data from this fund for reference:\n${JSON.stringify(template.sample_extraction, null, 2)}`;
+    }
+
+    // Build message content based on input type
+    let userContent: any;
+    if (isTextContent) {
+      // Decode base64 text and send as plain text message
+      const textBytes = Uint8Array.from(atob(pdf_base64), c => c.charCodeAt(0));
+      const decodedText = new TextDecoder().decode(textBytes);
+      userContent = [
+        { type: "text", text: enhancedPrompt + "\n\n--- EMAIL/TEXT CONTENT ---\n\n" + decodedText },
+      ];
+    } else {
+      // Send as document attachment for PDFs, Word docs, etc.
+      const mimeType = file_name?.endsWith('.docx')
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : 'application/pdf';
+      userContent = [
+        { type: "text", text: enhancedPrompt },
+        {
+          type: "image_url",
+          image_url: {
+            url: `data:${mimeType};base64,${pdf_base64}`,
+          },
+        },
+      ];
     }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -81,18 +111,7 @@ serve(async (req) => {
         model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: enhancedPrompt },
-              {
-                type: "image_url",
-                image_url: {
-                  url: `data:application/pdf;base64,${pdf_base64}`,
-                },
-              },
-            ],
-          },
+          { role: "user", content: userContent },
         ],
       }),
     });
