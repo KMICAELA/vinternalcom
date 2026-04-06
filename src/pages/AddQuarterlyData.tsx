@@ -460,6 +460,10 @@ const AddQuarterlyData = () => {
                         <PenLine className="h-3.5 w-3.5" />
                         Manual
                       </button>
+                      <button onClick={() => { setEmailFund(f); setEmailText(""); }} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-dashed border-border rounded-md px-3 py-1.5">
+                        <Mail className="h-3.5 w-3.5" />
+                        Email
+                      </button>
                     </>
                   )}
                 </div>
