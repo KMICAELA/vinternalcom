@@ -125,7 +125,14 @@ export default function ReviewPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="direct-imports">Direct Imports</TabsTrigger>
+          <TabsTrigger value="direct-imports" className="gap-2">
+            Direct Imports
+            {pendingDirects.length > 0 && (
+              <Badge className="bg-[hsl(var(--gold))]/20 text-[hsl(var(--gold))] border-0 text-[10px] px-1.5">
+                {pendingDirects.length}
+              </Badge>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="internal-data">Internal Data</TabsTrigger>
         </TabsList>
 
@@ -155,10 +162,29 @@ export default function ReviewPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="direct-imports" className="mt-4">
-          <div className="text-sm text-muted-foreground p-8 text-center border border-border rounded-lg bg-card">
-            Direct investment review will be available in a future update.
-          </div>
+        <TabsContent value="direct-imports" className="space-y-4 mt-4">
+          {directsLoading ? (
+            <div className="text-sm text-muted-foreground p-8 text-center">Loading imports...</div>
+          ) : pendingDirects.length === 0 ? (
+            <div className="text-sm text-muted-foreground p-8 text-center border border-border rounded-lg bg-card">
+              No pending direct imports to review.
+            </div>
+          ) : (
+            pendingDirects.map((imp: any) => (
+              <DirectImportReviewCard
+                key={imp.id}
+                item={imp}
+                reviewerName={reviewerName}
+                onAction={() => {
+                  qc.invalidateQueries({ queryKey: ["staged-direct-imports"] });
+                  qc.invalidateQueries({ queryKey: ["direct-investments"] });
+                  qc.invalidateQueries({ queryKey: ["direct-valuations"] });
+                  qc.invalidateQueries({ queryKey: ["pending-direct-imports"] });
+                  qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+                }}
+              />
+            ))
+          )}
         </TabsContent>
 
         <TabsContent value="internal-data" className="mt-4">
