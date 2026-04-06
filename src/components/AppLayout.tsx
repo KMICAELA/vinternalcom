@@ -26,6 +26,20 @@ export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const { selectedQuarter, availableQuarters, setSelectedDate } = useQuarterContext();
 
+  // Pending review count for badge
+  const { data: pendingCount = 0 } = useQuery({
+    queryKey: ["pending-review-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("staged_fund_extractions")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["pending_review", "needs_revision"]);
+      if (error) return 0;
+      return count || 0;
+    },
+    refetchInterval: 30000,
+  });
+
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
