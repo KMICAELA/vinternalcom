@@ -22,6 +22,8 @@ export default function SettingsPage() {
   const { data: settings = {} } = useAppSettings();
   const { data: funds = [] } = useFunds();
   const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
+  const [migrating, setMigrating] = useState(false);
+  const [migrationDone, setMigrationDone] = useState(false);
 
   const activeQuarter = (settings.active_quarter as any) || { quarter: "3Q25", date: "2025-09-30" };
   const [selectedQuarter, setSelectedQuarter] = useState(activeQuarter.quarter);
