@@ -149,6 +149,9 @@ export default function FundsPage() {
           <Button size="sm" variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
             <Plus className="h-3.5 w-3.5" /> Add Fund
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setBulkUploadOpen(true)} className="gap-2">
+            <FileStack className="h-3.5 w-3.5" /> Bulk Upload
+          </Button>
           <Button size="sm" onClick={() => setAddReportsOpen(true)} className="gap-2">
             <Upload className="h-3.5 w-3.5" /> Add Reports
           </Button>
