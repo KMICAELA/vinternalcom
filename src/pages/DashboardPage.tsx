@@ -5,6 +5,7 @@ import { useConsolidatedMetrics, useFundQuarterMetrics } from "@/hooks/useConsol
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Building2, Target, TrendingUp, DollarSign, Layers, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import LogoMark from "@/components/LogoMark";
+import QuarterCompletionWidget from "@/components/QuarterCompletionWidget";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -360,6 +361,9 @@ export default function DashboardPage() {
             data={targetIndData}
           />
         </div>
+
+        {/* Quarter Completion Status */}
+        <QuarterCompletionWidget quarterDate={activeQuarter.date} quarterLabel={activeQuarter.quarter} />
 
         {/* Fund Investments Table */}
         <div className="analytics-card overflow-hidden">

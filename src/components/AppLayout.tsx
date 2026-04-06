@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays, Sparkles, ClipboardCheck } from "lucide-react";
+import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays, Sparkles, ClipboardCheck, PlusCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,7 @@ const navItems = [
   { to: "/portfolio", icon: Briefcase, label: "Portfolio" },
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },
   { to: "/review", icon: ClipboardCheck, label: "Review" },
+  { to: "/quarterly-input", icon: PlusCircle, label: "Quarterly Input" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -30,12 +31,12 @@ export default function AppLayout() {
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ["pending-review-count"],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("staged_fund_extractions")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["pending_review", "needs_revision"]);
-      if (error) return 0;
-      return count || 0;
+      const [{ count: fundCount }, { count: directCount }, { count: internalCount }] = await Promise.all([
+        supabase.from("staged_fund_extractions").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
+        supabase.from("staged_direct_imports").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
+        supabase.from("staged_internal_data").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
+      ]);
+      return (fundCount || 0) + (directCount || 0) + (internalCount || 0);
     },
     refetchInterval: 30000,
   });
