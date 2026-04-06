@@ -31,12 +31,12 @@ export default function AppLayout() {
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ["pending-review-count"],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from("staged_fund_extractions")
-        .select("id", { count: "exact", head: true })
-        .in("status", ["pending_review", "needs_revision"]);
-      if (error) return 0;
-      return count || 0;
+      const [{ count: fundCount }, { count: directCount }, { count: internalCount }] = await Promise.all([
+        supabase.from("staged_fund_extractions").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
+        supabase.from("staged_direct_imports").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
+        supabase.from("staged_internal_data").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
+      ]);
+      return (fundCount || 0) + (directCount || 0) + (internalCount || 0);
     },
     refetchInterval: 30000,
   });
