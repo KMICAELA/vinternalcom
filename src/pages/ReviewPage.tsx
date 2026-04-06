@@ -115,6 +115,22 @@ export default function ReviewPage() {
         </div>
       )}
 
+      {/* Pending internal data */}
+      const { data: pendingInternal = [] } = useQuery({
+        queryKey: ["staged-internal-data", "pending"],
+        queryFn: async () => {
+          const { data, error } = await supabase
+            .from("staged_internal_data")
+            .select("*")
+            .in("status", ["pending_review", "needs_revision"])
+            .order("created_at", { ascending: false });
+          if (error) throw error;
+          return data || [];
+        },
+      });
+
+      const internalCount = pendingInternal.length;
+
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="fund-extractions" className="gap-2">
@@ -133,7 +149,14 @@ export default function ReviewPage() {
               </Badge>
             )}
           </TabsTrigger>
-          <TabsTrigger value="internal-data">Internal Data</TabsTrigger>
+          <TabsTrigger value="internal-data" className="gap-2">
+            Internal Data
+            {internalCount > 0 && (
+              <Badge className="bg-[hsl(var(--gold))]/20 text-[hsl(var(--gold))] border-0 text-[10px] px-1.5">
+                {internalCount}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="fund-extractions" className="space-y-4 mt-4">
