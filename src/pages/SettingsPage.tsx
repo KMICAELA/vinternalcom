@@ -197,6 +197,29 @@ export default function SettingsPage() {
         <p className="text-xs text-muted-foreground">All calculations use the active quarter's end date as the reporting date.</p>
       </div>
 
+      {/* Data Migration */}
+      <div className="border border-border rounded-lg p-6 bg-card space-y-4">
+        <h2 className="text-sm font-medium">Data Migration</h2>
+        <p className="text-xs text-muted-foreground">
+          Migrate hardcoded quarter registry data to the database. This is a one-time operation that populates the quarterly_history table with all historical metrics.
+        </p>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={migrateQuarterRegistry}
+          disabled={migrating || migrationDone || quarterHistory.length >= Object.keys(QUARTER_REGISTRY).length}
+          className="gap-2"
+        >
+          {migrating ? (
+            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Migrating...</>
+          ) : migrationDone || quarterHistory.length >= Object.keys(QUARTER_REGISTRY).length ? (
+            <><CheckCircle2 className="h-3.5 w-3.5" /> Migration complete</>
+          ) : (
+            <><Database className="h-3.5 w-3.5" /> Migrate Quarter Registry to Database</>
+          )}
+        </Button>
+      </div>
+
       {/* Quarterly History */}
       <div className="border border-border rounded-lg p-6 bg-card space-y-4">
         <h2 className="text-sm font-medium">Quarterly History</h2>
