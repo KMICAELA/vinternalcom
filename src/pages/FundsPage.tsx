@@ -35,6 +35,8 @@ export default function FundsPage() {
   const [addReportsOpen, setAddReportsOpen] = useState(false);
   const [addFundOpen, setAddFundOpen] = useState(false);
   const [lockModalOpen, setLockModalOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const navigate = useNavigate();
 
   // Fetch all FS for active quarter to compute completion
   const { data: allFsForQuarter = [] } = useQuery({
