@@ -189,6 +189,47 @@ export type Database = {
           },
         ]
       }
+      fund_extraction_templates: {
+        Row: {
+          created_at: string | null
+          field_mappings: Json
+          fund_id: string
+          id: string
+          notes: string | null
+          sample_extraction: Json | null
+          template_name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          field_mappings?: Json
+          fund_id: string
+          id?: string
+          notes?: string | null
+          sample_extraction?: Json | null
+          template_name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          field_mappings?: Json
+          fund_id?: string
+          id?: string
+          notes?: string | null
+          sample_extraction?: Json | null
+          template_name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_extraction_templates_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: true
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_financial_statements: {
         Row: {
           confirmed: boolean
@@ -501,6 +542,155 @@ export type Database = {
           unfunded?: number
         }
         Relationships: []
+      }
+      reconciliation_checks: {
+        Row: {
+          actual_value: number | null
+          check_type: string
+          created_at: string | null
+          description: string
+          entity_name: string | null
+          expected_value: number | null
+          id: string
+          quarter_date: string
+          resolved: boolean | null
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          variance_pct: number | null
+        }
+        Insert: {
+          actual_value?: number | null
+          check_type: string
+          created_at?: string | null
+          description: string
+          entity_name?: string | null
+          expected_value?: number | null
+          id?: string
+          quarter_date: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity: string
+          variance_pct?: number | null
+        }
+        Update: {
+          actual_value?: number | null
+          check_type?: string
+          created_at?: string | null
+          description?: string
+          entity_name?: string | null
+          expected_value?: number | null
+          id?: string
+          quarter_date?: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          variance_pct?: number | null
+        }
+        Relationships: []
+      }
+      staged_fund_extractions: {
+        Row: {
+          confidence_score: number | null
+          created_at: string | null
+          extracted_at: string | null
+          extracted_capital_called: number | null
+          extracted_commitment: number | null
+          extracted_companies: Json | null
+          extracted_distributions: number | null
+          extracted_dpi: number | null
+          extracted_gross_irr: number | null
+          extracted_gross_tvpi: number | null
+          extracted_nav: number | null
+          extracted_net_irr: number | null
+          extracted_net_tvpi: number | null
+          extracted_pic: number | null
+          extracted_rvpi: number | null
+          extracted_unfunded: number | null
+          extraction_model: string | null
+          fund_id: string
+          id: string
+          quarter_date: string
+          raw_extraction: Json | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          source_file_name: string | null
+          source_file_path: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string | null
+          extracted_at?: string | null
+          extracted_capital_called?: number | null
+          extracted_commitment?: number | null
+          extracted_companies?: Json | null
+          extracted_distributions?: number | null
+          extracted_dpi?: number | null
+          extracted_gross_irr?: number | null
+          extracted_gross_tvpi?: number | null
+          extracted_nav?: number | null
+          extracted_net_irr?: number | null
+          extracted_net_tvpi?: number | null
+          extracted_pic?: number | null
+          extracted_rvpi?: number | null
+          extracted_unfunded?: number | null
+          extraction_model?: string | null
+          fund_id: string
+          id?: string
+          quarter_date: string
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string | null
+          extracted_at?: string | null
+          extracted_capital_called?: number | null
+          extracted_commitment?: number | null
+          extracted_companies?: Json | null
+          extracted_distributions?: number | null
+          extracted_dpi?: number | null
+          extracted_gross_irr?: number | null
+          extracted_gross_tvpi?: number | null
+          extracted_nav?: number | null
+          extracted_net_irr?: number | null
+          extracted_net_tvpi?: number | null
+          extracted_pic?: number | null
+          extracted_rvpi?: number | null
+          extracted_unfunded?: number | null
+          extraction_model?: string | null
+          fund_id?: string
+          id?: string
+          quarter_date?: string
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staged_fund_extractions_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       underlying_portfolio_holdings: {
         Row: {

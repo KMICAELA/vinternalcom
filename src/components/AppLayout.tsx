@@ -1,5 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays, Sparkles } from "lucide-react";
+import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays, Sparkles, ClipboardCheck } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Badge } from "@/components/ui/badge";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ChatWidget from "./ChatWidget";
@@ -15,12 +18,27 @@ const navItems = [
   { to: "/underlying", icon: Layers, label: "Underlying Portfolio" },
   { to: "/portfolio", icon: Briefcase, label: "Portfolio" },
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },
+  { to: "/review", icon: ClipboardCheck, label: "Review" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const { selectedQuarter, availableQuarters, setSelectedDate } = useQuarterContext();
+
+  // Pending review count for badge
+  const { data: pendingCount = 0 } = useQuery({
+    queryKey: ["pending-review-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("staged_fund_extractions")
+        .select("id", { count: "exact", head: true })
+        .in("status", ["pending_review", "needs_revision"]);
+      if (error) return 0;
+      return count || 0;
+    },
+    refetchInterval: 30000,
+  });
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -90,7 +108,14 @@ export default function AppLayout() {
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{label}</span>}
+              {!collapsed && (
+                <span className="flex-1">{label}</span>
+              )}
+              {!collapsed && to === "/review" && pendingCount > 0 && (
+                <Badge className="bg-[hsl(var(--gold))]/20 text-[hsl(var(--gold))] border-0 text-[10px] px-1.5 py-0 h-4 min-w-[1.25rem] flex items-center justify-center">
+                  {pendingCount}
+                </Badge>
+              )}
             </NavLink>
           ))}
         </nav>

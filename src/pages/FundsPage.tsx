@@ -12,8 +12,9 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const CASHFLOW_TYPES = [
@@ -34,6 +35,8 @@ export default function FundsPage() {
   const [addReportsOpen, setAddReportsOpen] = useState(false);
   const [addFundOpen, setAddFundOpen] = useState(false);
   const [lockModalOpen, setLockModalOpen] = useState(false);
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const navigate = useNavigate();
 
   // Fetch all FS for active quarter to compute completion
   const { data: allFsForQuarter = [] } = useQuery({
@@ -146,6 +149,9 @@ export default function FundsPage() {
           <Button size="sm" variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
             <Plus className="h-3.5 w-3.5" /> Add Fund
           </Button>
+          <Button size="sm" variant="outline" onClick={() => setBulkUploadOpen(true)} className="gap-2">
+            <FileStack className="h-3.5 w-3.5" /> Bulk Upload
+          </Button>
           <Button size="sm" onClick={() => setAddReportsOpen(true)} className="gap-2">
             <Upload className="h-3.5 w-3.5" /> Add Reports
           </Button>
@@ -237,6 +243,16 @@ export default function FundsPage() {
           availableQuarters={availableQuarters}
           defaultQuarterDate={defaultQuarter.date}
           onClose={() => setAddReportsOpen(false)}
+        />
+      )}
+
+      {/* Bulk Upload Dialog */}
+      {bulkUploadOpen && (
+        <BulkUploadDialog
+          funds={funds}
+          defaultQuarterDate={defaultQuarter.date}
+          availableQuarters={availableQuarters}
+          onClose={() => setBulkUploadOpen(false)}
         />
       )}
 
@@ -1110,6 +1126,209 @@ function AddFundDialog({ onClose }: { onClose: () => void }) {
             Add Fund
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Bulk Upload Dialog ─────────────────────────────────────────────
+
+function BulkUploadDialog({ funds, defaultQuarterDate, availableQuarters, onClose }: {
+  funds: any[];
+  defaultQuarterDate: string;
+  availableQuarters: { label: string; date: string }[];
+  onClose: () => void;
+}) {
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+  const [quarterDate, setQuarterDate] = useState(defaultQuarterDate);
+  const [files, setFiles] = useState<Record<string, File | null>>({});
+  const [extracting, setExtracting] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [allDone, setAllDone] = useState(false);
+
+  const filledCount = Object.values(files).filter(Boolean).length;
+
+  const handleExtractAll = async () => {
+    const entries = Object.entries(files).filter(([, f]) => f != null) as [string, File][];
+    if (entries.length === 0) return;
+
+    setExtracting(true);
+    setProgress({ done: 0, total: entries.length });
+
+    let completed = 0;
+
+    // Process in parallel (batches of 3 to avoid rate limits)
+    const batchSize = 3;
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize);
+      await Promise.all(batch.map(async ([fundId, file]) => {
+        try {
+          // Upload file
+          const fileName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
+          const storagePath = `${quarterDate}/${fundId}/${fileName}`;
+          await supabase.storage.from("fund-reports").upload(storagePath, file);
+
+          // Read file as base64
+          const arrayBuffer = await file.arrayBuffer();
+          const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+
+          // Fetch template if exists
+          const { data: template } = await supabase
+            .from("fund_extraction_templates")
+            .select("*")
+            .eq("fund_id", fundId)
+            .maybeSingle();
+
+          // Call extraction edge function
+          const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
+            body: { pdf_base64: base64, file_name: file.name, template: template || undefined },
+          });
+
+          if (error) throw error;
+
+          const summary = extracted?.fund_summary || {};
+          const companies = extracted?.portfolio_companies || [];
+
+          // Insert into staged_fund_extractions
+          await supabase.from("staged_fund_extractions").insert({
+            fund_id: fundId,
+            quarter_date: quarterDate,
+            source_file_path: storagePath,
+            source_file_name: file.name,
+            extracted_nav: summary.nav,
+            extracted_capital_called: summary.total_capital_called,
+            extracted_distributions: summary.total_distributions,
+            extracted_gross_irr: summary.gross_irr,
+            extracted_gross_tvpi: summary.gross_tvpi,
+            extracted_net_irr: summary.net_irr,
+            extracted_net_tvpi: summary.net_tvpi,
+            extracted_dpi: summary.dpi,
+            extracted_rvpi: summary.rvpi,
+            extracted_pic: summary.pic,
+            extracted_commitment: summary.commitment,
+            extracted_unfunded: summary.unfunded_commitment,
+            extracted_companies: companies,
+            raw_extraction: extracted,
+            confidence_score: extracted?.extraction_confidence ?? null,
+            extraction_model: "gemini-2.5-pro",
+          } as any);
+
+          completed++;
+          setProgress({ done: completed, total: entries.length });
+        } catch (err: any) {
+          completed++;
+          setProgress({ done: completed, total: entries.length });
+          const fund = funds.find(f => f.id === fundId);
+          toast.error(`Failed: ${fund?.fund_name || fundId}: ${err.message}`);
+        }
+      }));
+    }
+
+    setAllDone(true);
+    setExtracting(false);
+    qc.invalidateQueries({ queryKey: ["staged-extractions"] });
+    qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+    toast.success(`Extracted ${completed}/${entries.length} reports. Ready for review.`);
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open && !extracting) onClose(); }}>
+      <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col p-0">
+        <DialogHeader className="px-6 pt-6 pb-4 border-b border-border">
+          <DialogTitle className="flex items-center gap-2">
+            <FileStack className="h-5 w-5" /> Bulk Upload Reports
+          </DialogTitle>
+          <div className="flex items-center gap-3 pt-2">
+            <span className="text-sm text-muted-foreground">Quarter:</span>
+            <Select value={quarterDate} onValueChange={setQuarterDate} disabled={extracting}>
+              <SelectTrigger className="h-8 w-40 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {availableQuarters.map(q => (
+                  <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+          {extracting && (
+            <div className="flex items-center gap-3 p-3 bg-surface-1 rounded-lg mb-3">
+              <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" />
+              <span className="text-sm text-muted-foreground">Extracting {progress.done}/{progress.total} funds...</span>
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-[hsl(var(--gold))] transition-all"
+                  style={{ width: `${progress.total > 0 ? (progress.done / progress.total) * 100 : 0}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {funds.map((fund: any) => (
+            <div key={fund.id} className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{fund.fund_name}</p>
+                <p className="text-xs text-muted-foreground">{fund.strategy || ""}{fund.vintage_year ? ` · ${fund.vintage_year}` : ""}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {files[fund.id] ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-[hsl(var(--gold))] truncate max-w-[150px]">{files[fund.id]!.name}</span>
+                    <button onClick={() => setFiles(prev => ({ ...prev, [fund.id]: null }))} className="text-muted-foreground hover:text-destructive">
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="cursor-pointer">
+                    <Input
+                      type="file"
+                      accept=".pdf"
+                      className="hidden"
+                      disabled={extracting}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null;
+                        if (file) setFiles(prev => ({ ...prev, [fund.id]: file }));
+                        e.currentTarget.value = "";
+                      }}
+                    />
+                    <span className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md border border-border hover:bg-surface-1 transition-colors cursor-pointer">
+                      <Upload className="h-3 w-3" /> Upload PDF
+                    </span>
+                  </label>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">
+            {filledCount} file{filledCount !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={extracting}>Cancel</Button>
+            {allDone ? (
+              <Button
+                size="sm"
+                className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90 gap-2"
+                onClick={() => { onClose(); navigate("/review"); }}
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" /> Go to Review
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="bg-[hsl(var(--gold))] text-[hsl(var(--background))] hover:bg-[hsl(var(--gold))]/90"
+                onClick={handleExtractAll}
+                disabled={filledCount === 0 || extracting}
+              >
+                {extracting ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Extracting...</> : `Extract All (${filledCount})`}
+              </Button>
+            )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

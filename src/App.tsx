@@ -13,6 +13,7 @@ import DirectsPage from "./pages/DirectsPage";
 import ConsolidatedPage from "./pages/ConsolidatedPage";
 import SettingsPage from "./pages/SettingsPage";
 import HighlightsPage from "./pages/HighlightsPage";
+import ReviewPage from "./pages/ReviewPage";
 import NotFound from "./pages/NotFound";
 import AddQuarterlyData from "./pages/AddQuarterlyData";
 
@@ -34,6 +35,7 @@ const App = () => (
               <Route path="/portfolio" element={<PortfolioPage />} />
               <Route path="/directs" element={<DirectsPage />} />
               <Route path="/consolidated" element={<ConsolidatedPage />} />
+              <Route path="/review" element={<ReviewPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
             <Route path="/add-quarterly-data" element={<AddQuarterlyData />} />
