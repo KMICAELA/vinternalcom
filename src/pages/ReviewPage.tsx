@@ -65,6 +65,22 @@ export default function ReviewPage() {
     },
   });
 
+  // Pending internal data
+  const { data: pendingInternal = [] } = useQuery({
+    queryKey: ["staged-internal-data", "pending"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("staged_internal_data")
+        .select("*")
+        .in("status", ["pending_review", "needs_revision"])
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const internalCount = pendingInternal.length;
+
   return (
     <div className="p-6 max-w-[1400px] mx-auto space-y-6">
       <div className="flex items-center justify-between">
@@ -114,22 +130,6 @@ export default function ReviewPage() {
           </div>
         </div>
       )}
-
-      {/* Pending internal data */}
-      const { data: pendingInternal = [] } = useQuery({
-        queryKey: ["staged-internal-data", "pending"],
-        queryFn: async () => {
-          const { data, error } = await supabase
-            .from("staged_internal_data")
-            .select("*")
-            .in("status", ["pending_review", "needs_revision"])
-            .order("created_at", { ascending: false });
-          if (error) throw error;
-          return data || [];
-        },
-      });
-
-      const internalCount = pendingInternal.length;
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
