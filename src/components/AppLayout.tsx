@@ -19,6 +19,7 @@ const navItems = [
   { to: "/portfolio", icon: Briefcase, label: "Portfolio" },
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },
   { to: "/review", icon: ClipboardCheck, label: "Review" },
+  { to: "/quarterly-input", icon: PlusCircle, label: "Quarterly Input" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 

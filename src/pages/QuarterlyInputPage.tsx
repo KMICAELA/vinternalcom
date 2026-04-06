@@ -46,7 +46,7 @@ export default function QuarterlyInputPage() {
     d.setMonth(d.getMonth() - 3);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()).padStart(2, "0")}`;
   }, [quarterDate]);
-  const prevMetrics = useConsolidatedMetrics(prevQuarterDate);
+  const prevMetrics = useConsolidatedMetrics();
   const { data: prevSnapshot } = usePortfolioSnapshot(prevQuarterDate);
   const { data: existingHighlights = [] } = useQuery({
     queryKey: ["highlight-entries", quarterDate],
