@@ -108,7 +108,14 @@ export default function AppLayout() {
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{label}</span>}
+              {!collapsed && (
+                <span className="flex-1">{label}</span>
+              )}
+              {!collapsed && to === "/review" && pendingCount > 0 && (
+                <Badge className="bg-[hsl(var(--gold))]/20 text-[hsl(var(--gold))] border-0 text-[10px] px-1.5 py-0 h-4 min-w-[1.25rem] flex items-center justify-center">
+                  {pendingCount}
+                </Badge>
+              )}
             </NavLink>
           ))}
         </nav>
