@@ -202,6 +202,7 @@ export default function FundsPage() {
           </TableHeader>
           <TableBody>
             {activeFunds.map((fund: any) => {
+              const hasFS = fsStatusMap.confirmedSet.has(fund.id);
               const registryNav = fqm?.fundNAVs[fund.fund_name] ?? null;
               const hasTvpiEntry = fqm?.fundTVPIs ? fund.fund_name in fqm.fundTVPIs : false;
               const registryTvpi = hasTvpiEntry ? (fqm!.fundTVPIs[fund.fund_name] ?? null) : undefined;
@@ -213,8 +214,8 @@ export default function FundsPage() {
                   quarterDate={activeQuarter.date}
                   isExpanded={expandedFund === fund.id}
                   onToggle={() => setExpandedFund(expandedFund === fund.id ? null : fund.id)}
-                  fsStatus={hasActiveQuarterFS ? "uploaded" : "pending"}
-                  fsLabel={hasActiveQuarterFS ? activeQuarter.quarter : "Pending"}
+                  fsStatus={hasFS ? "uploaded" : "pending"}
+                  fsLabel={hasFS ? activeQuarter.quarter : "Pending"}
                   registryNav={registryNav}
                   registryTvpi={registryTvpi}
                 />
