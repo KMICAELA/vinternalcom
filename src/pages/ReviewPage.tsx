@@ -990,3 +990,233 @@ function DirectImportReviewCard({ item, reviewerName, onAction }: {
     </div>
   );
 }
+
+// ─── Internal Data Review Tab ──────────────────────────────────────
+
+function InternalDataReviewTab({ reviewerName, onAction }: { reviewerName: string; onAction: () => void }) {
+  const { data: pendingItems = [], isLoading } = useQuery({
+    queryKey: ["staged-internal-data", "pending"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("staged_internal_data")
+        .select("*")
+        .in("status", ["pending_review", "needs_revision"])
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const grouped = {
+    lp_cashflow: pendingItems.filter((i: any) => i.data_type === "lp_cashflow"),
+    nav_adjustment: pendingItems.filter((i: any) => i.data_type === "nav_adjustment"),
+    commentary: pendingItems.filter((i: any) => i.data_type === "commentary"),
+    highlight: pendingItems.filter((i: any) => i.data_type === "highlight"),
+  };
+
+  const [approving, setApproving] = useState<string | null>(null);
+
+  const approveGroup = async (dataType: string, items: any[]) => {
+    if (!reviewerName.trim()) { toast.error("Enter your name in 'Reviewing as'"); return; }
+    setApproving(dataType);
+    try {
+      if (dataType === "lp_cashflow") {
+        const cfRows = items.map((i: any) => ({
+          cashflow_date: i.quarter_date,
+          type: i.cashflow_type === "Capital Call" ? "capital_call" : i.cashflow_type === "Distribution" ? "distribution" : "other",
+          amount: Number(i.cashflow_amount) || 0,
+          portfolio_name: i.entity_name || null,
+          description: i.cashflow_description || null,
+        }));
+        const { error } = await supabase.from("fund_level_cashflows").insert(cfRows as any);
+        if (error) throw error;
+      } else if (dataType === "nav_adjustment") {
+        for (const item of items) {
+          await supabase.from("portfolio_snapshots").upsert({
+            quarter_date: item.quarter_date,
+            lp_nav: Number(item.lp_nav) || 0,
+            notes: item.nav_notes || null,
+          } as any, { onConflict: "quarter_date" });
+        }
+      } else if (dataType === "commentary") {
+        const commentRows = items.map((i: any, idx: number) => ({
+          quarter_date: i.quarter_date,
+          section: i.entity_name || "Other",
+          body: i.body || "",
+          sort_order: idx,
+        }));
+        const { error } = await supabase.from("quarterly_commentary").insert(commentRows as any);
+        if (error) throw error;
+      } else if (dataType === "highlight") {
+        const hlRows = items.map((i: any) => ({
+          quarter_date: i.quarter_date,
+          entity_name: i.entity_name || "",
+          update_type: i.update_type || "Other",
+          body: i.body || "",
+          url: i.url || null,
+        }));
+        const { error } = await supabase.from("highlight_entries").insert(hlRows as any);
+        if (error) throw error;
+      }
+
+      // Mark all as approved
+      const ids = items.map((i: any) => i.id);
+      await supabase.from("staged_internal_data").update({
+        status: "approved",
+        reviewed_by: reviewerName,
+        reviewed_at: new Date().toISOString(),
+      } as any).in("id", ids);
+
+      // Audit log
+      await supabase.from("audit_log").insert({
+        action: `approve_internal_${dataType}`,
+        target_table: "staged_internal_data",
+        performed_by: reviewerName,
+        quarter_date: items[0]?.quarter_date,
+        details: { count: items.length, data_type: dataType },
+      } as any);
+
+      toast.success(`${items.length} ${dataType.replace("_", " ")} items approved`);
+      onAction();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setApproving(null);
+    }
+  };
+
+  if (isLoading) return <div className="text-sm text-muted-foreground p-8 text-center">Loading...</div>;
+  if (pendingItems.length === 0) {
+    return (
+      <div className="text-sm text-muted-foreground p-8 text-center border border-border rounded-lg bg-card">
+        No pending internal data to review.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* LP Cashflows */}
+      {grouped.lp_cashflow.length > 0 && (
+        <div className="border border-border rounded-lg bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">LP Cashflows ({grouped.lp_cashflow.length})</h3>
+            <Button
+              size="sm"
+              className="bg-[hsl(var(--positive))] text-[hsl(var(--positive-foreground))] hover:bg-[hsl(var(--positive))]/90 gap-1"
+              onClick={() => approveGroup("lp_cashflow", grouped.lp_cashflow)}
+              disabled={approving === "lp_cashflow"}
+            >
+              {approving === "lp_cashflow" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Approve All Cashflows
+            </Button>
+          </div>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="text-xs">Date</TableHead>
+                <TableHead className="text-xs">Type</TableHead>
+                <TableHead className="text-xs text-right">Amount</TableHead>
+                <TableHead className="text-xs">Fund/Portfolio</TableHead>
+                <TableHead className="text-xs">Description</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {grouped.lp_cashflow.map((cf: any) => (
+                <TableRow key={cf.id}>
+                  <TableCell className="text-xs font-mono">{cf.quarter_date}</TableCell>
+                  <TableCell className="text-xs">{cf.cashflow_type}</TableCell>
+                  <TableCell className="text-xs text-right font-mono">{formatCurrency(Number(cf.cashflow_amount))}</TableCell>
+                  <TableCell className="text-xs">{cf.entity_name || "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{cf.cashflow_description || "—"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* NAV Adjustment */}
+      {grouped.nav_adjustment.length > 0 && (
+        <div className="border border-border rounded-lg bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">NAV Adjustment</h3>
+            <Button
+              size="sm"
+              className="bg-[hsl(var(--positive))] text-[hsl(var(--positive-foreground))] hover:bg-[hsl(var(--positive))]/90 gap-1"
+              onClick={() => approveGroup("nav_adjustment", grouped.nav_adjustment)}
+              disabled={approving === "nav_adjustment"}
+            >
+              {approving === "nav_adjustment" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Approve NAV
+            </Button>
+          </div>
+          {grouped.nav_adjustment.map((nav: any) => (
+            <div key={nav.id} className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase">LP NAV</p>
+                <p className="text-lg font-semibold font-mono">{formatCurrency(Number(nav.lp_nav))}</p>
+              </div>
+              <div>
+                <p className="text-[10px] text-muted-foreground uppercase">Notes</p>
+                <p className="text-xs text-muted-foreground">{nav.nav_notes || "—"}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Commentary */}
+      {grouped.commentary.length > 0 && (
+        <div className="border border-border rounded-lg bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">Commentary ({grouped.commentary.length})</h3>
+            <Button
+              size="sm"
+              className="bg-[hsl(var(--positive))] text-[hsl(var(--positive-foreground))] hover:bg-[hsl(var(--positive))]/90 gap-1"
+              onClick={() => approveGroup("commentary", grouped.commentary)}
+              disabled={approving === "commentary"}
+            >
+              {approving === "commentary" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Approve Commentary
+            </Button>
+          </div>
+          {grouped.commentary.map((c: any) => (
+            <div key={c.id} className="border border-border/50 rounded-lg p-3">
+              <Badge variant="outline" className="text-[10px] mb-2">{c.entity_name}</Badge>
+              <p className="text-xs text-foreground whitespace-pre-wrap">{c.body}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Highlights */}
+      {grouped.highlight.length > 0 && (
+        <div className="border border-border rounded-lg bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium">Highlights ({grouped.highlight.length})</h3>
+            <Button
+              size="sm"
+              className="bg-[hsl(var(--positive))] text-[hsl(var(--positive-foreground))] hover:bg-[hsl(var(--positive))]/90 gap-1"
+              onClick={() => approveGroup("highlight", grouped.highlight)}
+              disabled={approving === "highlight"}
+            >
+              {approving === "highlight" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+              Approve Highlights
+            </Button>
+          </div>
+          {grouped.highlight.map((h: any) => (
+            <div key={h.id} className="flex items-start gap-3 text-xs">
+              <Badge variant="outline" className="text-[10px] shrink-0">{h.update_type}</Badge>
+              <div className="flex-1">
+                <p className="font-medium text-foreground">{h.entity_name}</p>
+                <p className="text-muted-foreground">{h.body}</p>
+                {h.url && <a href={h.url} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{h.url}</a>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
