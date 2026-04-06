@@ -16,6 +16,7 @@ import HighlightsPage from "./pages/HighlightsPage";
 import ReviewPage from "./pages/ReviewPage";
 import NotFound from "./pages/NotFound";
 import AddQuarterlyData from "./pages/AddQuarterlyData";
+import QuarterlyInputPage from "./pages/QuarterlyInputPage";
 
 const queryClient = new QueryClient();
 
