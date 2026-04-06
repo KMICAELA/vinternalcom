@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck, Eye, ArrowRight, Link as LinkIcon } from "lucide-react";
+import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck, Eye, ArrowRight, Link as LinkIcon, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -370,6 +370,64 @@ function ReportTrackerRow({
   const [uploading, setUploading] = useState(false);
   const [urlValue, setUrlValue] = useState("");
   const [savingUrl, setSavingUrl] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"document" | "email" | "link">("document");
+  const [emailText, setEmailText] = useState("");
+  const [submittingEmail, setSubmittingEmail] = useState(false);
+
+  const handleEmailSubmit = async () => {
+    if (!emailText.trim()) return;
+    setSubmittingEmail(true);
+    try {
+      const arrayBuffer = new TextEncoder().encode(emailText);
+      const base64 = btoa(String.fromCharCode(...arrayBuffer));
+
+      const { data: template } = await supabase
+        .from("fund_extraction_templates")
+        .select("*")
+        .eq("fund_id", fund.fundId)
+        .maybeSingle();
+
+      const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
+        body: { pdf_base64: base64, file_name: "email_paste.txt", template: template || undefined },
+      });
+      if (error) throw error;
+
+      const summary = extracted?.fund_summary || {};
+      const companies = extracted?.portfolio_companies || [];
+
+      await supabase.from("staged_fund_extractions").insert({
+        fund_id: fund.fundId,
+        quarter_date: quarterDate,
+        source_file_name: "Email paste",
+        extracted_nav: summary.nav,
+        extracted_capital_called: summary.total_capital_called,
+        extracted_distributions: summary.total_distributions,
+        extracted_gross_irr: summary.gross_irr,
+        extracted_gross_tvpi: summary.gross_tvpi,
+        extracted_net_irr: summary.net_irr,
+        extracted_net_tvpi: summary.net_tvpi,
+        extracted_dpi: summary.dpi,
+        extracted_rvpi: summary.rvpi,
+        extracted_pic: summary.pic,
+        extracted_commitment: summary.commitment,
+        extracted_unfunded: summary.unfunded_commitment,
+        extracted_companies: companies,
+        raw_extraction: extracted,
+        confidence_score: extracted?.extraction_confidence ?? null,
+        extraction_model: "gemini-2.5-pro",
+      } as any);
+
+      toast.success("Email content submitted for extraction.");
+      qc.invalidateQueries({ queryKey: ["report-coverage"] });
+      qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+      setEmailText("");
+      onToggleUpload();
+    } catch (err: any) {
+      toast.error(err.message || "Email extraction failed");
+    } finally {
+      setSubmittingEmail(false);
+    }
+  };
 
   const handleFileUpload = async (file: File) => {
     setUploading(true);
@@ -555,62 +613,111 @@ function ReportTrackerRow({
       {/* Inline upload zone */}
       {isUploadOpen && fund.status === "missing" && (
         <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
-          <div
-            className="border-2 border-dashed border-[hsl(var(--gold))/0.4] rounded-lg p-6 text-center bg-[hsl(var(--gold))/0.03] hover:bg-[hsl(var(--gold))/0.06] transition-colors cursor-pointer"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? (
-              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" />
-                Uploading & extracting...
-              </div>
-            ) : (
-              <>
-                <Upload className="h-5 w-5 mx-auto text-[hsl(var(--gold))]/60 mb-2" />
-                <p className="text-sm text-muted-foreground">
-                  Drag & drop PDF here, or <span className="text-[hsl(var(--gold))] underline">browse files</span>
-                </p>
-              </>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFileUpload(file);
-                e.currentTarget.value = "";
-              }}
-            />
+          {/* Mode tabs */}
+          <div className="flex gap-1 bg-muted/50 rounded-lg p-0.5 w-fit">
+            {([
+              { key: "document" as const, icon: FileText, label: "Document" },
+              { key: "email" as const, icon: Mail, label: "Email" },
+              { key: "link" as const, icon: LinkIcon, label: "Link" },
+            ]).map(({ key, icon: Icon, label }) => (
+              <button
+                key={key}
+                onClick={() => setUploadMode(key)}
+                className={cn(
+                  "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-colors",
+                  uploadMode === key
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="h-3 w-3" />
+                {label}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="flex-1 h-px bg-border" />
-            <span>or paste a data room link</span>
-            <div className="flex-1 h-px bg-border" />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <Input
-              className="h-8 text-xs flex-1"
-              placeholder="https://..."
-              value={urlValue}
-              onChange={(e) => setUrlValue(e.target.value)}
-            />
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 text-xs"
-              disabled={!urlValue.trim() || savingUrl}
-              onClick={handleSaveUrl}
+          {/* Document upload */}
+          {uploadMode === "document" && (
+            <div
+              className="border-2 border-dashed border-[hsl(var(--gold))/0.4] rounded-lg p-6 text-center bg-[hsl(var(--gold))/0.03] hover:bg-[hsl(var(--gold))/0.06] transition-colors cursor-pointer"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
             >
-              {savingUrl ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-            </Button>
-          </div>
+              {uploading ? (
+                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" />
+                  Uploading & extracting...
+                </div>
+              ) : (
+                <>
+                  <Upload className="h-5 w-5 mx-auto text-[hsl(var(--gold))]/60 mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    Drag & drop PDF here, or <span className="text-[hsl(var(--gold))] underline">browse files</span>
+                  </p>
+                </>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUpload(file);
+                  e.currentTarget.value = "";
+                }}
+              />
+            </div>
+          )}
+
+          {/* Email paste */}
+          {uploadMode === "email" && (
+            <div className="space-y-2">
+              <Textarea
+                className="min-h-[140px] text-xs font-mono bg-muted/30"
+                placeholder="Paste the email body here (quarterly report update, capital call notice, distribution notice, etc.)..."
+                value={emailText}
+                onChange={(e) => setEmailText(e.target.value)}
+              />
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  AI will extract fund metrics from the email content
+                </p>
+                <Button
+                  size="sm"
+                  className="h-8 text-xs gap-1.5 bg-[hsl(var(--gold))] text-[hsl(var(--gold-foreground))] hover:bg-[hsl(var(--gold))]/90"
+                  disabled={!emailText.trim() || submittingEmail}
+                  onClick={handleEmailSubmit}
+                >
+                  {submittingEmail ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
+                  Extract from Email
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Link */}
+          {uploadMode === "link" && (
+            <div className="flex items-center gap-2">
+              <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <Input
+                className="h-8 text-xs flex-1"
+                placeholder="https://..."
+                value={urlValue}
+                onChange={(e) => setUrlValue(e.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs"
+                disabled={!urlValue.trim() || savingUrl}
+                onClick={handleSaveUrl}
+              >
+                {savingUrl ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+              </Button>
+            </div>
+          )}
         </div>
       )}
     </div>
