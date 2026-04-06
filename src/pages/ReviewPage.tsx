@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Check, X, AlertTriangle, ChevronDown, ChevronRight, Plus, Trash2, ExternalLink, Loader2, FileText } from "lucide-react";
+import { Check, X, AlertTriangle, ChevronDown, ChevronRight, Plus, Trash2, ExternalLink, Loader2, FileText, FileSpreadsheet, Pencil } from "lucide-react";
 import { formatCurrency, formatMultiple, formatPercent } from "@/lib/calcEngine";
 
 export default function ReviewPage() {
