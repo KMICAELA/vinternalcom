@@ -319,7 +319,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment)} icon={DollarSign} highlight />
           <MetricCard label="Fund Investments" value={formatCurrency(fundCommitmentTotal)} icon={Building2} sub={`${numFunds} funds`} />
-          <MetricCard label="Direct Investments" value={qData && qData.directsCost > 0 ? formatCurrency(qData.directsCost) : "—"} icon={Target} sub={`${numDirects} companies`} />
+          <MetricCard label="Direct Investments" value={directs.length > 0 ? formatCurrency(directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0)) : "—"} icon={Target} sub={`${numDirects} companies`} />
           <MetricCard label="Net TVPI" value={cm.netTvpi > 0 ? formatMultiple(cm.netTvpi) : "—"} highlight />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
