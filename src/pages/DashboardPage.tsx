@@ -362,6 +362,9 @@ export default function DashboardPage() {
           />
         </div>
 
+        {/* Quarter Completion Status */}
+        <QuarterCompletionWidget quarterDate={activeQuarter.date} quarterLabel={activeQuarter.quarter} />
+
         {/* Fund Investments Table */}
         <div className="analytics-card overflow-hidden">
           <div className="px-5 py-3.5 border-b border-border/20">
