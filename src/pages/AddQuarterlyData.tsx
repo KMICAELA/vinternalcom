@@ -525,6 +525,37 @@ const AddQuarterlyData = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Email Paste Dialog */}
+      <Dialog open={!!emailFund} onOpenChange={(open) => { if (!open) { setEmailFund(null); setEmailText(""); } }}>
+        <DialogContent className="sm:max-w-[540px]">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              Paste Email — {emailFund?.fund_name}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">{formatQuarterLabel(activeQuarter)} · AI will extract fund metrics from the email content</p>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <textarea
+              className="w-full min-h-[200px] rounded-md border border-input bg-muted/30 px-3 py-2 text-xs font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              placeholder="Paste the email body here (quarterly report update, capital call notice, distribution notice, etc.)..."
+              value={emailText}
+              onChange={(e) => setEmailText(e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              The AI extraction will parse fund metrics (NAV, capital called, distributions, IRR, TVPI, etc.) from the pasted email text and stage them for review.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => { setEmailFund(null); setEmailText(""); }}>Cancel</Button>
+            <Button size="sm" onClick={handleEmailSubmit} disabled={!emailText.trim() || submittingEmail} className="gap-1.5">
+              <Mail className="h-3.5 w-3.5" />
+              {submittingEmail ? "Extracting…" : "Extract from Email"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
