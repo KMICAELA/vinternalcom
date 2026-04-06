@@ -465,6 +465,36 @@ export type Database = {
         }
         Relationships: []
       }
+      quarterly_commentary: {
+        Row: {
+          body: string
+          created_at: string | null
+          id: string
+          quarter_date: string
+          section: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string | null
+          id?: string
+          quarter_date: string
+          section: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string | null
+          id?: string
+          quarter_date?: string
+          section?: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       quarterly_history: {
         Row: {
           computation_source: string
@@ -763,6 +793,72 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      staged_internal_data: {
+        Row: {
+          body: string | null
+          cashflow_amount: number | null
+          cashflow_description: string | null
+          cashflow_type: string | null
+          created_at: string | null
+          data_type: string
+          entity_name: string | null
+          id: string
+          lp_nav: number | null
+          nav_notes: string | null
+          quarter_date: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          status: string
+          submitted_by: string | null
+          update_type: string | null
+          updated_at: string | null
+          url: string | null
+        }
+        Insert: {
+          body?: string | null
+          cashflow_amount?: number | null
+          cashflow_description?: string | null
+          cashflow_type?: string | null
+          created_at?: string | null
+          data_type: string
+          entity_name?: string | null
+          id?: string
+          lp_nav?: number | null
+          nav_notes?: string | null
+          quarter_date: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string
+          submitted_by?: string | null
+          update_type?: string | null
+          updated_at?: string | null
+          url?: string | null
+        }
+        Update: {
+          body?: string | null
+          cashflow_amount?: number | null
+          cashflow_description?: string | null
+          cashflow_type?: string | null
+          created_at?: string | null
+          data_type?: string
+          entity_name?: string | null
+          id?: string
+          lp_nav?: number | null
+          nav_notes?: string | null
+          quarter_date?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string
+          submitted_by?: string | null
+          update_type?: string | null
+          updated_at?: string | null
+          url?: string | null
+        }
+        Relationships: []
       }
       underlying_portfolio_holdings: {
         Row: {
