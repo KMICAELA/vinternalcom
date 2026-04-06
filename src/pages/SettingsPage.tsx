@@ -74,6 +74,60 @@ export default function SettingsPage() {
     qc.invalidateQueries({ queryKey: ["quarterly-history"] });
   };
 
+  // Migration handler
+  const migrateQuarterRegistry = async () => {
+    setMigrating(true);
+    try {
+      const entries = Object.entries(QUARTER_REGISTRY);
+      let count = 0;
+      for (const [key, q] of entries) {
+        const dpi = q.netTotalContributions > 0 ? q.netTotalDistributions / q.netTotalContributions : 0;
+        const rvpi = q.netTotalContributions > 0 ? q.netTerminalNAV / q.netTotalContributions : 0;
+        const pic = q.totalCommitment > 0 ? q.netTotalContributions / q.totalCommitment : 0;
+        const unfunded = q.totalCommitment - q.netTotalContributions;
+
+        const { error } = await supabase.from("quarterly_history").upsert(
+          {
+            quarter: q.label,
+            quarter_date: q.quarterEndDate,
+            contribution: q.netTotalContributions,
+            distribution: q.netTotalDistributions,
+            nav: q.netTerminalNAV,
+            net_tvpi: q.netTVPI,
+            net_irr: q.netIRR || 0,
+            gross_tvpi: q.grossTVPI,
+            gross_irr: q.grossIRR || 0,
+            locked: true,
+            total_commitment: q.totalCommitment,
+            total_called: q.netTotalContributions,
+            total_distributed: q.netTotalDistributions,
+            total_nav: q.netTerminalNAV,
+            unfunded,
+            dpi,
+            rvpi,
+            pic,
+            computation_source: "manual",
+          } as any,
+          { onConflict: "quarter_date" }
+        );
+        if (error) {
+          toast.error(`Failed on ${key}: ${error.message}`);
+          setMigrating(false);
+          return;
+        }
+        count++;
+      }
+      toast.success(`Migrated ${count} quarters to database`);
+      setMigrationDone(true);
+      qc.invalidateQueries({ queryKey: ["quarterly-history"] });
+      qc.invalidateQueries({ queryKey: ["consolidated-metrics-all"] });
+    } catch (err: any) {
+      toast.error(`Migration error: ${err.message}`);
+    } finally {
+      setMigrating(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-[800px] mx-auto space-y-8">
       <div>
