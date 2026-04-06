@@ -187,10 +187,16 @@ export default function ReviewPage() {
           )}
         </TabsContent>
 
-        <TabsContent value="internal-data" className="mt-4">
-          <div className="text-sm text-muted-foreground p-8 text-center border border-border rounded-lg bg-card">
-            Internal data review will be available in a future update.
-          </div>
+        <TabsContent value="internal-data" className="space-y-4 mt-4">
+          <InternalDataReviewTab reviewerName={reviewerName} onAction={() => {
+            qc.invalidateQueries({ queryKey: ["staged-internal-data"] });
+            qc.invalidateQueries({ queryKey: ["lp-cashflows"] });
+            qc.invalidateQueries({ queryKey: ["portfolio-snapshot"] });
+            qc.invalidateQueries({ queryKey: ["highlight-entries"] });
+            qc.invalidateQueries({ queryKey: ["quarterly-commentary"] });
+            qc.invalidateQueries({ queryKey: ["pending-review-count"] });
+            qc.invalidateQueries({ queryKey: ["consolidated-metrics-all"] });
+          }} />
         </TabsContent>
       </Tabs>
     </div>
