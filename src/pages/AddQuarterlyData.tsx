@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, Upload, HardDrive, FileText, Check, X, CheckCircle2, Clock, PenLine, Zap } from "lucide-react";
+import { ArrowLeft, Upload, HardDrive, FileText, Check, X, CheckCircle2, Clock, PenLine, Zap, Mail } from "lucide-react";
 import { useFunds, useAvailableQuarters } from "@/hooks/usePortfolioData";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
