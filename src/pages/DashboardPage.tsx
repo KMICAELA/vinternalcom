@@ -330,6 +330,9 @@ export default function DashboardPage() {
           <MetricCard label="Unrealized Value" value={cm.grossFmv > 0 ? formatCurrency(cm.grossFmv) : "—"} />
         </div>
 
+        {/* Quarter Completion Status — prominent position */}
+        <QuarterCompletionWidget quarterDate={activeQuarter.date} quarterLabel={activeQuarter.quarter} />
+
         {/* Top Row: 3 Donut Charts */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <DonutChart
