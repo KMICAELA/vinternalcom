@@ -434,38 +434,27 @@ export default function DashboardPage() {
           <div className="px-5 py-3.5 border-b border-border/20">
             <h3 className="text-sm font-medium text-foreground">Direct Investments ({numDirects})</h3>
           </div>
-          {qData && qData.activeDirects.length > 0 ? (
+          {directs.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-muted-foreground" style={{ backgroundColor: "#12141C" }}>
                     <th className="text-left px-4 py-2.5 font-medium">Company</th>
                     <th className="text-right px-4 py-2.5 font-medium">TWH Cost</th>
-                    <th className="text-right px-4 py-2.5 font-medium">FMV</th>
-                    <th className="text-right px-4 py-2.5 font-medium">MOIC</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {qData.activeDirects.map((d, i) => {
-                    const moic = d.cost > 0 ? d.fmv / d.cost : 0;
-                    return (
-                      <tr key={i} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
-                        <td className="px-4 py-2.5 font-medium text-foreground">{d.name}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(d.cost)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(d.fmv)}</td>
-                        <td className={cn("px-4 py-2.5 text-right font-mono font-medium", moic >= 1 ? "text-[hsl(var(--positive))]" : "text-[hsl(var(--negative))]")}>
-                          {moic > 0 ? formatMultiple(moic) : '—'}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {directs.map((d: any) => (
+                    <tr key={d.id} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-foreground">{d.company_name}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(Number(d.cost_basis))}</td>
+                    </tr>
+                  ))}
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-border/20 font-medium" style={{ backgroundColor: "#12141C" }}>
                     <td className="px-4 py-2.5">Total ({numDirects} directs)</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(qData.directsCost)}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(qData.directsFMV)}</td>
-                    <td />
+                    <td className="px-4 py-2.5 text-right font-mono">{formatCurrency(directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0))}</td>
                   </tr>
                 </tfoot>
               </table>
