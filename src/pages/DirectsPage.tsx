@@ -87,15 +87,8 @@ export default function DirectsPage() {
   // All directs are shown (no registry filter)
   const activeDirects = directs;
 
-  // Use registry cost/fmv — always look up by the matched registry name, not DB name
-  const getCost = (d: any) => {
-    const regEntry = d._registryName ? registryDirectsMap.get(d._registryName) : null;
-    return regEntry?.cost ?? Number(d.cost_basis);
-  };
-  const getFmv = (d: any) => {
-    const regEntry = d._registryName ? registryDirectsMap.get(d._registryName) : null;
-    return regEntry?.fmv ?? (valMap.get(d.id)?.fmv || 0);
-  };
+  const getCost = (d: any) => Number(d.cost_basis);
+  const getFmv = (d: any) => valMap.get(d.id)?.fmv || 0;
 
   const totalCost = activeDirects.reduce((s: number, d: any) => s + getCost(d), 0);
   const totalFmv = activeDirects.reduce((s: number, d: any) => s + getFmv(d), 0);

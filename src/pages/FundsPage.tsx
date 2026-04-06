@@ -202,10 +202,9 @@ export default function FundsPage() {
           </TableHeader>
           <TableBody>
             {activeFunds.map((fund: any) => {
-              const hasActiveQuarterFS = fsStatusMap.confirmedSet.has(fund.id);
-              const registryNav = qData?.fundNAVs[fund.fund_name] ?? null;
-              const hasTvpiEntry = qData?.fundTVPIs ? fund.fund_name in qData.fundTVPIs : false;
-              const registryTvpi = hasTvpiEntry ? (qData!.fundTVPIs[fund.fund_name] ?? null) : undefined;
+              const registryNav = fqm?.fundNAVs[fund.fund_name] ?? null;
+              const hasTvpiEntry = fqm?.fundTVPIs ? fund.fund_name in fqm.fundTVPIs : false;
+              const registryTvpi = hasTvpiEntry ? (fqm!.fundTVPIs[fund.fund_name] ?? null) : undefined;
 
               return (
                 <FundRow
