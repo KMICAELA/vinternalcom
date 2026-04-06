@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import { useFunds, useDirectInvestments, useActiveQuarter, useUnderlyingPortfolio } from "@/hooks/usePortfolioData";
 import { formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
-import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
-import { getQuarterData } from "@/data/quarterRegistry";
+import { useConsolidatedMetrics, useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Building2, Target, TrendingUp, DollarSign, Layers, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import LogoMark from "@/components/LogoMark";
