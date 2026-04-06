@@ -389,9 +389,9 @@ export default function DashboardPage() {
                   const bDate = b.start_date || 'zzzz';
                   return aDate.localeCompare(bDate);
                 }).map((fund: any) => {
-                  const nav = qData?.fundNAVs[fund.fund_name] ?? 0;
-                  const tvpi = qData?.fundTVPIs[fund.fund_name] ?? null;
-                  const isActive = qData?.activeFunds.includes(fund.fund_name);
+                  const nav = fundNAVs[fund.fund_name] ?? 0;
+                  const tvpi = fundTVPIs[fund.fund_name] ?? null;
+                  const isActive = true;
                   return (
                     <tr key={fund.id} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
                       <td className="px-4 py-2.5 font-medium text-foreground">{fund.fund_name}</td>
