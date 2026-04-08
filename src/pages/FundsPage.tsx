@@ -750,14 +750,7 @@ function TimelineView({ funds, daysSinceQE, quarterEndLabel }: {
 }
 
 
-  setTrackerQuarterDate,
-  coverage,
-  summary,
-  received,
-  totalActive,
-  coverageLoading,
-  funds,
-  availableQuarters,
+
 }: {
   trackerQuarters: { label: string; date: string }[];
   trackerQuarterDate: string;
