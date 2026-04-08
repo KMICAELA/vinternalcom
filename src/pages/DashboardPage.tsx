@@ -430,8 +430,8 @@ export default function DashboardPage() {
                   const nav = fundNAVs[fund.fund_name] ?? 0;
                   const tvpi = fundTVPIs[fund.fund_name] ?? null;
                   const isActive = true;
-                  // Check if fund has any capital called (from fund_quarterly_reports)
-                  const reportCalled = fqm?.fundNAVs ? 0 : 0; // We'll use tvpi=0 as proxy
+                  // Fund is "not yet called" if NAV=0 and TVPI is null/0
+                  const notYetCalled = nav === 0 && (tvpi == null || tvpi === 0);
                   // Determine if fund is "new" (start_date within last 6 months of quarter)
                   const isNewFund = (() => {
                     if (!fund.start_date) return false;
@@ -442,7 +442,12 @@ export default function DashboardPage() {
                   })();
                   return (
                     <tr key={fund.id} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
-                      <td className="px-4 py-2.5 font-medium text-foreground">{fund.fund_name}</td>
+                      <td className="px-4 py-2.5 font-medium text-foreground">
+                        <span className="flex items-center gap-2">
+                          {fund.fund_name}
+                          {isNewFund && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--gold))]/15 text-[hsl(var(--gold))] font-semibold uppercase tracking-wide">New</span>}
+                        </span>
+                      </td>
                       <td className="px-4 py-2.5 text-muted-foreground font-mono text-xs">{fund.start_date || '—'}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{fund.theme || '—'}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{fund.geography || '—'}</td>
@@ -451,7 +456,7 @@ export default function DashboardPage() {
                       <td className="px-4 py-2.5 text-right font-mono">{formatPercent(Number(fund.ownership_percentage))}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{formatPercent(Number(fund.commitment_amount) / (fundCommitmentTotal || 1))}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{nav > 0 ? formatCurrency(nav) : '—'}</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{tvpi != null && tvpi > 0 ? formatMultiple(tvpi) : (reportCalled === 0 ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—')}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{tvpi != null && tvpi > 0 ? formatMultiple(tvpi) : (notYetCalled ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—')}</td>
                       <td className="px-4 py-2.5 text-center">
                         <span className={cn(
                           "inline-block w-2 h-2 rounded-full",
