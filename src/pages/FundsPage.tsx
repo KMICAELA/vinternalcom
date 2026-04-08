@@ -356,6 +356,8 @@ function ReportTrackerView({
                 setOpenUploadFundId(openUploadFundId === fund.fundId ? null : fund.fundId)
               }
               quarterDate={trackerQuarterDate}
+              pcap={pcapMap[fund.fundId] || null}
+              onReviewPcap={() => setPcapReviewFundId(fund.fundId)}
             />
           ))}
         </div>
