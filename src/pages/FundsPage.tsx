@@ -751,23 +751,6 @@ function TimelineView({ funds, daysSinceQE, quarterEndLabel }: {
 
 
 
-}: {
-  trackerQuarters: { label: string; date: string }[];
-  trackerQuarterDate: string;
-  setTrackerQuarterDate: (d: string) => void;
-  coverage: FundCoverage[];
-  summary: any;
-  received: number;
-  totalActive: number;
-  coverageLoading: boolean;
-  funds: any[];
-  availableQuarters: { label: string; date: string }[];
-}) {
-  const [openUploadFundId, setOpenUploadFundId] = useState<string | null>(null);
-  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
-  const [pcapReviewFundId, setPcapReviewFundId] = useState<string | null>(null);
-  const navigate = useNavigate();
-  const qc = useQueryClient();
   const completionPct = totalActive > 0 ? (received / totalActive) * 100 : 0;
 
   // PCAP extractions for the selected quarter
