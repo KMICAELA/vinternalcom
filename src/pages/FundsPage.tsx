@@ -256,10 +256,28 @@ function ReportTrackerView({
 }) {
   const [openUploadFundId, setOpenUploadFundId] = useState<string | null>(null);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [pcapReviewFundId, setPcapReviewFundId] = useState<string | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const completionPct = totalActive > 0 ? (received / totalActive) * 100 : 0;
 
+  // PCAP extractions for the selected quarter
+  const { data: pcapExtractions = [] } = useQuery({
+    queryKey: ["pcap-extractions", trackerQuarterDate],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pcap_extractions")
+        .select("*")
+        .eq("quarter_date", trackerQuarterDate);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+  const pcapMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const p of pcapExtractions) map[p.fund_id] = p;
+    return map;
+  }, [pcapExtractions]);
   const missingFunds = coverage.filter((c) => c.status === "missing");
 
   return (
