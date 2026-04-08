@@ -196,6 +196,7 @@ export default function FundsPage() {
             fqm={fqm}
             expandedFund={expandedFund}
             setExpandedFund={setExpandedFund}
+            quarterDate={activeQuarter.date}
           />
         </TabsContent>
       </Tabs>
