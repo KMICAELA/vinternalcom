@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -20,6 +21,7 @@ import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Che
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import PcapReviewDialog from "@/components/PcapReviewDialog";
 
 const CASHFLOW_TYPES = [
   "Capital Call — Investment",
@@ -254,10 +256,28 @@ function ReportTrackerView({
 }) {
   const [openUploadFundId, setOpenUploadFundId] = useState<string | null>(null);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
+  const [pcapReviewFundId, setPcapReviewFundId] = useState<string | null>(null);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const completionPct = totalActive > 0 ? (received / totalActive) * 100 : 0;
 
+  // PCAP extractions for the selected quarter
+  const { data: pcapExtractions = [] } = useQuery({
+    queryKey: ["pcap-extractions", trackerQuarterDate],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("pcap_extractions")
+        .select("*")
+        .eq("quarter_date", trackerQuarterDate);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+  const pcapMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    for (const p of pcapExtractions) map[p.fund_id] = p;
+    return map;
+  }, [pcapExtractions]);
   const missingFunds = coverage.filter((c) => c.status === "missing");
 
   return (
@@ -336,6 +356,8 @@ function ReportTrackerView({
                 setOpenUploadFundId(openUploadFundId === fund.fundId ? null : fund.fundId)
               }
               quarterDate={trackerQuarterDate}
+              pcap={pcapMap[fund.fundId] || null}
+              onReviewPcap={() => setPcapReviewFundId(fund.fundId)}
             />
           ))}
         </div>
@@ -349,6 +371,14 @@ function ReportTrackerView({
           onClose={() => setBulkUploadOpen(false)}
         />
       )}
+
+      {pcapReviewFundId && pcapMap[pcapReviewFundId] && (
+        <PcapReviewDialog
+          pcap={pcapMap[pcapReviewFundId]}
+          fundName={coverage.find(c => c.fundId === pcapReviewFundId)?.fundName || ""}
+          onClose={() => setPcapReviewFundId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -360,11 +390,15 @@ function ReportTrackerRow({
   isUploadOpen,
   onToggleUpload,
   quarterDate,
+  pcap,
+  onReviewPcap,
 }: {
   fund: FundCoverage;
   isUploadOpen: boolean;
   onToggleUpload: () => void;
   quarterDate: string;
+  pcap: any;
+  onReviewPcap: () => void;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -606,6 +640,20 @@ function ReportTrackerRow({
             </span>
           )}
           {statusBadge()}
+          {pcap && (
+            <Badge
+              variant="outline"
+              className={cn("text-[9px] cursor-pointer", {
+                "border-[hsl(var(--positive))]/50 text-[hsl(var(--positive))]": pcap.extraction_status === "approved",
+                "border-amber-500/50 text-amber-400": pcap.extraction_status === "extracted" || pcap.extraction_status === "reviewed",
+                "border-destructive/50 text-destructive": pcap.extraction_status === "error",
+                "border-muted-foreground/50 text-muted-foreground": pcap.extraction_status === "pending",
+              })}
+              onClick={(e) => { e.stopPropagation(); onReviewPcap(); }}
+            >
+              PCAP: {pcap.extraction_status}
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {rightAction()}

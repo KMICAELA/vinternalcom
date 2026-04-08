@@ -508,6 +508,62 @@ export type Database = {
         }
         Relationships: []
       }
+      pcap_extractions: {
+        Row: {
+          confidence_scores: Json
+          created_at: string
+          document_path: string | null
+          extracted_data: Json
+          extraction_notes: string | null
+          extraction_status: string
+          fund_id: string
+          id: string
+          quarter: string
+          quarter_date: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence_scores?: Json
+          created_at?: string
+          document_path?: string | null
+          extracted_data?: Json
+          extraction_notes?: string | null
+          extraction_status?: string
+          fund_id: string
+          id?: string
+          quarter: string
+          quarter_date: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence_scores?: Json
+          created_at?: string
+          document_path?: string | null
+          extracted_data?: Json
+          extraction_notes?: string | null
+          extraction_status?: string
+          fund_id?: string
+          id?: string
+          quarter?: string
+          quarter_date?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcap_extractions_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_snapshots: {
         Row: {
           created_at: string
