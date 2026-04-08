@@ -66,6 +66,7 @@ export default function FundsPage() {
   }, [defaultQuarter.date, defaultQuarter.quarter]);
 
   const [trackerQuarterDate, setTrackerQuarterDate] = useState(defaultQuarter.date);
+  const { data: trackingData, isLoading: trackingLoading } = useReportTracking(trackerQuarterDate);
   const { data: coverage, isLoading: coverageLoading } = useReportCoverage(trackerQuarterDate);
 
   // Add Reports quarter options (for existing dialog)
