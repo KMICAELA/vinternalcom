@@ -342,6 +342,33 @@ export default function QuarterlyInputPage() {
           </AccordionContent>
         </AccordionItem>
 
+        {/* FX Conversion for non-USD funds */}
+        {funds.filter((f: any) => f.currency && f.currency !== "USD").length > 0 && (
+          <AccordionItem value="fx-conversion" className="border border-border rounded-lg bg-card overflow-hidden">
+            <AccordionTrigger className="px-4 py-3 text-sm font-medium hover:no-underline">
+              FX Conversion
+              <Badge variant="outline" className="ml-2 text-[10px]">
+                {funds.filter((f: any) => f.currency && f.currency !== "USD").length} non-USD fund{funds.filter((f: any) => f.currency && f.currency !== "USD").length > 1 ? "s" : ""}
+              </Badge>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 space-y-4">
+              {funds.filter((f: any) => f.currency && f.currency !== "USD").map((fund: any) => (
+                <div key={fund.id}>
+                  <p className="text-xs font-medium text-foreground mb-2">{fund.fund_name}</p>
+                  <FxConversionSection
+                    quarterDate={quarterDate}
+                    sourceCurrency={fund.currency}
+                    onConvertedValues={(vals) => {
+                      // Values auto-saved via the FX rate hook; could integrate into submit flow if needed
+                      console.log(`FX converted for ${fund.fund_name}:`, vals);
+                    }}
+                  />
+                </div>
+              ))}
+            </AccordionContent>
+          </AccordionItem>
+        )}
+
         <AccordionItem value="commentary" className="border border-border rounded-lg bg-card overflow-hidden">
           <AccordionTrigger className="px-4 py-3 text-sm font-medium hover:no-underline">Quarterly Commentary</AccordionTrigger>
           <AccordionContent className="px-4 pb-4 space-y-3">
