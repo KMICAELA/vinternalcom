@@ -51,8 +51,8 @@ const FundsTable = ({ data }: FundsTableProps) => {
                 <td className="p-3 text-right font-mono text-foreground">{fmt(called)}</td>
                 <td className="p-3 text-right font-mono text-foreground">{fmt(dist)}</td>
                 <td className="p-3 text-right font-mono text-foreground">{fmt(nav)}</td>
-                <td className={cn("p-3 text-right font-mono font-medium", tvpi >= 1 ? "text-green-600" : "text-red-500")}>
-                  {tvpi.toFixed(2)}x
+                <td className={cn("p-3 text-right font-mono font-medium", called === 0 ? "text-muted-foreground" : tvpi >= 1 ? "text-green-600" : "text-red-500")}>
+                  {called === 0 ? <span className="text-[10px] font-normal">Not yet called</span> : `${tvpi.toFixed(2)}x`}
                 </td>
                 <td className="p-3 text-right font-mono text-muted-foreground">
                   {irr != null ? `${(irr * 100).toFixed(1)}%` : "—"}
