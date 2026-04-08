@@ -1,5 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays, Sparkles, ClipboardCheck, PlusCircle } from "lucide-react";
+import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays, Sparkles, ClipboardCheck, PlusCircle, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
@@ -20,6 +20,7 @@ const navItems = [
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },
   { to: "/review", icon: ClipboardCheck, label: "Review" },
   { to: "/quarterly-input", icon: PlusCircle, label: "Quarterly Input" },
+  { to: "/fund-templates", icon: FileText, label: "Fund Templates" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
