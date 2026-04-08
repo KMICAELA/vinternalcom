@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
+import { useReportTracking, type EnhancedFundTracking, type TrackingSummary } from "@/hooks/useReportTracking";
 import { useQuarterContext } from "@/contexts/QuarterContext";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
@@ -65,6 +66,7 @@ export default function FundsPage() {
   }, [defaultQuarter.date, defaultQuarter.quarter]);
 
   const [trackerQuarterDate, setTrackerQuarterDate] = useState(defaultQuarter.date);
+  const { data: trackingData, isLoading: trackingLoading } = useReportTracking(trackerQuarterDate);
   const { data: coverage, isLoading: coverageLoading } = useReportCoverage(trackerQuarterDate);
 
   // Add Reports quarter options (for existing dialog)
@@ -137,6 +139,7 @@ export default function FundsPage() {
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
   const summary = coverage?.summary;
+  const tSummary = trackingData?.summary;
   const received = (summary?.complete ?? 0) + (summary?.inReview ?? 0);
   const totalActive = (summary?.total ?? 0) - (summary?.na ?? 0);
 
@@ -175,14 +178,13 @@ export default function FundsPage() {
 
         {/* ── Tab 1: Report Tracker ── */}
         <TabsContent value="tracker" className="space-y-4">
-          <ReportTrackerView
+          <EnhancedReportTrackerView
             trackerQuarters={trackerQuarters}
             trackerQuarterDate={trackerQuarterDate}
             setTrackerQuarterDate={setTrackerQuarterDate}
+            trackingData={trackingData}
+            trackingLoading={trackingLoading}
             coverage={coverage?.coverage || []}
-            summary={summary}
-            received={received}
-            totalActive={totalActive}
             coverageLoading={coverageLoading}
             funds={funds}
             availableQuarters={availableQuarters}
@@ -228,17 +230,16 @@ export default function FundsPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// Report Tracker View
+// Enhanced Report Tracker View
 // ═══════════════════════════════════════════════════════════════════
 
-function ReportTrackerView({
+function EnhancedReportTrackerView({
   trackerQuarters,
   trackerQuarterDate,
   setTrackerQuarterDate,
+  trackingData,
+  trackingLoading,
   coverage,
-  summary,
-  received,
-  totalActive,
   coverageLoading,
   funds,
   availableQuarters,
@@ -246,10 +247,9 @@ function ReportTrackerView({
   trackerQuarters: { label: string; date: string }[];
   trackerQuarterDate: string;
   setTrackerQuarterDate: (d: string) => void;
+  trackingData: any;
+  trackingLoading: boolean;
   coverage: FundCoverage[];
-  summary: any;
-  received: number;
-  totalActive: number;
   coverageLoading: boolean;
   funds: any[];
   availableQuarters: { label: string; date: string }[];
@@ -257,273 +257,322 @@ function ReportTrackerView({
   const [openUploadFundId, setOpenUploadFundId] = useState<string | null>(null);
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
   const [pcapReviewFundId, setPcapReviewFundId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"list" | "timeline">("list");
+  const [sortBy, setSortBy] = useState<"status" | "name" | "expected">("status");
+  const [filterStatus, setFilterStatus] = useState<string>("all");
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const completionPct = totalActive > 0 ? (received / totalActive) * 100 : 0;
 
-  // PCAP extractions for the selected quarter
-  const { data: pcapExtractions = [] } = useQuery({
-    queryKey: ["pcap-extractions", trackerQuarterDate],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("pcap_extractions")
-        .select("*")
-        .eq("quarter_date", trackerQuarterDate);
-      if (error) throw error;
-      return data || [];
-    },
-  });
-  const pcapMap = useMemo(() => {
-    const map: Record<string, any> = {};
-    for (const p of pcapExtractions) map[p.fund_id] = p;
-    return map;
-  }, [pcapExtractions]);
+  const tSummary = trackingData?.summary as TrackingSummary | undefined;
+  const trackedFunds = (trackingData?.funds || []) as EnhancedFundTracking[];
+  const pcapMap = trackingData?.pcapByFund || {};
+
+  const enrichedFunds = useMemo(() => {
+    return trackedFunds.map((tf) => {
+      const cov = coverage.find((c) => c.fundId === tf.fundId);
+      return { ...tf, coverage: cov || null };
+    });
+  }, [trackedFunds, coverage]);
+
+  const sortedFunds = useMemo(() => {
+    const statusOrder: Record<string, number> = {
+      not_received: 0, received: 1, processing: 2, extracted: 3, review: 4, approved: 5, na: 6,
+    };
+    return [...enrichedFunds].sort((a, b) => {
+      if (sortBy === "status") {
+        const sa = statusOrder[a.quarterlyReport?.status || "not_received"] ?? 0;
+        const sb = statusOrder[b.quarterlyReport?.status || "not_received"] ?? 0;
+        return sa - sb;
+      }
+      if (sortBy === "name") return a.fundName.localeCompare(b.fundName);
+      if (sortBy === "expected") return (a.pattern?.avg_days_to_report ?? 99) - (b.pattern?.avg_days_to_report ?? 99);
+      return 0;
+    });
+  }, [enrichedFunds, sortBy]);
+
+  const filteredFunds = useMemo(() => {
+    if (filterStatus === "all") return sortedFunds;
+    return sortedFunds.filter((f) => {
+      const s = f.quarterlyReport?.status || "not_received";
+      if (filterStatus === "awaiting") return s === "not_received";
+      if (filterStatus === "in_progress") return ["received", "processing", "extracted", "review"].includes(s);
+      if (filterStatus === "approved") return s === "approved";
+      if (filterStatus === "na") return s === "na";
+      return true;
+    });
+  }, [sortedFunds, filterStatus]);
+
+  const totalActive = tSummary ? tSummary.total - tSummary.na : 0;
+  const approvedCount = tSummary?.approved ?? 0;
+  const completionPct = totalActive > 0 ? (approvedCount / totalActive) * 100 : 0;
   const missingFunds = coverage.filter((c) => c.status === "missing");
+
+  const quarterEndLabel = useMemo(() => {
+    const d = new Date(trackerQuarterDate + "T00:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }, [trackerQuarterDate]);
+
+  const loading = trackingLoading || coverageLoading;
 
   return (
     <div className="space-y-4">
-      {/* Controls row */}
+      {/* Header Summary Bar */}
+      <div className="analytics-card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <label className="text-sm text-muted-foreground">Quarter</label>
+            <Select value={trackerQuarterDate} onValueChange={setTrackerQuarterDate}>
+              <SelectTrigger className="h-9 w-32 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {trackerQuarters.map((q) => (
+                  <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {tSummary && (
+              <span className="text-xs text-muted-foreground">
+                {tSummary.daysSinceQuarterEnd} days since {quarterEndLabel}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {missingFunds.length > 0 && (
+              <Button size="sm" variant="outline" onClick={() => setBulkUploadOpen(true)} className="gap-2">
+                <FileStack className="h-3.5 w-3.5" /> Bulk Upload
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {tSummary && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-2.5 bg-muted rounded-full overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${completionPct}%`, background: "linear-gradient(90deg, hsl(var(--gold) / 0.7), hsl(var(--gold)))" }} />
+              </div>
+              <span className="text-sm font-medium text-foreground font-mono whitespace-nowrap">
+                {approvedCount} of {totalActive} funds reported
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <StatusChip color="emerald" count={tSummary.approved} label="Approved" />
+              <StatusChip color="amber" count={tSummary.inReview} label="In Review" />
+              <StatusChip color="blue" count={tSummary.processing} label="Processing" />
+              <StatusChip color="muted" count={tSummary.awaiting} label="Awaiting" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <label className="text-sm text-muted-foreground">Quarter</label>
-          <Select value={trackerQuarterDate} onValueChange={setTrackerQuarterDate}>
-            <SelectTrigger className="h-9 w-32 text-sm">
-              <SelectValue />
-            </SelectTrigger>
+        <div className="flex items-center gap-2">
+          <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+            <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="Sort by" /></SelectTrigger>
             <SelectContent>
-              {trackerQuarters.map((q) => (
-                <SelectItem key={q.date} value={q.date}>{q.label}</SelectItem>
-              ))}
+              <SelectItem value="status">Sort: Outstanding first</SelectItem>
+              <SelectItem value="name">Sort: Fund name</SelectItem>
+              <SelectItem value="expected">Sort: Expected date</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <SelectTrigger className="h-8 w-28 text-xs"><SelectValue placeholder="Filter" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="awaiting">Awaiting</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="na">N/A</SelectItem>
             </SelectContent>
           </Select>
         </div>
-
-        <div className="flex items-center gap-3">
-          {/* Summary chips */}
-          {summary && (
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-card border border-border">
-                <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                {summary.complete} Complete
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-card border border-border">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                {summary.inReview} In Review
-              </span>
-              <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-card border border-border">
-                <span className="w-2 h-2 rounded-full bg-muted-foreground" />
-                {summary.missing} Missing
-              </span>
-            </div>
-          )}
-          {missingFunds.length > 0 && (
-            <Button size="sm" variant="outline" onClick={() => setBulkUploadOpen(true)} className="gap-2">
-              <FileStack className="h-3.5 w-3.5" /> Bulk Upload Missing
-            </Button>
-          )}
+        <div className="flex gap-1 bg-muted/50 rounded-lg p-0.5">
+          {(["list", "timeline"] as const).map(mode => (
+            <button key={mode} onClick={() => setViewMode(mode)}
+              className={cn("text-xs px-3 py-1.5 rounded-md transition-colors capitalize",
+                viewMode === mode ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+              )}>{mode}</button>
+          ))}
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-500"
-            style={{
-              width: `${completionPct}%`,
-              background: "linear-gradient(90deg, hsl(var(--gold) / 0.7), hsl(var(--gold)))",
-            }}
-          />
-        </div>
-        <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-          {received} / {totalActive}
-        </span>
-      </div>
-
-      {/* Fund list */}
-      {coverageLoading ? (
+      {loading ? (
         <div className="flex items-center gap-2 p-8 justify-center text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading...
         </div>
-      ) : (
-        <div className="space-y-2">
-          {coverage.map((fund) => (
-            <ReportTrackerRow
-              key={fund.fundId}
-              fund={fund}
-              isUploadOpen={openUploadFundId === fund.fundId}
-              onToggleUpload={() =>
-                setOpenUploadFundId(openUploadFundId === fund.fundId ? null : fund.fundId)
-              }
-              quarterDate={trackerQuarterDate}
-              pcap={pcapMap[fund.fundId] || null}
-              onReviewPcap={() => setPcapReviewFundId(fund.fundId)}
-            />
-          ))}
+      ) : viewMode === "list" ? (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-surface-1">
+                <TableHead>Fund</TableHead>
+                <TableHead className="text-center">Quarterly Report</TableHead>
+                <TableHead className="text-center">PCAP</TableHead>
+                <TableHead className="text-center">Expected</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredFunds.map((fund) => (
+                <EnhancedTrackerRow key={fund.fundId} fund={fund} quarterDate={trackerQuarterDate}
+                  daysSinceQE={tSummary?.daysSinceQuarterEnd ?? 0}
+                  onUpload={() => setOpenUploadFundId(openUploadFundId === fund.fundId ? null : fund.fundId)}
+                  isUploadOpen={openUploadFundId === fund.fundId}
+                  onReviewPcap={() => setPcapReviewFundId(fund.fundId)} />
+              ))}
+            </TableBody>
+          </Table>
         </div>
+      ) : (
+        <TimelineView funds={filteredFunds} daysSinceQE={tSummary?.daysSinceQuarterEnd ?? 0} quarterEndLabel={quarterEndLabel} />
       )}
 
       {bulkUploadOpen && (
-        <BulkUploadMissingDialog
-          missingFunds={missingFunds}
-          allFunds={funds}
-          quarterDate={trackerQuarterDate}
-          onClose={() => setBulkUploadOpen(false)}
-        />
+        <BulkUploadMissingDialog missingFunds={missingFunds} allFunds={funds}
+          quarterDate={trackerQuarterDate} onClose={() => setBulkUploadOpen(false)} />
       )}
-
       {pcapReviewFundId && pcapMap[pcapReviewFundId] && (
-        <PcapReviewDialog
-          pcap={pcapMap[pcapReviewFundId]}
-          fundName={coverage.find(c => c.fundId === pcapReviewFundId)?.fundName || ""}
-          onClose={() => setPcapReviewFundId(null)}
-        />
+        <PcapReviewDialog pcap={pcapMap[pcapReviewFundId]}
+          fundName={trackedFunds.find(f => f.fundId === pcapReviewFundId)?.fundName || ""}
+          onClose={() => setPcapReviewFundId(null)} />
       )}
     </div>
   );
 }
 
-// ─── Single fund row in Report Tracker ──────────────────────────────
+function StatusChip({ color, count, label }: { color: string; count: number; label: string }) {
+  const colorMap: Record<string, string> = { emerald: "bg-emerald-500", amber: "bg-amber-500", blue: "bg-blue-500", muted: "bg-muted-foreground" };
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-card border border-border">
+      <span className={cn("w-2 h-2 rounded-full", colorMap[color] || "bg-muted-foreground")} />
+      {count} {label}
+    </span>
+  );
+}
 
-function ReportTrackerRow({
-  fund,
-  isUploadOpen,
-  onToggleUpload,
-  quarterDate,
-  pcap,
-  onReviewPcap,
-}: {
-  fund: FundCoverage;
-  isUploadOpen: boolean;
-  onToggleUpload: () => void;
-  quarterDate: string;
-  pcap: any;
-  onReviewPcap: () => void;
+function ReportStatusBadge({ status, daysSinceQE, avgDays }: { status: string | undefined; daysSinceQE: number; avgDays: number | null }) {
+  if (!status || status === "not_received") {
+    const expected = avgDays ?? 45;
+    const daysRemaining = expected - daysSinceQE;
+    const overdue = daysRemaining < 0;
+    return (
+      <div className="flex flex-col items-center gap-0.5">
+        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive font-medium">
+          <span className="w-1.5 h-1.5 rounded-full bg-destructive" /> Not Received
+        </span>
+        <span className={cn("text-[9px]", overdue ? "text-destructive" : "text-muted-foreground")}>
+          {overdue ? `Overdue by ${Math.abs(daysRemaining)}d` : `Expected in ~${daysRemaining}d`}
+        </span>
+      </div>
+    );
+  }
+  if (status === "received" || status === "processing") {
+    return (<span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-medium">
+      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> {status === "received" ? "Received" : "Processing"}
+    </span>);
+  }
+  if (status === "extracted" || status === "review") {
+    return (<span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-medium">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Needs Review
+    </span>);
+  }
+  if (status === "approved") {
+    return (<span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">
+      <Check className="h-3 w-3" /> Approved
+    </span>);
+  }
+  if (status === "na") {
+    return (<span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full text-muted-foreground/50 font-medium">— N/A</span>);
+  }
+  return <span className="text-[10px] text-muted-foreground">{status}</span>;
+}
+
+function EnhancedTrackerRow({ fund, quarterDate, daysSinceQE, onUpload, isUploadOpen, onReviewPcap }: {
+  fund: EnhancedFundTracking & { coverage: FundCoverage | null };
+  quarterDate: string; daysSinceQE: number; onUpload: () => void; isUploadOpen: boolean; onReviewPcap: () => void;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
-  const [urlValue, setUrlValue] = useState("");
-  const [savingUrl, setSavingUrl] = useState(false);
   const [uploadMode, setUploadMode] = useState<"document" | "email" | "link">("document");
   const [emailText, setEmailText] = useState("");
   const [submittingEmail, setSubmittingEmail] = useState(false);
+  const [urlValue, setUrlValue] = useState("");
+  const [savingUrl, setSavingUrl] = useState(false);
 
-  const handleEmailSubmit = async () => {
-    if (!emailText.trim()) return;
-    setSubmittingEmail(true);
-    try {
-      const arrayBuffer = new TextEncoder().encode(emailText);
-      const base64 = btoa(String.fromCharCode(...arrayBuffer));
-
-      const { data: template } = await supabase
-        .from("fund_extraction_templates")
-        .select("*")
-        .eq("fund_id", fund.fundId)
-        .maybeSingle();
-
-      const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
-        body: { pdf_base64: base64, file_name: "email_paste.txt", template: template || undefined },
-      });
-      if (error) throw error;
-
-      const summary = extracted?.fund_summary || {};
-      const companies = extracted?.portfolio_companies || [];
-
-      await supabase.from("staged_fund_extractions").insert({
-        fund_id: fund.fundId,
-        quarter_date: quarterDate,
-        source_file_name: "Email paste",
-        extracted_nav: summary.nav,
-        extracted_capital_called: summary.total_capital_called,
-        extracted_distributions: summary.total_distributions,
-        extracted_gross_irr: summary.gross_irr,
-        extracted_gross_tvpi: summary.gross_tvpi,
-        extracted_net_irr: summary.net_irr,
-        extracted_net_tvpi: summary.net_tvpi,
-        extracted_dpi: summary.dpi,
-        extracted_rvpi: summary.rvpi,
-        extracted_pic: summary.pic,
-        extracted_commitment: summary.commitment,
-        extracted_unfunded: summary.unfunded_commitment,
-        extracted_companies: companies,
-        raw_extraction: extracted,
-        confidence_score: extracted?.extraction_confidence ?? null,
-        extraction_model: "gemini-2.5-pro",
-      } as any);
-
-      toast.success("Email content submitted for extraction.");
-      qc.invalidateQueries({ queryKey: ["report-coverage"] });
-      qc.invalidateQueries({ queryKey: ["pending-review-count"] });
-      setEmailText("");
-      onToggleUpload();
-    } catch (err: any) {
-      toast.error(err.message || "Email extraction failed");
-    } finally {
-      setSubmittingEmail(false);
-    }
-  };
+  const qrStatus = fund.quarterlyReport?.status;
+  const pcapStatus = fund.pcap?.status;
+  const canUpload = !qrStatus || qrStatus === "not_received";
 
   const handleFileUpload = async (file: File) => {
     setUploading(true);
     try {
       const fileName = `${Date.now()}_${file.name.replace(/\s+/g, "_")}`;
       const storagePath = `${quarterDate}/${fund.fundId}/${fileName}`;
-      const { error: uploadError } = await supabase.storage
-        .from("fund-reports")
-        .upload(storagePath, file);
-      if (uploadError) throw uploadError;
-
+      await supabase.storage.from("fund-reports").upload(storagePath, file);
       const arrayBuffer = await file.arrayBuffer();
       const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-
-      const { data: template } = await supabase
-        .from("fund_extraction_templates")
-        .select("*")
-        .eq("fund_id", fund.fundId)
-        .maybeSingle();
-
+      const { data: template } = await supabase.from("fund_extraction_templates").select("*").eq("fund_id", fund.fundId).maybeSingle();
       const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
         body: { pdf_base64: base64, file_name: file.name, template: template || undefined },
       });
       if (error) throw error;
-
       const summary = extracted?.fund_summary || {};
-      const companies = extracted?.portfolio_companies || [];
-
       await supabase.from("staged_fund_extractions").insert({
-        fund_id: fund.fundId,
-        quarter_date: quarterDate,
-        source_file_path: storagePath,
-        source_file_name: file.name,
-        extracted_nav: summary.nav,
-        extracted_capital_called: summary.total_capital_called,
-        extracted_distributions: summary.total_distributions,
-        extracted_gross_irr: summary.gross_irr,
-        extracted_gross_tvpi: summary.gross_tvpi,
-        extracted_net_irr: summary.net_irr,
-        extracted_net_tvpi: summary.net_tvpi,
-        extracted_dpi: summary.dpi,
-        extracted_rvpi: summary.rvpi,
-        extracted_pic: summary.pic,
-        extracted_commitment: summary.commitment,
-        extracted_unfunded: summary.unfunded_commitment,
-        extracted_companies: companies,
-        raw_extraction: extracted,
-        confidence_score: extracted?.extraction_confidence ?? null,
-        extraction_model: "gemini-2.5-pro",
+        fund_id: fund.fundId, quarter_date: quarterDate, source_file_path: storagePath, source_file_name: file.name,
+        extracted_nav: summary.nav, extracted_capital_called: summary.total_capital_called,
+        extracted_distributions: summary.total_distributions, extracted_gross_irr: summary.gross_irr,
+        extracted_gross_tvpi: summary.gross_tvpi, extracted_net_irr: summary.net_irr,
+        extracted_net_tvpi: summary.net_tvpi, extracted_dpi: summary.dpi, extracted_rvpi: summary.rvpi,
+        extracted_pic: summary.pic, extracted_commitment: summary.commitment,
+        extracted_unfunded: summary.unfunded_commitment, extracted_companies: extracted?.portfolio_companies || [],
+        raw_extraction: extracted, confidence_score: extracted?.extraction_confidence ?? null, extraction_model: "gemini-2.5-pro",
       } as any);
-
-      toast.success("Report uploaded and extracting...");
+      await supabase.from("quarterly_report_tracking").upsert({
+        fund_id: fund.fundId, quarter_date: quarterDate, quarter: fund.quarterlyReport?.quarter || "",
+        report_type: "quarterly_report", status: "review", received_at: new Date().toISOString(), received_via: "upload",
+      } as any, { onConflict: "fund_id,quarter_date,report_type" });
+      toast.success("Report uploaded and extracted.");
+      qc.invalidateQueries({ queryKey: ["report-tracking"] });
       qc.invalidateQueries({ queryKey: ["report-coverage"] });
-      qc.invalidateQueries({ queryKey: ["pending-review-count"] });
-      onToggleUpload(); // close
-    } catch (err: any) {
-      toast.error(err.message || "Upload failed");
-    } finally {
-      setUploading(false);
-    }
+      onUpload();
+    } catch (err: any) { toast.error(err.message || "Upload failed"); }
+    finally { setUploading(false); }
+  };
+
+  const handleEmailSubmit = async () => {
+    if (!emailText.trim()) return;
+    setSubmittingEmail(true);
+    try {
+      const base64 = btoa(String.fromCharCode(...new TextEncoder().encode(emailText)));
+      const { data: template } = await supabase.from("fund_extraction_templates").select("*").eq("fund_id", fund.fundId).maybeSingle();
+      const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
+        body: { pdf_base64: base64, file_name: "email_paste.txt", template: template || undefined },
+      });
+      if (error) throw error;
+      const summary = extracted?.fund_summary || {};
+      await supabase.from("staged_fund_extractions").insert({
+        fund_id: fund.fundId, quarter_date: quarterDate, source_file_name: "Email paste",
+        extracted_nav: summary.nav, extracted_capital_called: summary.total_capital_called,
+        extracted_distributions: summary.total_distributions, extracted_gross_irr: summary.gross_irr,
+        extracted_gross_tvpi: summary.gross_tvpi, extracted_net_irr: summary.net_irr,
+        extracted_net_tvpi: summary.net_tvpi, extracted_dpi: summary.dpi, extracted_rvpi: summary.rvpi,
+        extracted_pic: summary.pic, extracted_commitment: summary.commitment,
+        extracted_unfunded: summary.unfunded_commitment, extracted_companies: extracted?.portfolio_companies || [],
+        raw_extraction: extracted, confidence_score: extracted?.extraction_confidence ?? null, extraction_model: "gemini-2.5-pro",
+      } as any);
+      await supabase.from("quarterly_report_tracking").upsert({
+        fund_id: fund.fundId, quarter_date: quarterDate, quarter: fund.quarterlyReport?.quarter || "",
+        report_type: "quarterly_report", status: "review", received_at: new Date().toISOString(), received_via: "email",
+      } as any, { onConflict: "fund_id,quarter_date,report_type" });
+      toast.success("Email extracted.");
+      qc.invalidateQueries({ queryKey: ["report-tracking"] });
+      qc.invalidateQueries({ queryKey: ["report-coverage"] });
+      setEmailText(""); onUpload();
+    } catch (err: any) { toast.error(err.message || "Extraction failed"); }
+    finally { setSubmittingEmail(false); }
   };
 
   const handleSaveUrl = async () => {
@@ -531,248 +580,175 @@ function ReportTrackerRow({
     setSavingUrl(true);
     try {
       await supabase.from("staged_fund_extractions").insert({
-        fund_id: fund.fundId,
-        quarter_date: quarterDate,
-        source_file_name: urlValue.trim(),
-        source_url: urlValue.trim(),
-        status: "pending_review",
+        fund_id: fund.fundId, quarter_date: quarterDate, source_file_name: urlValue.trim(),
+        source_url: urlValue.trim(), status: "pending_review",
       } as any);
-      toast.success("Link saved. Extraction available when PDF URL processing is supported.");
+      toast.success("Link saved.");
       qc.invalidateQueries({ queryKey: ["report-coverage"] });
-      setUrlValue("");
-      onToggleUpload();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save link");
-    } finally {
-      setSavingUrl(false);
-    }
+      setUrlValue(""); onUpload();
+    } catch (err: any) { toast.error(err.message || "Failed"); }
+    finally { setSavingUrl(false); }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
-    if (file && file.type === "application/pdf") handleFileUpload(file);
+    if (file?.type === "application/pdf") handleFileUpload(file);
     else toast.error("Please drop a PDF file");
   };
 
-  const statusBadge = () => {
-    switch (fund.status) {
-      case "complete":
-        return (
-          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-emerald-500/15 text-emerald-400 font-medium">
-            <Check className="h-3 w-3" /> Complete
-          </span>
-        );
-      case "in_review":
-        return (
-          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 font-medium">
-            ⏳ In Review
-          </span>
-        );
-      case "na":
-        return (
-          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full text-muted-foreground/50 font-medium">
-            — N/A
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-muted text-muted-foreground font-medium">
-            Missing
-          </span>
-        );
-    }
-  };
-
-  const rightAction = () => {
-    switch (fund.status) {
-      case "complete":
-        return (
-          <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5 text-muted-foreground">
-            <Eye className="h-3 w-3" /> View
-          </Button>
-        );
-      case "in_review":
-        return (
-          <div className="flex items-center gap-2">
-            {fund.fileName && (
-              <span className="text-xs font-mono text-muted-foreground max-w-[180px] truncate">
-                {fund.fileName}
-              </span>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs gap-1.5 text-amber-400 hover:text-amber-300"
-              onClick={() => navigate("/review")}
-            >
-              <ArrowRight className="h-3 w-3" /> Go to Review
-            </Button>
-          </div>
-        );
-      case "missing":
-        return (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs gap-1.5 text-[hsl(var(--gold))] hover:text-[hsl(var(--gold))]/80"
-            onClick={(e) => {
-              e.stopPropagation();
-              onToggleUpload();
-            }}
-          >
-            <Upload className="h-3 w-3" /> Upload Report
-          </Button>
-        );
-      default:
-        return null;
-    }
-  };
-
   return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
-        <div className="flex items-center gap-3 min-w-0">
-          <span className="text-sm font-medium text-foreground truncate">{fund.fundName}</span>
-          {fund.strategy && (
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              {fund.strategy}{fund.vintageYear ? ` · ${fund.vintageYear}` : ""}
-            </span>
-          )}
-          {statusBadge()}
-          {pcap && (
-            <Badge
-              variant="outline"
-              className={cn("text-[9px] cursor-pointer", {
-                "border-[hsl(var(--positive))]/50 text-[hsl(var(--positive))]": pcap.extraction_status === "approved",
-                "border-amber-500/50 text-amber-400": pcap.extraction_status === "extracted" || pcap.extraction_status === "reviewed",
-                "border-destructive/50 text-destructive": pcap.extraction_status === "error",
-                "border-muted-foreground/50 text-muted-foreground": pcap.extraction_status === "pending",
-              })}
-              onClick={(e) => { e.stopPropagation(); onReviewPcap(); }}
-            >
-              PCAP: {pcap.extraction_status}
-            </Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {rightAction()}
+    <>
+      <TableRow className="table-row-hover">
+        <TableCell>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-foreground">{fund.fundName}</span>
+            {fund.currency !== "USD" && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-semibold">{fund.currency}</span>
+            )}
+            {fund.strategy && <span className="text-xs text-muted-foreground hidden lg:inline">{fund.strategy}</span>}
+          </div>
+        </TableCell>
+        <TableCell className="text-center">
+          <ReportStatusBadge status={qrStatus} daysSinceQE={daysSinceQE} avgDays={fund.pattern?.avg_days_to_report ?? null} />
+        </TableCell>
+        <TableCell className="text-center">
+          <ReportStatusBadge status={pcapStatus} daysSinceQE={daysSinceQE} avgDays={null} />
+        </TableCell>
+        <TableCell className="text-center">
+          {fund.pattern?.avg_days_to_report ? (
+            <span className="text-xs text-muted-foreground font-mono">~{fund.pattern.avg_days_to_report}d</span>
+          ) : <span className="text-xs text-muted-foreground">—</span>}
+        </TableCell>
+        <TableCell className="text-right">
+          <div className="flex items-center gap-1 justify-end">
+            {canUpload && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-[hsl(var(--gold))]" onClick={onUpload}>
+                <Upload className="h-3 w-3" /> Upload
+              </Button>
+            )}
+            {(qrStatus === "extracted" || qrStatus === "review") && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-amber-400" onClick={() => navigate("/review")}>
+                <ArrowRight className="h-3 w-3" /> Review
+              </Button>
+            )}
+            {qrStatus === "approved" && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs gap-1 text-muted-foreground">
+                <Eye className="h-3 w-3" /> View
+              </Button>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+      {isUploadOpen && canUpload && (
+        <TableRow>
+          <TableCell colSpan={5} className="bg-surface-1 p-0">
+            <div className="px-4 pb-4 pt-3 space-y-3">
+              <div className="flex gap-1 bg-muted/50 rounded-lg p-0.5 w-fit">
+                {([
+                  { key: "document" as const, icon: FileText, label: "Document" },
+                  { key: "email" as const, icon: Mail, label: "Email" },
+                  { key: "link" as const, icon: LinkIcon, label: "Link" },
+                ]).map(({ key, icon: Icon, label }) => (
+                  <button key={key} onClick={() => setUploadMode(key)}
+                    className={cn("flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-colors",
+                      uploadMode === key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                    )}><Icon className="h-3 w-3" />{label}</button>
+                ))}
+              </div>
+              {uploadMode === "document" && (
+                <div className="border-2 border-dashed border-[hsl(var(--gold))/0.4] rounded-lg p-6 text-center bg-[hsl(var(--gold))/0.03] hover:bg-[hsl(var(--gold))/0.06] transition-colors cursor-pointer"
+                  onDragOver={(e) => e.preventDefault()} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
+                  {uploading ? (
+                    <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" /> Uploading & extracting...
+                    </div>
+                  ) : (
+                    <><Upload className="h-5 w-5 mx-auto text-[hsl(var(--gold))]/60 mb-2" />
+                    <p className="text-sm text-muted-foreground">Drag & drop PDF here, or <span className="text-[hsl(var(--gold))] underline">browse files</span></p></>
+                  )}
+                  <input ref={fileInputRef} type="file" accept=".pdf" className="hidden"
+                    onChange={(e) => { const file = e.target.files?.[0]; if (file) handleFileUpload(file); e.currentTarget.value = ""; }} />
+                </div>
+              )}
+              {uploadMode === "email" && (
+                <div className="space-y-2">
+                  <Textarea className="min-h-[140px] text-xs font-mono bg-muted/30" placeholder="Paste the email body here..."
+                    value={emailText} onChange={(e) => setEmailText(e.target.value)} />
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">AI will extract fund metrics from the email content</p>
+                    <Button size="sm" className="h-8 text-xs gap-1.5 bg-[hsl(var(--gold))] text-[hsl(var(--gold-foreground))] hover:bg-[hsl(var(--gold))]/90"
+                      disabled={!emailText.trim() || submittingEmail} onClick={handleEmailSubmit}>
+                      {submittingEmail ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />} Extract
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {uploadMode === "link" && (
+                <div className="flex items-center gap-2">
+                  <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <Input className="h-8 text-xs flex-1" placeholder="https://..." value={urlValue} onChange={(e) => setUrlValue(e.target.value)} />
+                  <Button size="sm" variant="outline" className="h-8 text-xs" disabled={!urlValue.trim() || savingUrl} onClick={handleSaveUrl}>
+                    {savingUrl ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          </TableCell>
+        </TableRow>
+      )}
+    </>
+  );
+}
+
+function TimelineView({ funds, daysSinceQE, quarterEndLabel }: {
+  funds: (EnhancedFundTracking & { coverage: FundCoverage | null })[];
+  daysSinceQE: number; quarterEndLabel: string;
+}) {
+  const maxDays = Math.max(90, daysSinceQE + 10);
+  const markers = [0, 30, 45, 60, 90].filter(d => d <= maxDays);
+  return (
+    <div className="analytics-card p-5 space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-foreground">Report Arrival Timeline</h3>
+        <span className="text-xs text-muted-foreground">Days after {quarterEndLabel}</span>
+      </div>
+      <div className="relative h-6 border-b border-border">
+        {markers.map(d => (
+          <div key={d} className="absolute top-0 h-full flex flex-col items-center" style={{ left: `${(d / maxDays) * 100}%` }}>
+            <div className="w-px h-3 bg-border" /><span className="text-[9px] text-muted-foreground mt-0.5">{d}d</span>
+          </div>
+        ))}
+        <div className="absolute top-0 h-full" style={{ left: `${Math.min((daysSinceQE / maxDays) * 100, 100)}%` }}>
+          <div className="w-px h-4 bg-[hsl(var(--gold))]" /><span className="text-[8px] text-[hsl(var(--gold))] -ml-3">Today</span>
         </div>
       </div>
-
-      {/* Inline upload zone */}
-      {isUploadOpen && fund.status === "missing" && (
-        <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
-          {/* Mode tabs */}
-          <div className="flex gap-1 bg-muted/50 rounded-lg p-0.5 w-fit">
-            {([
-              { key: "document" as const, icon: FileText, label: "Document" },
-              { key: "email" as const, icon: Mail, label: "Email" },
-              { key: "link" as const, icon: LinkIcon, label: "Link" },
-            ]).map(({ key, icon: Icon, label }) => (
-              <button
-                key={key}
-                onClick={() => setUploadMode(key)}
-                className={cn(
-                  "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md transition-colors",
-                  uploadMode === key
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground"
+      <div className="space-y-1.5">
+        {funds.filter(f => f.quarterlyReport?.status !== "na").map((fund) => {
+          const avgDays = fund.pattern?.avg_days_to_report ?? 45;
+          const isApproved = (fund.quarterlyReport?.status || "not_received") === "approved";
+          return (
+            <div key={fund.fundId} className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground w-[200px] shrink-0 truncate">{fund.fundName}</span>
+              <div className="flex-1 relative h-5 bg-muted/30 rounded">
+                <div className="absolute top-0 h-full bg-muted/40 rounded"
+                  style={{ left: `${Math.max(0, ((avgDays - 10) / maxDays) * 100)}%`, width: `${(20 / maxDays) * 100}%` }} />
+                {isApproved ? (
+                  <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-emerald-500"
+                    style={{ left: `${Math.min((avgDays / maxDays) * 100, 98)}%` }} />
+                ) : (
+                  <div className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-destructive/50 border border-destructive animate-pulse"
+                    style={{ left: `${Math.min((daysSinceQE / maxDays) * 100, 98)}%` }} />
                 )}
-              >
-                <Icon className="h-3 w-3" />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Document upload */}
-          {uploadMode === "document" && (
-            <div
-              className="border-2 border-dashed border-[hsl(var(--gold))/0.4] rounded-lg p-6 text-center bg-[hsl(var(--gold))/0.03] hover:bg-[hsl(var(--gold))/0.06] transition-colors cursor-pointer"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {uploading ? (
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin text-[hsl(var(--gold))]" />
-                  Uploading & extracting...
-                </div>
-              ) : (
-                <>
-                  <Upload className="h-5 w-5 mx-auto text-[hsl(var(--gold))]/60 mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Drag & drop PDF here, or <span className="text-[hsl(var(--gold))] underline">browse files</span>
-                  </p>
-                </>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                  e.currentTarget.value = "";
-                }}
-              />
-            </div>
-          )}
-
-          {/* Email paste */}
-          {uploadMode === "email" && (
-            <div className="space-y-2">
-              <Textarea
-                className="min-h-[140px] text-xs font-mono bg-muted/30"
-                placeholder="Paste the email body here (quarterly report update, capital call notice, distribution notice, etc.)..."
-                value={emailText}
-                onChange={(e) => setEmailText(e.target.value)}
-              />
-              <div className="flex items-center justify-between">
-                <p className="text-xs text-muted-foreground">
-                  AI will extract fund metrics from the email content
-                </p>
-                <Button
-                  size="sm"
-                  className="h-8 text-xs gap-1.5 bg-[hsl(var(--gold))] text-[hsl(var(--gold-foreground))] hover:bg-[hsl(var(--gold))]/90"
-                  disabled={!emailText.trim() || submittingEmail}
-                  onClick={handleEmailSubmit}
-                >
-                  {submittingEmail ? <Loader2 className="h-3 w-3 animate-spin" /> : <Mail className="h-3 w-3" />}
-                  Extract from Email
-                </Button>
               </div>
             </div>
-          )}
-
-          {/* Link */}
-          {uploadMode === "link" && (
-            <div className="flex items-center gap-2">
-              <LinkIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-              <Input
-                className="h-8 text-xs flex-1"
-                placeholder="https://..."
-                value={urlValue}
-                onChange={(e) => setUrlValue(e.target.value)}
-              />
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-8 text-xs"
-                disabled={!urlValue.trim() || savingUrl}
-                onClick={handleSaveUrl}
-              >
-                {savingUrl ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+          );
+        })}
+      </div>
     </div>
   );
 }
+
 
 // ═══════════════════════════════════════════════════════════════════
 // Bulk Upload Missing Dialog
