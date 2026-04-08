@@ -58,9 +58,33 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { pdf_base64, file_name, template } = await req.json();
+    const { pdf_base64, file_name, template, fund_id } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+
+    // If fund_id provided, try to load the fund's extraction template from DB
+    let fundTemplate = template;
+    if (fund_id && !fundTemplate) {
+      try {
+        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.1");
+        const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const { data: tmpl } = await sb
+          .from("fund_extraction_templates")
+          .select("field_mappings, extraction_notes, document_type, report_format")
+          .eq("fund_id", fund_id)
+          .eq("is_active", true)
+          .eq("document_type", "quarterly_report")
+          .maybeSingle();
+        if (tmpl) {
+          fundTemplate = {
+            field_mappings: tmpl.field_mappings,
+            extraction_notes: tmpl.extraction_notes,
+          };
+        }
+      } catch (e) {
+        console.error("Template lookup failed, proceeding without:", e);
+      }
+    }
 
     // Detect if content is plain text (email paste) vs binary document
     const isTextContent = file_name?.endsWith('.txt') || file_name === 'email_paste.txt';
@@ -69,24 +93,38 @@ serve(async (req) => {
       ? `Please extract the financial data from this fund communication/email (${file_name || 'text'}).`
       : `Please extract the financial data from this fund financial statement PDF (${file_name || 'document'}).`;
 
-    if (template && template.field_mappings) {
-      enhancedPrompt += `\n\nThis fund has known field mappings from previous extractions. Use these as hints for where to find data:\n${JSON.stringify(template.field_mappings, null, 2)}`;
+    if (fundTemplate && fundTemplate.field_mappings) {
+      const mappings = fundTemplate.field_mappings;
+      enhancedPrompt += `\n\nThis fund has known field mappings. Use these as extraction guidance:\n`;
+      for (const [field, config] of Object.entries(mappings as Record<string, any>)) {
+        if (config.location) {
+          enhancedPrompt += `- For "${field}": look in ${config.location}.`;
+          if (config.label_variations?.length) {
+            enhancedPrompt += ` It may be labeled as: ${config.label_variations.join(", ")}.`;
+          }
+          if (config.value_type) {
+            enhancedPrompt += ` Extract as ${config.value_type}.`;
+          }
+          enhancedPrompt += `\n`;
+        }
+      }
     }
-    if (template && template.sample_extraction) {
-      enhancedPrompt += `\n\nHere is a sample of previously extracted data from this fund for reference:\n${JSON.stringify(template.sample_extraction, null, 2)}`;
+    if (fundTemplate && fundTemplate.extraction_notes) {
+      enhancedPrompt += `\n\nSpecial handling notes: ${fundTemplate.extraction_notes}`;
+    }
+    if (fundTemplate && fundTemplate.sample_extraction) {
+      enhancedPrompt += `\n\nHere is a sample of previously extracted data from this fund for reference:\n${JSON.stringify(fundTemplate.sample_extraction, null, 2)}`;
     }
 
     // Build message content based on input type
     let userContent: any;
     if (isTextContent) {
-      // Decode base64 text and send as plain text message
       const textBytes = Uint8Array.from(atob(pdf_base64), c => c.charCodeAt(0));
       const decodedText = new TextDecoder().decode(textBytes);
       userContent = [
         { type: "text", text: enhancedPrompt + "\n\n--- EMAIL/TEXT CONTENT ---\n\n" + decodedText },
       ];
     } else {
-      // Send as document attachment for PDFs, Word docs, etc.
       const mimeType = file_name?.endsWith('.docx')
         ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
         : 'application/pdf';
