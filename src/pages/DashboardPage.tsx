@@ -345,12 +345,16 @@ export default function DashboardPage() {
 
       <div className="max-w-[1400px] mx-auto px-6 pb-6 space-y-5">
         {/* Top Metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment)} icon={DollarSign} highlight />
           <MetricCard label="Fund Investments" value={formatCurrency(fundCommitmentTotal)} icon={Building2} sub={`${numFunds} funds`} />
           <MetricCard label="Direct Investments" value={directs.length > 0 ? formatCurrency(directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0)) : "—"} icon={Target} sub={`${numDirects} companies`} staleWarning={staleDirectPct > 0.25 ? `${staleDirectCount} of ${numDirects} stale` : undefined} />
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard label="Net TVPI" value={cm.netTvpi > 0 ? formatMultiple(cm.netTvpi) : "—"} highlight />
           <MetricCard label="Net IRR" value={cm.netIrr != null ? formatIrr(cm.netIrr) : "—"} highlight />
+          <MetricCard label="Gross TVPI" value={cm.grossTvpi > 0 ? formatMultiple(cm.grossTvpi) : "—"} highlight />
+          <MetricCard label="Gross IRR" value={cm.grossIrr != null ? formatIrr(cm.grossIrr) : "—"} highlight />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard label="Contributed" value={cm.totalCapitalCalls > 0 ? formatCurrency(cm.totalCapitalCalls) : "—"} icon={TrendingUp} sub={cm.totalCapitalCalls > 0 ? `${formatPercent(cm.totalCapitalCalls / (totalCommitment || 1))} deployed` : "No activity yet"} />
@@ -426,6 +430,16 @@ export default function DashboardPage() {
                   const nav = fundNAVs[fund.fund_name] ?? 0;
                   const tvpi = fundTVPIs[fund.fund_name] ?? null;
                   const isActive = true;
+                  // Check if fund has any capital called (from fund_quarterly_reports)
+                  const reportCalled = fqm?.fundNAVs ? 0 : 0; // We'll use tvpi=0 as proxy
+                  // Determine if fund is "new" (start_date within last 6 months of quarter)
+                  const isNewFund = (() => {
+                    if (!fund.start_date) return false;
+                    const start = new Date(fund.start_date);
+                    const qEnd = new Date(activeQuarter.date);
+                    const diffMs = qEnd.getTime() - start.getTime();
+                    return diffMs < 180 * 24 * 60 * 60 * 1000 && diffMs >= 0;
+                  })();
                   return (
                     <tr key={fund.id} className="border-t border-border/10 hover:bg-[#1E2130] transition-colors">
                       <td className="px-4 py-2.5 font-medium text-foreground">{fund.fund_name}</td>
@@ -437,7 +451,7 @@ export default function DashboardPage() {
                       <td className="px-4 py-2.5 text-right font-mono">{formatPercent(Number(fund.ownership_percentage))}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{formatPercent(Number(fund.commitment_amount) / (fundCommitmentTotal || 1))}</td>
                       <td className="px-4 py-2.5 text-right font-mono">{nav > 0 ? formatCurrency(nav) : '—'}</td>
-                      <td className="px-4 py-2.5 text-right font-mono">{tvpi != null && tvpi > 0 ? formatMultiple(tvpi) : '—'}</td>
+                      <td className="px-4 py-2.5 text-right font-mono">{tvpi != null && tvpi > 0 ? formatMultiple(tvpi) : (reportCalled === 0 ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—')}</td>
                       <td className="px-4 py-2.5 text-center">
                         <span className={cn(
                           "inline-block w-2 h-2 rounded-full",
