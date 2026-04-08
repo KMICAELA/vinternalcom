@@ -640,8 +640,21 @@ function ReportTrackerRow({
             </span>
           )}
           {statusBadge()}
+          {pcap && (
+            <Badge
+              variant="outline"
+              className={cn("text-[9px] cursor-pointer", {
+                "border-[hsl(var(--positive))]/50 text-[hsl(var(--positive))]": pcap.extraction_status === "approved",
+                "border-amber-500/50 text-amber-400": pcap.extraction_status === "extracted" || pcap.extraction_status === "reviewed",
+                "border-destructive/50 text-destructive": pcap.extraction_status === "error",
+                "border-muted-foreground/50 text-muted-foreground": pcap.extraction_status === "pending",
+              })}
+              onClick={(e) => { e.stopPropagation(); onReviewPcap(); }}
+            >
+              PCAP: {pcap.extraction_status}
+            </Badge>
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
           {rightAction()}
         </div>
       </div>
