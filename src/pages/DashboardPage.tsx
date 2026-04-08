@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useDirectInvestments, useActiveQuarter, useUnderlyingPortfolio } from "@/hooks/usePortfolioData";
 import { formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { useConsolidatedMetrics, useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { Building2, Target, TrendingUp, DollarSign, Layers, Plus, ChevronDown, ChevronRight } from "lucide-react";
+import { Building2, Target, TrendingUp, DollarSign, Layers, Plus, ChevronDown, ChevronRight, AlertTriangle } from "lucide-react";
 import LogoMark from "@/components/LogoMark";
 import QuarterCompletionWidget from "@/components/QuarterCompletionWidget";
 import { useNavigate } from "react-router-dom";
@@ -241,8 +243,8 @@ function ExpandableHBarChart({ title, data }: {
 }
 
 // ─── Metric Card ────────────────────────────────────────────────────
-function MetricCard({ label, value, sub, icon: Icon, highlight }: {
-  label: string; value: string; sub?: string; icon?: any; highlight?: boolean;
+function MetricCard({ label, value, sub, icon: Icon, highlight, staleWarning }: {
+  label: string; value: string; sub?: string; icon?: any; highlight?: boolean; staleWarning?: string;
 }) {
   return (
     <div className={cn(
@@ -255,6 +257,12 @@ function MetricCard({ label, value, sub, icon: Icon, highlight }: {
       </div>
       <p className="text-xl font-semibold font-mono text-foreground">{value}</p>
       {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+      {staleWarning && (
+        <div className="flex items-center gap-1 mt-1.5">
+          <AlertTriangle className="h-3 w-3 text-[hsl(var(--gold))]" />
+          <span className="text-[10px] text-[hsl(var(--gold))]">{staleWarning}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -269,6 +277,26 @@ export default function DashboardPage() {
   const { data: fqm } = useFundQuarterMetrics(activeQuarter.date);
   const fundNAVs = fqm?.fundNAVs || {};
   const fundTVPIs = fqm?.fundTVPIs || {};
+
+  // Fetch valuations for active quarter to detect stale directs
+  const { data: directVals = [] } = useQuery({
+    queryKey: ["direct-valuations", activeQuarter.date],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("direct_quarterly_valuations")
+        .select("company_id")
+        .eq("quarter_date", activeQuarter.date);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  const staleDirectCount = useMemo(() => {
+    if (directs.length === 0) return 0;
+    const valuedIds = new Set(directVals.map((v: any) => v.company_id));
+    return directs.filter((d: any) => !valuedIds.has(d.id)).length;
+  }, [directs, directVals]);
+  const staleDirectPct = directs.length > 0 ? staleDirectCount / directs.length : 0;
 
   // All funds are active (no registry filter needed)
   const activeFunds = funds;
@@ -320,7 +348,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard label="Total Commitment" value={formatCurrency(totalCommitment)} icon={DollarSign} highlight />
           <MetricCard label="Fund Investments" value={formatCurrency(fundCommitmentTotal)} icon={Building2} sub={`${numFunds} funds`} />
-          <MetricCard label="Direct Investments" value={directs.length > 0 ? formatCurrency(directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0)) : "—"} icon={Target} sub={`${numDirects} companies`} />
+          <MetricCard label="Direct Investments" value={directs.length > 0 ? formatCurrency(directs.reduce((s: number, d: any) => s + Number(d.cost_basis), 0)) : "—"} icon={Target} sub={`${numDirects} companies`} staleWarning={staleDirectPct > 0.25 ? `${staleDirectCount} of ${numDirects} stale` : undefined} />
           <MetricCard label="Net TVPI" value={cm.netTvpi > 0 ? formatMultiple(cm.netTvpi) : "—"} highlight />
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

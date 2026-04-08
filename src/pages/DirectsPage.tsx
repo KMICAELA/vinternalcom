@@ -123,6 +123,28 @@ export default function DirectsPage() {
     },
   });
 
+  // Fetch latest valuation date per company (for "As Of" column)
+  const { data: allValuations = [] } = useQuery({
+    queryKey: ["direct-valuations-all"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("direct_quarterly_valuations")
+        .select("company_id, quarter_date")
+        .order("quarter_date", { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Map: company_id -> latest valuation quarter_date
+  const latestValDateMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const v of allValuations) {
+      if (!map.has(v.company_id)) map.set(v.company_id, v.quarter_date);
+    }
+    return map;
+  }, [allValuations]);
+
   const valMap = new Map<string, { fmv: number; proceeds: number }>();
   for (const v of valuations) {
     valMap.set(v.company_id, { fmv: Number(v.current_valuation || 0), proceeds: Number(v.realized_proceeds_this_quarter || 0) });
@@ -231,6 +253,7 @@ export default function DirectsPage() {
               <TableHead>Round</TableHead>
               <TableHead className="text-right">TWH Cost</TableHead>
               <TableHead className="text-right">FMV</TableHead>
+              <TableHead className="text-center">As Of</TableHead>
               <TableHead className="text-right">Proceeds</TableHead>
               <TableHead className="text-right">MOIC</TableHead>
               <TableHead>Co-Investors</TableHead>
@@ -284,6 +307,17 @@ export default function DirectsPage() {
                     {isEditing ? <Input type="number" className="h-7 text-xs w-28 text-right" value={editData.current_fmv || 0}
                       onChange={e => setEditData({ ...editData, current_fmv: Number(e.target.value) })} />
                       : (fmv > 0 ? formatCurrency(fmv) : '—')}
+                  </TableCell>
+                  <TableCell className="text-center">
+                    {(() => {
+                      const latestDate = latestValDateMap.get(d.id);
+                      const isStale = !latestDate || latestDate < activeQuarter.date;
+                      if (!latestDate) return <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-destructive/50 text-destructive">No Val</Badge>;
+                      const label = new Date(latestDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+                      return isStale
+                        ? <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-[hsl(var(--gold))]/50 text-[hsl(var(--gold))]">{label}</Badge>
+                        : <span className="text-[10px] text-muted-foreground font-mono">{label}</span>;
+                    })()}
                   </TableCell>
                   <TableCell className="text-right font-mono">
                     {isEditing ? <Input type="number" className="h-7 text-xs w-28 text-right" value={editData.current_proceeds || 0}
