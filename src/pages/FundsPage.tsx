@@ -371,6 +371,14 @@ function ReportTrackerView({
           onClose={() => setBulkUploadOpen(false)}
         />
       )}
+
+      {pcapReviewFundId && pcapMap[pcapReviewFundId] && (
+        <PcapReviewDialog
+          pcap={pcapMap[pcapReviewFundId]}
+          fundName={coverage.find(c => c.fundId === pcapReviewFundId)?.fundName || ""}
+          onClose={() => setPcapReviewFundId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -382,11 +390,15 @@ function ReportTrackerRow({
   isUploadOpen,
   onToggleUpload,
   quarterDate,
+  pcap,
+  onReviewPcap,
 }: {
   fund: FundCoverage;
   isUploadOpen: boolean;
   onToggleUpload: () => void;
   quarterDate: string;
+  pcap: any;
+  onReviewPcap: () => void;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
