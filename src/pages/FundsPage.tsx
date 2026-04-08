@@ -139,6 +139,7 @@ export default function FundsPage() {
   if (isLoading) return <div className="p-8 text-muted-foreground">Loading...</div>;
 
   const summary = coverage?.summary;
+  const tSummary = trackingData?.summary;
   const received = (summary?.complete ?? 0) + (summary?.inReview ?? 0);
   const totalActive = (summary?.total ?? 0) - (summary?.na ?? 0);
 
