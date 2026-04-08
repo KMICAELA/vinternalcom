@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef } from "react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useFunds, useFundCashflows, useFundFinancialStatement, useFundReports, useActiveQuarter } from "@/hooks/usePortfolioData";
+import { useReportTracking, type EnhancedFundTracking, type TrackingSummary } from "@/hooks/useReportTracking";
 import { useQuarterContext } from "@/contexts/QuarterContext";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
