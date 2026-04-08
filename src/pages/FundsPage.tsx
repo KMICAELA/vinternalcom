@@ -655,6 +655,7 @@ function ReportTrackerRow({
             </Badge>
           )}
         </div>
+        <div className="flex items-center gap-2 shrink-0">
           {rightAction()}
         </div>
       </div>
