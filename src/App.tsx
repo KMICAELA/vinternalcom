@@ -17,6 +17,7 @@ import ReviewPage from "./pages/ReviewPage";
 import NotFound from "./pages/NotFound";
 import AddQuarterlyData from "./pages/AddQuarterlyData";
 import QuarterlyInputPage from "./pages/QuarterlyInputPage";
+import FundTemplatesPage from "./pages/FundTemplatesPage";
 
 const queryClient = new QueryClient();
 
@@ -39,6 +40,7 @@ const App = () => (
               <Route path="/review" element={<ReviewPage />} />
               <Route path="/quarterly-input" element={<QuarterlyInputPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/fund-templates" element={<FundTemplatesPage />} />
             </Route>
             <Route path="/add-quarterly-data" element={<AddQuarterlyData />} />
             <Route path="*" element={<NotFound />} />

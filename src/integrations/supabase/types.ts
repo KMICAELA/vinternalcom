@@ -192,39 +192,57 @@ export type Database = {
       fund_extraction_templates: {
         Row: {
           created_at: string | null
+          document_type: string
+          extraction_notes: string | null
           field_mappings: Json
           fund_id: string
           id: string
+          is_active: boolean
           notes: string | null
+          report_format: string
+          sample_document_url: string | null
           sample_extraction: Json | null
           template_name: string | null
+          template_version: number
           updated_at: string | null
         }
         Insert: {
           created_at?: string | null
+          document_type?: string
+          extraction_notes?: string | null
           field_mappings?: Json
           fund_id: string
           id?: string
+          is_active?: boolean
           notes?: string | null
+          report_format?: string
+          sample_document_url?: string | null
           sample_extraction?: Json | null
           template_name?: string | null
+          template_version?: number
           updated_at?: string | null
         }
         Update: {
           created_at?: string | null
+          document_type?: string
+          extraction_notes?: string | null
           field_mappings?: Json
           fund_id?: string
           id?: string
+          is_active?: boolean
           notes?: string | null
+          report_format?: string
+          sample_document_url?: string | null
           sample_extraction?: Json | null
           template_name?: string | null
+          template_version?: number
           updated_at?: string | null
         }
         Relationships: [
           {
             foreignKeyName: "fund_extraction_templates_fund_id_fkey"
             columns: ["fund_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "funds"
             referencedColumns: ["id"]
           },
