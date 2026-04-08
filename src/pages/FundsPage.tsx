@@ -6,6 +6,7 @@ import { useQuarterContext } from "@/contexts/QuarterContext";
 import { useConsolidatedMetrics } from "@/hooks/useConsolidatedMetrics";
 import { useFundQuarterMetrics } from "@/hooks/useConsolidatedMetrics";
 import { useReportCoverage, type FundCoverage } from "@/hooks/useReportCoverage";
+import { useFxRatesForQuarter } from "@/hooks/useFxRates";
 import { computeFundMetrics, formatCurrency, formatMultiple, formatPercent, formatIrr } from "@/lib/calcEngine";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -14,6 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChevronDown, ChevronRight, Upload, Plus, Trash2, FileText, Loader2, Check, Lock, X, FileStack, ClipboardCheck, Eye, ArrowRight, Link as LinkIcon, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
@@ -1039,6 +1041,22 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
   const { data: fs } = useFundFinancialStatement(fund.id, quarterDate);
   const { data: allFundReports = [] } = useFundReports(quarterDate);
   const { data: cashflows = [] } = useFundCashflows(fund.id);
+  const isNonUsd = fund.currency && fund.currency !== "USD";
+  const fxPair = isNonUsd ? `${fund.currency}/USD` : null;
+  const { data: fxRateData } = useQuery({
+    queryKey: ["fx-rate-fund-row", fxPair, quarterDate],
+    queryFn: async () => {
+      if (!fxPair) return null;
+      const { data } = await supabase
+        .from("fx_rates")
+        .select("*")
+        .eq("currency_pair", fxPair)
+        .eq("rate_date", quarterDate)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!fxPair,
+  });
   const qc = useQueryClient();
 
   const fundReport = allFundReports.find((r: any) => r.fund_id === fund.id);
@@ -1129,6 +1147,9 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
           <span className="flex items-center gap-2">
             {fund.fund_name}
             {isNewFund && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--gold))]/15 text-[hsl(var(--gold))] font-semibold uppercase tracking-wide">New</span>}
+            {fund.currency && fund.currency !== "USD" && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-semibold uppercase tracking-wide">{fund.currency}</span>
+            )}
           </span>
         </TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).start_date || '—'}</TableCell>
@@ -1137,7 +1158,28 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
         <TableCell className="text-right font-mono">{formatCurrency(Number(fund.commitment_amount))}</TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).currency || 'USD'}</TableCell>
         <TableCell className="text-right font-mono">{metrics.twhPct > 0 ? formatPercent(metrics.twhPct) : '—'}</TableCell>
-        <TableCell className="text-right font-mono">{registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')}</TableCell>
+        <TableCell className="text-right font-mono">
+          {isNonUsd && fxRateData ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help border-b border-dashed border-muted-foreground/40">
+                    {registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-xs text-xs space-y-1">
+                  <p className="font-medium">FX Conversion Detail</p>
+                  <p>
+                    NAV: €{((registryNav || metrics.twhNav) / Number(fxRateData.rate)).toLocaleString("en-US", { maximumFractionDigits: 0 })} × {Number(fxRateData.rate).toFixed(4)} = ${(registryNav || metrics.twhNav).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-muted-foreground">{fxRateData.source} rate, {fxRateData.rate_date}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')
+          )}
+        </TableCell>
         <TableCell className="text-right font-mono">{registryTvpi !== undefined ? (registryTvpi != null && registryTvpi > 0 ? formatMultiple(registryTvpi) : (notYetCalled ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—')) : (metrics.tvpi > 0 ? formatMultiple(metrics.tvpi) : (notYetCalled ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—'))}</TableCell>
         <TableCell className="text-right font-mono">{formatIrr(metrics.irr)}</TableCell>
       </TableRow>
