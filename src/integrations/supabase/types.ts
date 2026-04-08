@@ -388,6 +388,53 @@ export type Database = {
           },
         ]
       }
+      fund_reporting_patterns: {
+        Row: {
+          avg_days_to_report: number | null
+          created_at: string
+          fund_id: string
+          id: string
+          last_received_days: number | null
+          notes: string | null
+          report_type: string
+          typical_format: string | null
+          typical_sender_email: string | null
+          updated_at: string
+        }
+        Insert: {
+          avg_days_to_report?: number | null
+          created_at?: string
+          fund_id: string
+          id?: string
+          last_received_days?: number | null
+          notes?: string | null
+          report_type?: string
+          typical_format?: string | null
+          typical_sender_email?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avg_days_to_report?: number | null
+          created_at?: string
+          fund_id?: string
+          id?: string
+          last_received_days?: number | null
+          notes?: string | null
+          report_type?: string
+          typical_format?: string | null
+          typical_sender_email?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_reporting_patterns_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       funds: {
         Row: {
           carry_percentage: number
@@ -695,6 +742,77 @@ export type Database = {
           unfunded?: number
         }
         Relationships: []
+      }
+      quarterly_report_tracking: {
+        Row: {
+          approved_at: string | null
+          created_at: string
+          days_since_quarter_end: number | null
+          document_path: string | null
+          expected_by: string | null
+          fund_id: string
+          id: string
+          notes: string | null
+          processing_completed_at: string | null
+          processing_started_at: string | null
+          quarter: string
+          quarter_date: string
+          received_at: string | null
+          received_via: string | null
+          report_type: string
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          created_at?: string
+          days_since_quarter_end?: number | null
+          document_path?: string | null
+          expected_by?: string | null
+          fund_id: string
+          id?: string
+          notes?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
+          quarter: string
+          quarter_date: string
+          received_at?: string | null
+          received_via?: string | null
+          report_type?: string
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          created_at?: string
+          days_since_quarter_end?: number | null
+          document_path?: string | null
+          expected_by?: string | null
+          fund_id?: string
+          id?: string
+          notes?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
+          quarter?: string
+          quarter_date?: string
+          received_at?: string | null
+          received_via?: string | null
+          report_type?: string
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quarterly_report_tracking_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       reconciliation_checks: {
         Row: {
