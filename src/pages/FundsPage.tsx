@@ -1131,6 +1131,9 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
           <span className="flex items-center gap-2">
             {fund.fund_name}
             {isNewFund && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--gold))]/15 text-[hsl(var(--gold))] font-semibold uppercase tracking-wide">New</span>}
+            {fund.currency && fund.currency !== "USD" && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-semibold uppercase tracking-wide">{fund.currency}</span>
+            )}
           </span>
         </TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).start_date || '—'}</TableCell>
