@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Plus, Trash2, Upload, Save, ArrowRight, ArrowUp, ArrowDown, Eye, EyeOff } from "lucide-react";
 import * as XLSX from "xlsx";
+import FxConversionSection from "@/components/FxConversionSection";
 
 const CASHFLOW_TYPES = ["Capital Call", "Distribution", "Return of Capital", "Management Fee", "Other"];
 const COMMENTARY_SECTIONS = ["Market Overview", "Portfolio Update", "Performance Attribution", "Outlook", "Other"];
