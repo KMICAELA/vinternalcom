@@ -1158,7 +1158,28 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
         <TableCell className="text-right font-mono">{formatCurrency(Number(fund.commitment_amount))}</TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).currency || 'USD'}</TableCell>
         <TableCell className="text-right font-mono">{metrics.twhPct > 0 ? formatPercent(metrics.twhPct) : '—'}</TableCell>
-        <TableCell className="text-right font-mono">{registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')}</TableCell>
+        <TableCell className="text-right font-mono">
+          {isNonUsd && fxRateData ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="cursor-help border-b border-dashed border-muted-foreground/40">
+                    {registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-xs text-xs space-y-1">
+                  <p className="font-medium">FX Conversion Detail</p>
+                  <p>
+                    NAV: €{((registryNav || metrics.twhNav) / Number(fxRateData.rate)).toLocaleString("en-US", { maximumFractionDigits: 0 })} × {Number(fxRateData.rate).toFixed(4)} = ${(registryNav || metrics.twhNav).toLocaleString("en-US", { maximumFractionDigits: 0 })}
+                  </p>
+                  <p className="text-muted-foreground">{fxRateData.source} rate, {fxRateData.rate_date}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')
+          )}
+        </TableCell>
         <TableCell className="text-right font-mono">{registryTvpi !== undefined ? (registryTvpi != null && registryTvpi > 0 ? formatMultiple(registryTvpi) : (notYetCalled ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—')) : (metrics.tvpi > 0 ? formatMultiple(metrics.tvpi) : (notYetCalled ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—'))}</TableCell>
         <TableCell className="text-right font-mono">{formatIrr(metrics.irr)}</TableCell>
       </TableRow>
