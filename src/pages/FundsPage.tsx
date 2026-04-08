@@ -178,14 +178,13 @@ export default function FundsPage() {
 
         {/* ── Tab 1: Report Tracker ── */}
         <TabsContent value="tracker" className="space-y-4">
-          <ReportTrackerView
+          <EnhancedReportTrackerView
             trackerQuarters={trackerQuarters}
             trackerQuarterDate={trackerQuarterDate}
             setTrackerQuarterDate={setTrackerQuarterDate}
+            trackingData={trackingData}
+            trackingLoading={trackingLoading}
             coverage={coverage?.coverage || []}
-            summary={summary}
-            received={received}
-            totalActive={totalActive}
             coverageLoading={coverageLoading}
             funds={funds}
             availableQuarters={availableQuarters}
