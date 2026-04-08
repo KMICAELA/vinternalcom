@@ -993,6 +993,7 @@ function FundDetailsView({
             <TableHead className="w-8" />
             <TableHead>Fund Name</TableHead>
             <TableHead>Start Date</TableHead>
+            <TableHead className="text-right">Vintage</TableHead>
             <TableHead className="text-center">FS Status</TableHead>
             <TableHead className="text-right">TWH Commitment</TableHead>
             <TableHead>Currency</TableHead>
@@ -1106,26 +1107,44 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
     );
   };
 
+  // Determine if fund is "new" (start_date within last 6 months of quarter)
+  const isNewFund = (() => {
+    if (!fund.start_date) return false;
+    const start = new Date(fund.start_date);
+    const qEnd = new Date(quarterDate);
+    const diffMs = qEnd.getTime() - start.getTime();
+    return diffMs < 180 * 24 * 60 * 60 * 1000 && diffMs >= 0;
+  })();
+
+  // "Not yet called" if no contributions at all
+  const notYetCalled = reportCalled === 0 && reportNav === 0;
+
   return (
     <>
       <TableRow className="table-row-hover cursor-pointer" onClick={onToggle}>
         <TableCell className="w-8">
           {isExpanded ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
         </TableCell>
-        <TableCell className="font-medium">{fund.fund_name}</TableCell>
+        <TableCell className="font-medium">
+          <span className="flex items-center gap-2">
+            {fund.fund_name}
+            {isNewFund && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[hsl(var(--gold))]/15 text-[hsl(var(--gold))] font-semibold uppercase tracking-wide">New</span>}
+          </span>
+        </TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).start_date || '—'}</TableCell>
+        <TableCell className="text-right font-mono">{fund.vintage_year || '—'}</TableCell>
         <TableCell className="text-center">{statusBadge()}</TableCell>
         <TableCell className="text-right font-mono">{formatCurrency(Number(fund.commitment_amount))}</TableCell>
         <TableCell className="text-muted-foreground">{(fund as any).currency || 'USD'}</TableCell>
         <TableCell className="text-right font-mono">{metrics.twhPct > 0 ? formatPercent(metrics.twhPct) : '—'}</TableCell>
         <TableCell className="text-right font-mono">{registryNav != null && registryNav > 0 ? formatCurrency(registryNav) : (metrics.twhNav > 0 ? formatCurrency(metrics.twhNav) : '—')}</TableCell>
-        <TableCell className="text-right font-mono">{registryTvpi !== undefined ? (registryTvpi != null ? formatMultiple(registryTvpi) : '—') : (metrics.tvpi > 0 ? formatMultiple(metrics.tvpi) : '—')}</TableCell>
+        <TableCell className="text-right font-mono">{registryTvpi !== undefined ? (registryTvpi != null && registryTvpi > 0 ? formatMultiple(registryTvpi) : (notYetCalled ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—')) : (metrics.tvpi > 0 ? formatMultiple(metrics.tvpi) : (notYetCalled ? <span className="text-muted-foreground text-[10px]">Not yet called</span> : '—'))}</TableCell>
         <TableCell className="text-right font-mono">{formatIrr(metrics.irr)}</TableCell>
       </TableRow>
 
       {isExpanded && (
         <TableRow>
-          <TableCell colSpan={10} className="bg-surface-1 p-0">
+          <TableCell colSpan={11} className="bg-surface-1 p-0">
             <div className="p-4 space-y-4">
               {/* Fund Classification */}
               <div>
