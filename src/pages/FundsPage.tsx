@@ -748,8 +748,8 @@ function TimelineView({ funds, daysSinceQE, quarterEndLabel }: {
     </div>
   );
 }
-  trackerQuarters,
-  trackerQuarterDate,
+
+
   setTrackerQuarterDate,
   coverage,
   summary,
