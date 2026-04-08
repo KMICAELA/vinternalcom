@@ -307,11 +307,16 @@ export type Database = {
           created_at: string
           distributions_to_date: number
           fund_id: string
+          fx_rate_id: string | null
           id: string
           quarter_date: string
           reported_gross_irr: number | null
           reported_gross_tvpi: number | null
           reported_nav: number
+          source_contributions: number | null
+          source_currency: string
+          source_distributions: number | null
+          source_nav: number | null
           updated_at: string
         }
         Insert: {
@@ -319,11 +324,16 @@ export type Database = {
           created_at?: string
           distributions_to_date?: number
           fund_id: string
+          fx_rate_id?: string | null
           id?: string
           quarter_date: string
           reported_gross_irr?: number | null
           reported_gross_tvpi?: number | null
           reported_nav?: number
+          source_contributions?: number | null
+          source_currency?: string
+          source_distributions?: number | null
+          source_nav?: number | null
           updated_at?: string
         }
         Update: {
@@ -331,11 +341,16 @@ export type Database = {
           created_at?: string
           distributions_to_date?: number
           fund_id?: string
+          fx_rate_id?: string | null
           id?: string
           quarter_date?: string
           reported_gross_irr?: number | null
           reported_gross_tvpi?: number | null
           reported_nav?: number
+          source_contributions?: number | null
+          source_currency?: string
+          source_distributions?: number | null
+          source_nav?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -344,6 +359,13 @@ export type Database = {
             columns: ["fund_id"]
             isOneToOne: false
             referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_quarterly_reports_fx_rate_id_fkey"
+            columns: ["fx_rate_id"]
+            isOneToOne: false
+            referencedRelation: "fx_rates"
             referencedColumns: ["id"]
           },
         ]
@@ -405,6 +427,33 @@ export type Database = {
           theme?: string | null
           updated_at?: string
           vintage_year?: number | null
+        }
+        Relationships: []
+      }
+      fx_rates: {
+        Row: {
+          created_at: string
+          currency_pair: string
+          id: string
+          rate: number
+          rate_date: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          currency_pair: string
+          id?: string
+          rate: number
+          rate_date: string
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          currency_pair?: string
+          id?: string
+          rate?: number
+          rate_date?: string
+          source?: string
         }
         Relationships: []
       }
