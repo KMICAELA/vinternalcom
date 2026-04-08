@@ -1144,7 +1144,7 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
 
       {isExpanded && (
         <TableRow>
-          <TableCell colSpan={10} className="bg-surface-1 p-0">
+          <TableCell colSpan={11} className="bg-surface-1 p-0">
             <div className="p-4 space-y-4">
               {/* Fund Classification */}
               <div>
