@@ -1041,6 +1041,22 @@ function FundRow({ fund, quarterDate, isExpanded, onToggle, fsStatus, fsLabel, r
   const { data: fs } = useFundFinancialStatement(fund.id, quarterDate);
   const { data: allFundReports = [] } = useFundReports(quarterDate);
   const { data: cashflows = [] } = useFundCashflows(fund.id);
+  const isNonUsd = fund.currency && fund.currency !== "USD";
+  const fxPair = isNonUsd ? `${fund.currency}/USD` : null;
+  const { data: fxRateData } = useQuery({
+    queryKey: ["fx-rate-fund-row", fxPair, quarterDate],
+    queryFn: async () => {
+      if (!fxPair) return null;
+      const { data } = await supabase
+        .from("fx_rates")
+        .select("*")
+        .eq("currency_pair", fxPair)
+        .eq("rate_date", quarterDate)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!fxPair,
+  });
   const qc = useQueryClient();
 
   const fundReport = allFundReports.find((r: any) => r.fund_id === fund.id);
