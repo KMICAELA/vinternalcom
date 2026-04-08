@@ -207,7 +207,7 @@ export default function ConsolidatedPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cm.allQuarters.map((q) => (
+                {cm.allQuarters.slice(-3).map((q) => (
                   <TableRow key={q.id} className={`text-xs table-row-hover ${q.quarter === activeQuarter.quarter ? 'bg-primary/5' : ''}`}>
                     <TableCell className="font-medium">{q.quarter}</TableCell>
                     <TableCell className="text-right font-mono">{formatMultiple(q.net_tvpi)}</TableCell>
