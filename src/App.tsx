@@ -12,12 +12,8 @@ import PortfolioPage from "./pages/PortfolioPage";
 import DirectsPage from "./pages/DirectsPage";
 import ConsolidatedPage from "./pages/ConsolidatedPage";
 import SettingsPage from "./pages/SettingsPage";
-import HighlightsPage from "./pages/HighlightsPage";
-import ReviewPage from "./pages/ReviewPage";
 import NotFound from "./pages/NotFound";
 import AddQuarterlyData from "./pages/AddQuarterlyData";
-import QuarterlyInputPage from "./pages/QuarterlyInputPage";
-import FundTemplatesPage from "./pages/FundTemplatesPage";
 
 const queryClient = new QueryClient();
 
@@ -31,16 +27,12 @@ const App = () => (
           <Routes>
             <Route element={<AppLayout />}>
               <Route path="/" element={<DashboardPage />} />
-              <Route path="/highlights" element={<HighlightsPage />} />
               <Route path="/funds" element={<FundsPage />} />
               <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
               <Route path="/directs" element={<DirectsPage />} />
               <Route path="/consolidated" element={<ConsolidatedPage />} />
-              <Route path="/review" element={<ReviewPage />} />
-              <Route path="/quarterly-input" element={<QuarterlyInputPage />} />
               <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/fund-templates" element={<FundTemplatesPage />} />
             </Route>
             <Route path="/add-quarterly-data" element={<AddQuarterlyData />} />
             <Route path="*" element={<NotFound />} />

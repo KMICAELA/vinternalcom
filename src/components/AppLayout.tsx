@@ -1,8 +1,5 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays, Sparkles, ClipboardCheck, PlusCircle, FileText } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { Badge } from "@/components/ui/badge";
+import { LayoutDashboard, Building2, Layers, Briefcase, Target, BarChart3, Settings, ChevronLeft, ChevronRight, CalendarDays } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import ChatWidget from "./ChatWidget";
@@ -12,35 +9,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/highlights", icon: Sparkles, label: "Highlights" },
   { to: "/funds", icon: Building2, label: "Funds" },
   { to: "/directs", icon: Target, label: "Directs" },
   { to: "/underlying", icon: Layers, label: "Underlying Portfolio" },
   { to: "/portfolio", icon: Briefcase, label: "Portfolio" },
   { to: "/consolidated", icon: BarChart3, label: "TWH Consolidated" },
-  { to: "/review", icon: ClipboardCheck, label: "Review" },
-  { to: "/quarterly-input", icon: PlusCircle, label: "Quarterly Input" },
-  { to: "/fund-templates", icon: FileText, label: "Fund Templates" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const { selectedQuarter, availableQuarters, setSelectedDate } = useQuarterContext();
-
-  // Pending review count for badge
-  const { data: pendingCount = 0 } = useQuery({
-    queryKey: ["pending-review-count"],
-    queryFn: async () => {
-      const [{ count: fundCount }, { count: directCount }, { count: internalCount }] = await Promise.all([
-        supabase.from("staged_fund_extractions").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
-        supabase.from("staged_direct_imports").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
-        supabase.from("staged_internal_data").select("id", { count: "exact", head: true }).in("status", ["pending_review", "needs_revision"]),
-      ]);
-      return (fundCount || 0) + (directCount || 0) + (internalCount || 0);
-    },
-    refetchInterval: 30000,
-  });
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -110,14 +89,7 @@ export default function AppLayout() {
               }
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && (
-                <span className="flex-1">{label}</span>
-              )}
-              {!collapsed && to === "/review" && pendingCount > 0 && (
-                <Badge className="bg-[hsl(var(--gold))]/20 text-[hsl(var(--gold))] border-0 text-[10px] px-1.5 py-0 h-4 min-w-[1.25rem] flex items-center justify-center">
-                  {pendingCount}
-                </Badge>
-              )}
+              {!collapsed && <span>{label}</span>}
             </NavLink>
           ))}
         </nav>

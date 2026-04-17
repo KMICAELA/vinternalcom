@@ -7,9 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Save, Lock, ArrowRight, AlertTriangle, Database, Loader2, CheckCircle2, FileText } from "lucide-react";
-import { QUARTER_REGISTRY } from "@/data/quarterRegistry.legacy";
-import { portfolioCommentsSeed } from "@/data/portfolioComments";
+import { Save, Lock, ArrowRight, AlertTriangle } from "lucide-react";
 
 const QUARTERS = ["1Q24", "2Q24", "3Q24", "4Q24", "1Q25", "2Q25", "3Q25", "4Q25", "1Q26", "2Q26", "3Q26", "4Q26"];
 const QUARTER_DATES: Record<string, string> = {
@@ -23,8 +21,6 @@ export default function SettingsPage() {
   const { data: settings = {} } = useAppSettings();
   const { data: funds = [] } = useFunds();
   const [advanceModalOpen, setAdvanceModalOpen] = useState(false);
-  const [migrating, setMigrating] = useState(false);
-  const [migrationDone, setMigrationDone] = useState(false);
 
   const activeQuarter = (settings.active_quarter as any) || { quarter: "3Q25", date: "2025-09-30" };
   const [selectedQuarter, setSelectedQuarter] = useState(activeQuarter.quarter);
@@ -73,60 +69,6 @@ export default function SettingsPage() {
     toast.success(`Advanced to ${nextQuarterLabel}. All fund FS statuses reset to Pending.`);
     qc.invalidateQueries({ queryKey: ["app-settings"] });
     qc.invalidateQueries({ queryKey: ["quarterly-history"] });
-  };
-
-  // Migration handler
-  const migrateQuarterRegistry = async () => {
-    setMigrating(true);
-    try {
-      const entries = Object.entries(QUARTER_REGISTRY);
-      let count = 0;
-      for (const [key, q] of entries) {
-        const dpi = q.netTotalContributions > 0 ? q.netTotalDistributions / q.netTotalContributions : 0;
-        const rvpi = q.netTotalContributions > 0 ? q.netTerminalNAV / q.netTotalContributions : 0;
-        const pic = q.totalCommitment > 0 ? q.netTotalContributions / q.totalCommitment : 0;
-        const unfunded = q.totalCommitment - q.netTotalContributions;
-
-        const { error } = await supabase.from("quarterly_history").upsert(
-          {
-            quarter: q.label,
-            quarter_date: q.quarterEndDate,
-            contribution: q.netTotalContributions,
-            distribution: q.netTotalDistributions,
-            nav: q.netTerminalNAV,
-            net_tvpi: q.netTVPI,
-            net_irr: q.netIRR || 0,
-            gross_tvpi: q.grossTVPI,
-            gross_irr: q.grossIRR || 0,
-            locked: true,
-            total_commitment: q.totalCommitment,
-            total_called: q.netTotalContributions,
-            total_distributed: q.netTotalDistributions,
-            total_nav: q.netTerminalNAV,
-            unfunded,
-            dpi,
-            rvpi,
-            pic,
-            computation_source: "manual",
-          } as any,
-          { onConflict: "quarter_date" }
-        );
-        if (error) {
-          toast.error(`Failed on ${key}: ${error.message}`);
-          setMigrating(false);
-          return;
-        }
-        count++;
-      }
-      toast.success(`Migrated ${count} quarters to database`);
-      setMigrationDone(true);
-      qc.invalidateQueries({ queryKey: ["quarterly-history"] });
-      qc.invalidateQueries({ queryKey: ["consolidated-metrics-all"] });
-    } catch (err: any) {
-      toast.error(`Migration error: ${err.message}`);
-    } finally {
-      setMigrating(false);
-    }
   };
 
   return (
@@ -196,59 +138,6 @@ export default function SettingsPage() {
         )}
 
         <p className="text-xs text-muted-foreground">All calculations use the active quarter's end date as the reporting date.</p>
-      </div>
-
-      {/* Data Migration */}
-      <div className="border border-border rounded-lg p-6 bg-card space-y-4">
-        <h2 className="text-sm font-medium">Data Migration</h2>
-        <p className="text-xs text-muted-foreground">
-          Migrate hardcoded quarter registry data to the database. This is a one-time operation that populates the quarterly_history table with all historical metrics.
-        </p>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={migrateQuarterRegistry}
-          disabled={migrating || migrationDone || quarterHistory.length >= Object.keys(QUARTER_REGISTRY).length}
-          className="gap-2"
-        >
-          {migrating ? (
-            <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Migrating...</>
-          ) : migrationDone || quarterHistory.length >= Object.keys(QUARTER_REGISTRY).length ? (
-            <><CheckCircle2 className="h-3.5 w-3.5" /> Migration complete</>
-          ) : (
-            <><Database className="h-3.5 w-3.5" /> Migrate Quarter Registry to Database</>
-          )}
-        </Button>
-      </div>
-
-      {/* Portfolio Comments Migration */}
-      <div className="border border-border rounded-lg p-6 bg-card space-y-4">
-        <h2 className="text-sm font-medium">Portfolio Comments Migration</h2>
-        <p className="text-xs text-muted-foreground">
-          Migrate hardcoded portfolio comments to the quarterly_commentary table.
-        </p>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={async () => {
-            try {
-              const rows = portfolioCommentsSeed.map((c, i) => ({
-                quarter_date: activeQuarter.date,
-                section: "Portfolio Company Notes",
-                body: `**${c.company}**\n\n${c.whatTheyDo || ""}\n\nTarget Market: ${c.targetMarket || "—"}`,
-                sort_order: i,
-              }));
-              const { error } = await supabase.from("quarterly_commentary").insert(rows as any);
-              if (error) throw error;
-              toast.success(`Migrated ${rows.length} portfolio comments`);
-            } catch (err: any) {
-              toast.error(err.message);
-            }
-          }}
-          className="gap-2"
-        >
-          <FileText className="h-3.5 w-3.5" /> Migrate Portfolio Comments
-        </Button>
       </div>
 
       {/* Quarterly History */}

@@ -1,1 +1,0 @@
-ALTER TABLE public.staged_fund_extractions ADD COLUMN IF NOT EXISTS source_url TEXT;

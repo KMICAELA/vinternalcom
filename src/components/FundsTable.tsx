@@ -43,12 +43,7 @@ const FundsTable = ({ data }: FundsTableProps) => {
             return (
               <tr key={i} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
                 <td className="p-3">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-foreground">{fund.fund_name || "—"}</span>
-                    {fund.currency && fund.currency !== "USD" && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 font-semibold uppercase tracking-wide">{fund.currency}</span>
-                    )}
-                  </div>
+                  <div className="font-medium text-foreground">{fund.fund_name || "—"}</div>
                   <div className="text-xs text-muted-foreground">{fund.strategy || ""} · {fund.vintage_year || ""}</div>
                   {!tvpiValid && <div className="text-xs text-destructive mt-0.5">⚠ TVPI ≠ DPI + RVPI</div>}
                 </td>
@@ -56,8 +51,8 @@ const FundsTable = ({ data }: FundsTableProps) => {
                 <td className="p-3 text-right font-mono text-foreground">{fmt(called)}</td>
                 <td className="p-3 text-right font-mono text-foreground">{fmt(dist)}</td>
                 <td className="p-3 text-right font-mono text-foreground">{fmt(nav)}</td>
-                <td className={cn("p-3 text-right font-mono font-medium", called === 0 ? "text-muted-foreground" : tvpi >= 1 ? "text-green-600" : "text-red-500")}>
-                  {called === 0 ? <span className="text-[10px] font-normal">Not yet called</span> : `${tvpi.toFixed(2)}x`}
+                <td className={cn("p-3 text-right font-mono font-medium", tvpi >= 1 ? "text-green-600" : "text-red-500")}>
+                  {tvpi.toFixed(2)}x
                 </td>
                 <td className="p-3 text-right font-mono text-muted-foreground">
                   {irr != null ? `${(irr * 100).toFixed(1)}%` : "—"}

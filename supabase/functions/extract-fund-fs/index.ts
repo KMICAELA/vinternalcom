@@ -5,139 +5,43 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const SYSTEM_PROMPT = `You are a financial data extraction assistant for a venture fund-of-funds. Extract ALL of the following from this fund financial statement and return ONLY valid JSON with no markdown or explanation.
+const SYSTEM_PROMPT = `You are a financial data extraction assistant for a venture fund-of-funds. Extract ALL of the following from this fund financial statement and return ONLY valid JSON with no markdown or explanation:
 
-Return this exact JSON structure:
 {
-  "fund_summary": {
-    "nav": <number or null>,
-    "total_capital_called": <number or null>,
-    "total_distributions": <number or null>,
-    "unfunded_commitment": <number or null>,
-    "gross_irr": <number as decimal e.g. 0.15 for 15%, or null>,
-    "gross_tvpi": <number or null>,
-    "net_irr": <number as decimal or null>,
-    "net_tvpi": <number or null>,
-    "dpi": <number or null>,
-    "rvpi": <number or null>,
-    "pic": <number as decimal or null>,
-    "commitment": <number or null>,
-    "currency": "USD",
-    "as_of_date": "YYYY-MM-DD"
+  "fund_name": "",
+  "report_date": "YYYY-MM-DD",
+  "currency": "USD",
+  "fund_totals": {
+    "total_commitment": 0,
+    "total_contributions_called": 0,
+    "total_distributions": 0,
+    "total_investment_cost": 0,
+    "total_portfolio_fmv": 0,
+    "fund_nav": 0
   },
   "portfolio_companies": [
     {
-      "name": "",
-      "investment_cost": <number or null>,
-      "fair_market_value": <number or null>,
-      "realized_proceeds": <number or null>,
-      "sector": <string or null>,
-      "region": <string or null>,
-      "instrument": <string or null>,
-      "round": <string or null>,
-      "status": "active" | "realized" | "written_off" | null
+      "company_name": "",
+      "investment_date": "YYYY-MM-DD",
+      "instrument": "",
+      "round": "",
+      "investment_cost": 0,
+      "fmv": 0,
+      "proceeds": 0,
+      "status": "Active"
     }
-  ],
-  "cashflow_activity": [
-    {
-      "date": "YYYY-MM-DD",
-      "type": "capital_call" | "distribution" | "recallable",
-      "amount": <number>,
-      "description": <string or null>
-    }
-  ],
-  "extraction_confidence": <number 0-1>,
-  "extraction_notes": ["any notes about uncertain or missing data"]
+  ]
 }
 
-All monetary numbers in base currency units (no formatting, no commas). Use null if data is not found.
-IRR values should be expressed as decimals (e.g. 0.15 for 15%).
-TVPI/DPI/RVPI/PIC as raw multiples or decimals.`;
+All numbers in base currency units (no formatting). Null if not found.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { pdf_base64, file_name, template, fund_id } = await req.json();
+    const { pdf_base64, file_name } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
-    // If fund_id provided, try to load the fund's extraction template from DB
-    let fundTemplate = template;
-    if (fund_id && !fundTemplate) {
-      try {
-        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.1");
-        const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        const { data: tmpl } = await sb
-          .from("fund_extraction_templates")
-          .select("field_mappings, extraction_notes, document_type, report_format")
-          .eq("fund_id", fund_id)
-          .eq("is_active", true)
-          .eq("document_type", "quarterly_report")
-          .maybeSingle();
-        if (tmpl) {
-          fundTemplate = {
-            field_mappings: tmpl.field_mappings,
-            extraction_notes: tmpl.extraction_notes,
-          };
-        }
-      } catch (e) {
-        console.error("Template lookup failed, proceeding without:", e);
-      }
-    }
-
-    // Detect if content is plain text (email paste) vs binary document
-    const isTextContent = file_name?.endsWith('.txt') || file_name === 'email_paste.txt';
-
-    let enhancedPrompt = isTextContent
-      ? `Please extract the financial data from this fund communication/email (${file_name || 'text'}).`
-      : `Please extract the financial data from this fund financial statement PDF (${file_name || 'document'}).`;
-
-    if (fundTemplate && fundTemplate.field_mappings) {
-      const mappings = fundTemplate.field_mappings;
-      enhancedPrompt += `\n\nThis fund has known field mappings. Use these as extraction guidance:\n`;
-      for (const [field, config] of Object.entries(mappings as Record<string, any>)) {
-        if (config.location) {
-          enhancedPrompt += `- For "${field}": look in ${config.location}.`;
-          if (config.label_variations?.length) {
-            enhancedPrompt += ` It may be labeled as: ${config.label_variations.join(", ")}.`;
-          }
-          if (config.value_type) {
-            enhancedPrompt += ` Extract as ${config.value_type}.`;
-          }
-          enhancedPrompt += `\n`;
-        }
-      }
-    }
-    if (fundTemplate && fundTemplate.extraction_notes) {
-      enhancedPrompt += `\n\nSpecial handling notes: ${fundTemplate.extraction_notes}`;
-    }
-    if (fundTemplate && fundTemplate.sample_extraction) {
-      enhancedPrompt += `\n\nHere is a sample of previously extracted data from this fund for reference:\n${JSON.stringify(fundTemplate.sample_extraction, null, 2)}`;
-    }
-
-    // Build message content based on input type
-    let userContent: any;
-    if (isTextContent) {
-      const textBytes = Uint8Array.from(atob(pdf_base64), c => c.charCodeAt(0));
-      const decodedText = new TextDecoder().decode(textBytes);
-      userContent = [
-        { type: "text", text: enhancedPrompt + "\n\n--- EMAIL/TEXT CONTENT ---\n\n" + decodedText },
-      ];
-    } else {
-      const mimeType = file_name?.endsWith('.docx')
-        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        : 'application/pdf';
-      userContent = [
-        { type: "text", text: enhancedPrompt },
-        {
-          type: "image_url",
-          image_url: {
-            url: `data:${mimeType};base64,${pdf_base64}`,
-          },
-        },
-      ];
-    }
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -149,7 +53,21 @@ serve(async (req) => {
         model: "google/gemini-2.5-pro",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userContent },
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `Please extract the financial data from this fund financial statement PDF (${file_name || 'document'}).`,
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:application/pdf;base64,${pdf_base64}`,
+                },
+              },
+            ],
+          },
         ],
       }),
     });
@@ -173,10 +91,13 @@ serve(async (req) => {
     const result = await response.json();
     const content = result.choices?.[0]?.message?.content || "";
 
+    // Parse JSON from response
     let parsed;
     try {
+      // Try direct parse first
       parsed = JSON.parse(content);
     } catch {
+      // Try extracting JSON from markdown code blocks
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[1].trim());

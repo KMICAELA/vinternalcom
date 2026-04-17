@@ -5,7 +5,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ArrowLeft, Upload, HardDrive, FileText, Check, X, CheckCircle2, Clock, PenLine, Zap, Mail } from "lucide-react";
+import { ArrowLeft, Upload, HardDrive, FileText, Check, X, CheckCircle2, Clock, PenLine, Zap } from "lucide-react";
 import { useFunds, useAvailableQuarters } from "@/hooks/usePortfolioData";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -117,66 +117,6 @@ const AddQuarterlyData = () => {
   const [manualFund, setManualFund] = useState<any>(null);
   const [manualForm, setManualForm] = useState<ManualFormData | null>(null);
   const [savingManual, setSavingManual] = useState(false);
-
-  // Email paste state
-  const [emailFund, setEmailFund] = useState<any>(null);
-  const [emailText, setEmailText] = useState("");
-  const [submittingEmail, setSubmittingEmail] = useState(false);
-
-  const handleEmailSubmit = async () => {
-    if (!emailFund || !emailText.trim()) return;
-    setSubmittingEmail(true);
-    try {
-      const arrayBuffer = new TextEncoder().encode(emailText);
-      const base64 = btoa(String.fromCharCode(...arrayBuffer));
-
-      const { data: template } = await supabase
-        .from("fund_extraction_templates")
-        .select("*")
-        .eq("fund_id", emailFund.id)
-        .maybeSingle();
-
-      const { data: extracted, error } = await supabase.functions.invoke("extract-fund-fs", {
-        body: { pdf_base64: base64, file_name: "email_paste.txt", template: template || undefined },
-      });
-      if (error) throw error;
-
-      const summary = extracted?.fund_summary || {};
-      const companies = extracted?.portfolio_companies || [];
-
-      await supabase.from("staged_fund_extractions").insert({
-        fund_id: emailFund.id,
-        quarter_date: activeQuarter,
-        source_file_name: "Email paste",
-        extracted_nav: summary.nav,
-        extracted_capital_called: summary.total_capital_called,
-        extracted_distributions: summary.total_distributions,
-        extracted_gross_irr: summary.gross_irr,
-        extracted_gross_tvpi: summary.gross_tvpi,
-        extracted_net_irr: summary.net_irr,
-        extracted_net_tvpi: summary.net_tvpi,
-        extracted_dpi: summary.dpi,
-        extracted_rvpi: summary.rvpi,
-        extracted_pic: summary.pic,
-        extracted_commitment: summary.commitment,
-        extracted_unfunded: summary.unfunded_commitment,
-        extracted_companies: companies,
-        raw_extraction: extracted,
-        confidence_score: extracted?.extraction_confidence ?? null,
-        extraction_model: "gemini-2.5-pro",
-      } as any);
-
-      toast({ title: "Email submitted", description: `Email content for ${emailFund.fund_name} sent for extraction.` });
-      setEmailFund(null);
-      setEmailText("");
-      queryClient.invalidateQueries({ queryKey: ["fund-fs-status", activeQuarter] });
-      queryClient.invalidateQueries({ queryKey: ["report-coverage"] });
-    } catch (err: any) {
-      toast({ title: "Extraction failed", description: err.message, variant: "destructive" });
-    } finally {
-      setSubmittingEmail(false);
-    }
-  };
 
   const handleFileSelect = (fundId: string, file: File | null) => {
     setUploadedFiles((prev) => ({ ...prev, [fundId]: file }));
@@ -460,10 +400,6 @@ const AddQuarterlyData = () => {
                         <PenLine className="h-3.5 w-3.5" />
                         Manual
                       </button>
-                      <button onClick={() => { setEmailFund(f); setEmailText(""); }} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors border border-dashed border-border rounded-md px-3 py-1.5">
-                        <Mail className="h-3.5 w-3.5" />
-                        Email
-                      </button>
                     </>
                   )}
                 </div>
@@ -521,37 +457,6 @@ const AddQuarterlyData = () => {
             <Button size="sm" onClick={saveManualEntry} disabled={savingManual} className="gap-1.5">
               <Check className="h-3.5 w-3.5" />
               {savingManual ? "Saving…" : "Confirm & Mark Uploaded"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Email Paste Dialog */}
-      <Dialog open={!!emailFund} onOpenChange={(open) => { if (!open) { setEmailFund(null); setEmailText(""); } }}>
-        <DialogContent className="sm:max-w-[540px]">
-          <DialogHeader>
-            <DialogTitle className="text-base flex items-center gap-2">
-              <Mail className="h-4 w-4" />
-              Paste Email — {emailFund?.fund_name}
-            </DialogTitle>
-            <p className="text-xs text-muted-foreground">{formatQuarterLabel(activeQuarter)} · AI will extract fund metrics from the email content</p>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <textarea
-              className="w-full min-h-[200px] rounded-md border border-input bg-muted/30 px-3 py-2 text-xs font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              placeholder="Paste the email body here (quarterly report update, capital call notice, distribution notice, etc.)..."
-              value={emailText}
-              onChange={(e) => setEmailText(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              The AI extraction will parse fund metrics (NAV, capital called, distributions, IRR, TVPI, etc.) from the pasted email text and stage them for review.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => { setEmailFund(null); setEmailText(""); }}>Cancel</Button>
-            <Button size="sm" onClick={handleEmailSubmit} disabled={!emailText.trim() || submittingEmail} className="gap-1.5">
-              <Mail className="h-3.5 w-3.5" />
-              {submittingEmail ? "Extracting…" : "Extract from Email"}
             </Button>
           </DialogFooter>
         </DialogContent>
