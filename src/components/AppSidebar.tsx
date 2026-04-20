@@ -8,7 +8,9 @@ import {
   Building2,
   Wallet,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   Sidebar,
   SidebarContent,
@@ -37,6 +39,11 @@ export function AppSidebar() {
   const collapsed = state === "collapsed";
   const location = useLocation();
   const currentPath = location.pathname;
+  const { role } = useAuth();
+  const navItems =
+    role === "admin"
+      ? [...items, { title: "Reconciliation", url: "/admin/reconciliation", icon: ShieldCheck }]
+      : items;
 
   return (
     <Sidebar collapsible="icon">
@@ -55,7 +62,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => {
+              {navItems.map((item) => {
                 const active =
                   item.url === "/"
                     ? currentPath === "/"
