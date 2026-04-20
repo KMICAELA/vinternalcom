@@ -3,6 +3,9 @@ import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
+import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 
 type FundRow = {
@@ -24,6 +27,9 @@ export default function FundsPage() {
   const { selected, loading: qLoading } = useSelectedQuarter();
   const [rows, setRows] = useState<FundRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardFundId, setWizardFundId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!selected) return;
@@ -57,7 +63,7 @@ export default function FundsPage() {
       setRows(out);
       setLoading(false);
     })();
-  }, [selected]);
+  }, [selected, refreshKey]);
 
   const totals = rows.reduce(
     (a, r) => ({
@@ -73,11 +79,16 @@ export default function FundsPage() {
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Funds</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {rows.length} funds · {selected.label}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Funds</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {rows.length} funds · {selected.label}
+          </p>
+        </div>
+        <Button onClick={() => { setWizardFundId(null); setWizardOpen(true); }} className="gap-2">
+          <Upload className="h-4 w-4" /> Add report
+        </Button>
       </div>
 
       <Card className="bg-card border-border overflow-hidden">
@@ -94,13 +105,14 @@ export default function FundsPage() {
                 <TableHead className="text-right">NAV</TableHead>
                 <TableHead className="text-right">DPI</TableHead>
                 <TableHead className="text-right">TVPI</TableHead>
+                <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={9} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
               ) : (
                 <>
                   {rows.map((r) => {
@@ -117,6 +129,11 @@ export default function FundsPage() {
                         <TableCell className="text-right font-mono">{fmtUSD(r.twh_nav_usd, { compact: true })}</TableCell>
                         <TableCell className="text-right font-mono">{fmtMultiple(dpi)}</TableCell>
                         <TableCell className="text-right font-mono">{fmtMultiple(tvpi)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => { setWizardFundId(r.id); setWizardOpen(true); }}>
+                            <Upload className="h-3 w-3" /> Add
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -130,6 +147,7 @@ export default function FundsPage() {
                     <TableCell className="text-right font-mono">{fmtUSD(totals.nav, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtMultiple(calcDpi(totals.contrib, totals.distrib))}</TableCell>
                     <TableCell className="text-right font-mono">{fmtMultiple(calcTvpi(totals.contrib, totals.distrib, totals.nav))}</TableCell>
+                    <TableCell></TableCell>
                   </TableRow>
                 </>
               )}
@@ -137,6 +155,14 @@ export default function FundsPage() {
           </Table>
         </div>
       </Card>
+
+      <AddReportWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        defaultFundId={wizardFundId}
+        defaultQuarterId={selected.id}
+        onConfirmed={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }

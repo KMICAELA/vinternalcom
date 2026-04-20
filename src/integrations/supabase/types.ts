@@ -342,26 +342,44 @@ export type Database = {
         Row: {
           confidence_notes: Json | null
           created_at: string
+          error_message: string | null
+          fund_id: string | null
           id: string
           normalized_payload: Json | null
+          quarter_id: string | null
           raw_model_output: Json | null
           source_document_id: string
+          source_type: string | null
+          status: string
+          updated_at: string
         }
         Insert: {
           confidence_notes?: Json | null
           created_at?: string
+          error_message?: string | null
+          fund_id?: string | null
           id?: string
           normalized_payload?: Json | null
+          quarter_id?: string | null
           raw_model_output?: Json | null
           source_document_id: string
+          source_type?: string | null
+          status?: string
+          updated_at?: string
         }
         Update: {
           confidence_notes?: Json | null
           created_at?: string
+          error_message?: string | null
+          fund_id?: string | null
           id?: string
           normalized_payload?: Json | null
+          quarter_id?: string | null
           raw_model_output?: Json | null
           source_document_id?: string
+          source_type?: string | null
+          status?: string
+          updated_at?: string
         }
         Relationships: [
           {

@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LogOut, User as UserIcon } from "lucide-react";
+import ReportsTopbarActions from "@/components/ReportsTopbarActions";
 
 const AppLayout = () => {
   const { user, role, signOut } = useAuth();
@@ -29,6 +30,7 @@ const AppLayout = () => {
               <div className="text-sm font-medium text-foreground">TWH-1 Portfolio</div>
             </div>
             <div className="flex items-center gap-3">
+              <ReportsTopbarActions />
               <QuarterSelect />
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
