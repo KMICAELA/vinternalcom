@@ -3,6 +3,12 @@ import type { ParsedWorkbook } from "./parseXlsx";
 import { buildSectionResult, norm } from "./compare";
 import type { ReconciliationResult, SectionResult } from "./types";
 
+const fmtDate = (d: string | null | undefined): string => (d ? d.slice(0, 10) : "");
+const compositeDirectKey = (name: string, date: string | null) =>
+  `${norm(name)}||${fmtDate(date)}`;
+const compositeUnderlyingKey = (name: string, fund: string, date: string | null) =>
+  `${norm(name)}||${norm(fund)}||${fmtDate(date)}`;
+
 export async function runReconciliation(
   parsed: ParsedWorkbook,
   quarterId: string,
@@ -12,7 +18,7 @@ export async function runReconciliation(
 
   // ===== FUNDS =====
   const [fundsRes, commitRes, fqsRes] = await Promise.all([
-    supabase.from("funds").select("id, name"),
+    supabase.from("funds").select("id, name, start_date"),
     supabase.from("fund_commitments").select("fund_id, twh_commitment_usd, total_fund_commitment_usd, twh_ownership_pct"),
     supabase
       .from("fund_quarter_snapshots")
@@ -23,7 +29,7 @@ export async function runReconciliation(
   const commits = new Map((commitRes.data ?? []).map((c) => [c.fund_id, c]));
   const fqs = new Map((fqsRes.data ?? []).map((s) => [s.fund_id, s]));
 
-  // Build map by normalized fund name
+  // Strict exact match by normalized fund name
   const fundsByName = new Map(funds.map((f) => [norm(f.name), f]));
   const seenFundIds = new Set<string>();
   const fundIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
@@ -36,6 +42,7 @@ export async function runReconciliation(
     fundIdentityRows.push({
       identity: srcFund.fundName,
       fields: [
+        { field: "Start Date", src: srcFund.startDate, sys: sysFund?.start_date ?? null, kind: "date" },
         { field: "Total Commitments", src: srcFund.totalCommitments, sys: c?.total_fund_commitment_usd ?? null, kind: "currency" },
         { field: "TWH Commitment", src: srcFund.twhCommitment, sys: c?.twh_commitment_usd ?? null, kind: "currency" },
         { field: "TWH Ownership %", src: srcFund.twhPct, sys: c?.twh_ownership_pct ?? null, kind: "percent" },
@@ -47,12 +54,12 @@ export async function runReconciliation(
       ],
     });
   }
-  // funds in DB missing from source
+  // funds in DB missing from source workbook
   for (const f of funds) {
     if (seenFundIds.has(f.id)) continue;
     const c = commits.get(f.id);
     const s = fqs.get(f.id);
-    if (!c && !s) continue; // truly empty, skip
+    if (!c && !s) continue;
     fundIdentityRows.push({
       identity: f.name,
       fields: [
@@ -64,6 +71,7 @@ export async function runReconciliation(
   sections.push(buildSectionResult("funds", "Funds", fundIdentityRows));
 
   // ===== DIRECTS =====
+  // Identity = (Company Name, Date) — Earth AI appears twice at different dates.
   const [directsRes, dqsRes, companiesRes] = await Promise.all([
     supabase.from("directs").select("id, company_id, investment_date, instrument, round, twh_cost_usd"),
     supabase.from("direct_quarter_snapshots").select("direct_id, twh_fmv_usd, twh_proceeds_usd").eq("quarter_id", quarterId),
@@ -74,34 +82,25 @@ export async function runReconciliation(
   const companies = companiesRes.data ?? [];
   const companiesById = new Map(companies.map((c) => [c.id, c]));
 
-  // Index directs by normalized company name. If multiple directs for same company, prefer match by date+round+instrument.
-  const directsByName = new Map<string, typeof directs>();
+  const directsByKey = new Map<string, typeof directs[number]>();
   for (const d of directs) {
     const co = companiesById.get(d.company_id);
     if (!co) continue;
-    const key = norm(co.legal_name);
-    const arr = directsByName.get(key) ?? [];
-    arr.push(d);
-    directsByName.set(key, arr);
+    const key = compositeDirectKey(co.legal_name, d.investment_date);
+    directsByKey.set(key, d);
   }
   const seenDirectIds = new Set<string>();
   const directIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
 
   for (const srcD of parsed.directs) {
-    const candidates = directsByName.get(norm(srcD.companyName)) ?? [];
-    let matched = candidates.find(
-      (c) =>
-        (c.investment_date ?? "").slice(0, 10) === (srcD.date ?? "") &&
-        norm(c.round ?? "") === norm(srcD.round ?? "") &&
-        norm(c.instrument ?? "") === norm(srcD.instrument ?? ""),
-    );
-    if (!matched && candidates.length === 1) matched = candidates[0];
+    const key = compositeDirectKey(srcD.companyName, srcD.date);
+    const matched = directsByKey.get(key);
     if (matched) seenDirectIds.add(matched.id);
     const snap = matched ? dqs.get(matched.id) : null;
+    const ident = `${srcD.companyName} · ${fmtDate(srcD.date)}`;
     directIdentityRows.push({
-      identity: srcD.companyName,
+      identity: ident,
       fields: [
-        { field: "Investment Date", src: srcD.date, sys: matched?.investment_date ?? null, kind: "date" },
         { field: "Round", src: srcD.round, sys: matched?.round ?? null, kind: "text" },
         { field: "Instrument", src: srcD.instrument, sys: matched?.instrument ?? null, kind: "text" },
         { field: "TWH Cost", src: srcD.twhCost, sys: matched?.twh_cost_usd ?? null, kind: "currency" },
@@ -110,14 +109,14 @@ export async function runReconciliation(
       ],
     });
   }
-  // missing in source
   for (const d of directs) {
     if (seenDirectIds.has(d.id)) continue;
     const co = companiesById.get(d.company_id);
     const snap = dqs.get(d.id);
     if (!snap && !d.twh_cost_usd) continue;
+    const ident = `${co?.legal_name ?? "(unknown)"} · ${fmtDate(d.investment_date)}`;
     directIdentityRows.push({
-      identity: co?.legal_name ?? "(unknown)",
+      identity: ident,
       fields: [
         { field: "TWH Cost", src: null, sys: d.twh_cost_usd ?? null, kind: "currency" },
         { field: "TWH FMV", src: null, sys: snap?.twh_fmv_usd ?? null, kind: "currency" },
@@ -126,46 +125,35 @@ export async function runReconciliation(
   }
   sections.push(buildSectionResult("directs", "Directs", directIdentityRows));
 
-  // ===== UNDERLYING =====
+  // ===== UNDERLYING HOLDINGS =====
+  // Identity = (Company Name, Fund, Date)
   const uhRes = await supabase
     .from("underlying_holdings")
     .select("id, company_id, fund_id, investment_date, instrument, round, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd")
     .eq("quarter_id", quarterId);
   const uh = uhRes.data ?? [];
   const fundsById = new Map(funds.map((f) => [f.id, f]));
-  // Index by composite key (company|fund|date|round|instrument)
   const uhByKey = new Map<string, typeof uh[number]>();
   for (const h of uh) {
     const co = companiesById.get(h.company_id);
     const fd = fundsById.get(h.fund_id);
     if (!co || !fd) continue;
-    const key = [
-      norm(co.legal_name),
-      norm(fd.name),
-      (h.investment_date ?? "").slice(0, 10),
-      norm(h.round ?? ""),
-      norm(h.instrument ?? ""),
-    ].join("||");
+    const key = compositeUnderlyingKey(co.legal_name, fd.name, h.investment_date);
     uhByKey.set(key, h);
   }
   const seenUhIds = new Set<string>();
   const uhIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
 
   for (const u of parsed.underlying) {
-    const key = [
-      norm(u.companyName),
-      norm(u.fundName),
-      u.date ?? "",
-      norm(u.round ?? ""),
-      norm(u.instrument ?? ""),
-    ].join("||");
+    const key = compositeUnderlyingKey(u.companyName, u.fundName, u.date);
     const matched = uhByKey.get(key);
     if (matched) seenUhIds.add(matched.id);
-    const ident = `${u.companyName} · ${u.fundName} · ${u.date ?? ""} · ${u.round ?? ""}`;
-    // TWH FMV in DB is derived (fund_fmv * twh_pct from commitments). We compare fund-level fields directly.
+    const ident = `${u.companyName} · ${u.fundName} · ${fmtDate(u.date)}`;
     uhIdentityRows.push({
       identity: ident,
       fields: [
+        { field: "Round", src: u.round, sys: matched?.round ?? null, kind: "text" },
+        { field: "Instrument", src: u.instrument, sys: matched?.instrument ?? null, kind: "text" },
         { field: "Investment Cost", src: u.investmentCost, sys: matched?.fund_cost_usd ?? null, kind: "currency" },
         { field: "FMV", src: u.fmv, sys: matched?.fund_fmv_usd ?? null, kind: "currency" },
         { field: "Proceeds", src: u.proceeds, sys: matched?.fund_proceeds_usd ?? null, kind: "currency" },
@@ -177,10 +165,10 @@ export async function runReconciliation(
     const co = companiesById.get(h.company_id);
     const fd = fundsById.get(h.fund_id);
     uhIdentityRows.push({
-      identity: `${co?.legal_name ?? "?"} · ${fd?.name ?? "?"} · ${(h.investment_date ?? "").slice(0, 10)} · ${h.round ?? ""}`,
+      identity: `${co?.legal_name ?? "?"} · ${fd?.name ?? "?"} · ${fmtDate(h.investment_date)}`,
       fields: [
-        { field: "FMV", src: null, sys: h.fund_fmv_usd ?? null, kind: "currency" },
         { field: "Investment Cost", src: null, sys: h.fund_cost_usd ?? null, kind: "currency" },
+        { field: "FMV", src: null, sys: h.fund_fmv_usd ?? null, kind: "currency" },
       ],
     });
   }
