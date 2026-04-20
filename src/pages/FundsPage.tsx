@@ -3,6 +3,9 @@ import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
+import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 
 type FundRow = {
@@ -24,6 +27,9 @@ export default function FundsPage() {
   const { selected, loading: qLoading } = useSelectedQuarter();
   const [rows, setRows] = useState<FundRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardFundId, setWizardFundId] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     if (!selected) return;
@@ -57,7 +63,7 @@ export default function FundsPage() {
       setRows(out);
       setLoading(false);
     })();
-  }, [selected]);
+  }, [selected, refreshKey]);
 
   const totals = rows.reduce(
     (a, r) => ({
