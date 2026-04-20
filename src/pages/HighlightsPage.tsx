@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles, Save, Trash2, Plus, Check, FileEdit, Loader2 } from "lucide-react";
+import { Sparkles, Save, Trash2, Plus, Check, FileEdit, Loader2, Share2, Copy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -37,6 +37,43 @@ const HighlightsPage = () => {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, { category: string; body_md: string }>>({});
   const [confirmRegen, setConfirmRegen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [creatingShare, setCreatingShare] = useState(false);
+
+  const createShareLink = async () => {
+    if (!selected) return;
+    setCreatingShare(true);
+    try {
+      // Generate a URL-safe token
+      const tokenBytes = new Uint8Array(24);
+      crypto.getRandomValues(tokenBytes);
+      const token = btoa(String.fromCharCode(...tokenBytes))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      const { error } = await supabase.from("quarter_share_tokens").insert({
+        quarter_id: selected.id,
+        token,
+      });
+      if (error) throw error;
+
+      const url = `${window.location.origin}/share/${token}`;
+      setShareUrl(url);
+      await navigator.clipboard.writeText(url).catch(() => {});
+      toast.success("Share link created and copied");
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to create share link");
+    } finally {
+      setCreatingShare(false);
+    }
+  };
+
+  const copyShareUrl = async () => {
+    if (!shareUrl) return;
+    await navigator.clipboard.writeText(shareUrl);
+    toast.success("Copied to clipboard");
+  };
 
   const load = async () => {
     if (!selected) return;
@@ -203,6 +240,16 @@ const HighlightsPage = () => {
               {counts.final}/{counts.total} final
             </div>
           )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={createShareLink}
+            disabled={creatingShare || counts.final === 0}
+            title={counts.final === 0 ? "Mark at least one section as Final to share" : "Create a public share link"}
+          >
+            {creatingShare ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+            Share
+          </Button>
           <Button variant="outline" size="sm" onClick={addBlank}>
             <Plus className="h-4 w-4" />
             Add Section
