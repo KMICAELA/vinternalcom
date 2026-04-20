@@ -14,1221 +14,892 @@ export type Database = {
   }
   public: {
     Tables: {
-      app_settings: {
-        Row: {
-          id: string
-          key: string
-          updated_at: string
-          value: Json
-        }
-        Insert: {
-          id?: string
-          key: string
-          updated_at?: string
-          value?: Json
-        }
-        Update: {
-          id?: string
-          key?: string
-          updated_at?: string
-          value?: Json
-        }
-        Relationships: []
-      }
       audit_log: {
         Row: {
           action: string
-          created_at: string | null
-          details: Json | null
+          actor_id: string | null
+          after: Json | null
+          before: Json | null
+          created_at: string
+          entity: string
+          entity_id: string | null
           id: string
-          performed_by: string
-          quarter_date: string | null
-          target_id: string | null
-          target_table: string
         }
         Insert: {
           action: string
-          created_at?: string | null
-          details?: Json | null
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entity: string
+          entity_id?: string | null
           id?: string
-          performed_by: string
-          quarter_date?: string | null
-          target_id?: string | null
-          target_table: string
         }
         Update: {
           action?: string
-          created_at?: string | null
-          details?: Json | null
+          actor_id?: string | null
+          after?: Json | null
+          before?: Json | null
+          created_at?: string
+          entity?: string
+          entity_id?: string | null
           id?: string
-          performed_by?: string
-          quarter_date?: string | null
-          target_id?: string | null
-          target_table?: string
         }
         Relationships: []
       }
-      direct_investments: {
+      cash_flows: {
         Row: {
-          co_investors: string | null
-          company_name: string
-          cost_basis: number
+          amount_usd: number
+          category: string
           created_at: string
-          geography: string | null
+          created_by: string | null
+          date: string
+          direct_id: string | null
+          fund_id: string | null
+          id: string
+          note: string | null
+          scope: string
+          source_document_id: string | null
+        }
+        Insert: {
+          amount_usd: number
+          category: string
+          created_at?: string
+          created_by?: string | null
+          date: string
+          direct_id?: string | null
+          fund_id?: string | null
+          id?: string
+          note?: string | null
+          scope: string
+          source_document_id?: string | null
+        }
+        Update: {
+          amount_usd?: number
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          direct_id?: string | null
+          fund_id?: string | null
+          id?: string
+          note?: string | null
+          scope?: string
+          source_document_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_flows_direct_id_fkey"
+            columns: ["direct_id"]
+            isOneToOne: false
+            referencedRelation: "directs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_flows_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          challenges: string | null
+          commentary_updated_at: string | null
+          commentary_updated_by: string | null
+          commercial_name: string | null
+          created_at: string
+          id: string
+          industry: string[] | null
+          legal_name: string
+          region: string[] | null
+          sdg: string[] | null
+          stage: string | null
+          status: string | null
+          sub_industry: string[] | null
+          tailwinds: string | null
+          target_market: string | null
+          theme: string[] | null
+          thesis_bucket: string | null
+          type: string | null
+          updated_at: string
+          url: string | null
+          what_they_do: string | null
+        }
+        Insert: {
+          challenges?: string | null
+          commentary_updated_at?: string | null
+          commentary_updated_by?: string | null
+          commercial_name?: string | null
+          created_at?: string
+          id?: string
+          industry?: string[] | null
+          legal_name: string
+          region?: string[] | null
+          sdg?: string[] | null
+          stage?: string | null
+          status?: string | null
+          sub_industry?: string[] | null
+          tailwinds?: string | null
+          target_market?: string | null
+          theme?: string[] | null
+          thesis_bucket?: string | null
+          type?: string | null
+          updated_at?: string
+          url?: string | null
+          what_they_do?: string | null
+        }
+        Update: {
+          challenges?: string | null
+          commentary_updated_at?: string | null
+          commentary_updated_by?: string | null
+          commercial_name?: string | null
+          created_at?: string
+          id?: string
+          industry?: string[] | null
+          legal_name?: string
+          region?: string[] | null
+          sdg?: string[] | null
+          stage?: string | null
+          status?: string | null
+          sub_industry?: string[] | null
+          tailwinds?: string | null
+          target_market?: string | null
+          theme?: string[] | null
+          thesis_bucket?: string | null
+          type?: string | null
+          updated_at?: string
+          url?: string | null
+          what_they_do?: string | null
+        }
+        Relationships: []
+      }
+      computed_metrics: {
+        Row: {
+          computed_at: string
+          direct_id: string | null
+          dpi: number | null
+          fund_id: string | null
+          gross_irr: number | null
+          gross_moic: number | null
+          id: string
+          net_irr: number | null
+          net_tvpi: number | null
+          quarter_id: string
+          rvpi: number | null
+          scope: string
+        }
+        Insert: {
+          computed_at?: string
+          direct_id?: string | null
+          dpi?: number | null
+          fund_id?: string | null
+          gross_irr?: number | null
+          gross_moic?: number | null
+          id?: string
+          net_irr?: number | null
+          net_tvpi?: number | null
+          quarter_id: string
+          rvpi?: number | null
+          scope: string
+        }
+        Update: {
+          computed_at?: string
+          direct_id?: string | null
+          dpi?: number | null
+          fund_id?: string | null
+          gross_irr?: number | null
+          gross_moic?: number | null
+          id?: string
+          net_irr?: number | null
+          net_tvpi?: number | null
+          quarter_id?: string
+          rvpi?: number | null
+          scope?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "computed_metrics_direct_id_fkey"
+            columns: ["direct_id"]
+            isOneToOne: false
+            referencedRelation: "directs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "computed_metrics_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "computed_metrics_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: false
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      direct_quarter_snapshots: {
+        Row: {
+          created_at: string
+          direct_id: string
+          id: string
+          quarter_id: string
+          source_report_id: string | null
+          twh_fmv_usd: number
+          twh_proceeds_usd: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          direct_id: string
+          id?: string
+          quarter_id: string
+          source_report_id?: string | null
+          twh_fmv_usd?: number
+          twh_proceeds_usd?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          direct_id?: string
+          id?: string
+          quarter_id?: string
+          source_report_id?: string | null
+          twh_fmv_usd?: number
+          twh_proceeds_usd?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "direct_quarter_snapshots_direct_id_fkey"
+            columns: ["direct_id"]
+            isOneToOne: false
+            referencedRelation: "directs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "direct_quarter_snapshots_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: false
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      directs: {
+        Row: {
+          co_investors: string[] | null
+          company_id: string
+          created_at: string
           id: string
           instrument: string | null
           investment_date: string | null
-          ownership_percentage: number | null
+          note: string | null
           round: string | null
-          strategy: string | null
+          twh_cost_usd: number
           updated_at: string
         }
         Insert: {
-          co_investors?: string | null
-          company_name: string
-          cost_basis?: number
+          co_investors?: string[] | null
+          company_id: string
           created_at?: string
-          geography?: string | null
           id?: string
           instrument?: string | null
           investment_date?: string | null
-          ownership_percentage?: number | null
+          note?: string | null
           round?: string | null
-          strategy?: string | null
+          twh_cost_usd?: number
           updated_at?: string
         }
         Update: {
-          co_investors?: string | null
-          company_name?: string
-          cost_basis?: number
-          created_at?: string
-          geography?: string | null
-          id?: string
-          instrument?: string | null
-          investment_date?: string | null
-          ownership_percentage?: number | null
-          round?: string | null
-          strategy?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      direct_quarterly_valuations: {
-        Row: {
-          company_id: string
-          created_at: string
-          current_valuation: number
-          id: string
-          quarter_date: string
-          realized_proceeds_this_quarter: number
-        }
-        Insert: {
-          company_id: string
-          created_at?: string
-          current_valuation?: number
-          id?: string
-          quarter_date: string
-          realized_proceeds_this_quarter?: number
-        }
-        Update: {
+          co_investors?: string[] | null
           company_id?: string
           created_at?: string
-          current_valuation?: number
           id?: string
-          quarter_date?: string
-          realized_proceeds_this_quarter?: number
+          instrument?: string | null
+          investment_date?: string | null
+          note?: string | null
+          round?: string | null
+          twh_cost_usd?: number
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "direct_quarterly_valuations_company_id_fkey"
+            foreignKeyName: "directs_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
-            referencedRelation: "direct_investments"
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
       }
-      fund_cashflows: {
+      extraction_drafts: {
         Row: {
-          capital_deployed: number
-          cashflow_date: string
-          cashflow_type: string
+          confidence_notes: Json | null
           created_at: string
-          description: string | null
-          distribution_received: number
-          fund_id: string
           id: string
+          normalized_payload: Json | null
+          raw_model_output: Json | null
+          source_document_id: string
         }
         Insert: {
-          capital_deployed?: number
-          cashflow_date: string
-          cashflow_type?: string
+          confidence_notes?: Json | null
           created_at?: string
-          description?: string | null
-          distribution_received?: number
-          fund_id: string
           id?: string
+          normalized_payload?: Json | null
+          raw_model_output?: Json | null
+          source_document_id: string
         }
         Update: {
-          capital_deployed?: number
-          cashflow_date?: string
-          cashflow_type?: string
+          confidence_notes?: Json | null
           created_at?: string
-          description?: string | null
-          distribution_received?: number
-          fund_id?: string
           id?: string
+          normalized_payload?: Json | null
+          raw_model_output?: Json | null
+          source_document_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "fund_cashflows_fund_id_fkey"
-            columns: ["fund_id"]
+            foreignKeyName: "extraction_drafts_source_document_id_fkey"
+            columns: ["source_document_id"]
             isOneToOne: false
-            referencedRelation: "funds"
+            referencedRelation: "source_documents"
             referencedColumns: ["id"]
           },
         ]
       }
-      fund_extraction_templates: {
+      fund_commitments: {
         Row: {
-          created_at: string | null
-          document_type: string
-          extraction_notes: string | null
-          field_mappings: Json
-          fund_id: string
-          id: string
-          is_active: boolean
-          notes: string | null
-          report_format: string
-          sample_document_url: string | null
-          sample_extraction: Json | null
-          template_name: string | null
-          template_version: number
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          document_type?: string
-          extraction_notes?: string | null
-          field_mappings?: Json
-          fund_id: string
-          id?: string
-          is_active?: boolean
-          notes?: string | null
-          report_format?: string
-          sample_document_url?: string | null
-          sample_extraction?: Json | null
-          template_name?: string | null
-          template_version?: number
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          document_type?: string
-          extraction_notes?: string | null
-          field_mappings?: Json
-          fund_id?: string
-          id?: string
-          is_active?: boolean
-          notes?: string | null
-          report_format?: string
-          sample_document_url?: string | null
-          sample_extraction?: Json | null
-          template_name?: string | null
-          template_version?: number
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fund_extraction_templates_fund_id_fkey"
-            columns: ["fund_id"]
-            isOneToOne: false
-            referencedRelation: "funds"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      fund_financial_statements: {
-        Row: {
-          confirmed: boolean
           created_at: string
-          extracted_data: Json
-          file_path: string | null
           fund_id: string
           id: string
-          quarter_date: string
+          total_fund_commitment_usd: number
+          twh_commitment_usd: number
+          twh_ownership_pct: number | null
           updated_at: string
         }
         Insert: {
-          confirmed?: boolean
           created_at?: string
-          extracted_data?: Json
-          file_path?: string | null
           fund_id: string
           id?: string
-          quarter_date: string
+          total_fund_commitment_usd?: number
+          twh_commitment_usd?: number
+          twh_ownership_pct?: number | null
           updated_at?: string
         }
         Update: {
-          confirmed?: boolean
           created_at?: string
-          extracted_data?: Json
-          file_path?: string | null
           fund_id?: string
           id?: string
-          quarter_date?: string
+          total_fund_commitment_usd?: number
+          twh_commitment_usd?: number
+          twh_ownership_pct?: number | null
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "fund_financial_statements_fund_id_fkey"
+            foreignKeyName: "fund_commitments_fund_id_fkey"
             columns: ["fund_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "funds"
             referencedColumns: ["id"]
           },
         ]
       }
-      fund_level_cashflows: {
+      fund_quarter_snapshots: {
         Row: {
-          amount: number
-          cashflow_date: string
+          confirmed_at: string | null
+          confirmed_by: string | null
           created_at: string
-          description: string | null
-          id: string
-          portfolio_name: string | null
-          type: string
-        }
-        Insert: {
-          amount: number
-          cashflow_date: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          portfolio_name?: string | null
-          type: string
-        }
-        Update: {
-          amount?: number
-          cashflow_date?: string
-          created_at?: string
-          description?: string | null
-          id?: string
-          portfolio_name?: string | null
-          type?: string
-        }
-        Relationships: []
-      }
-      fund_quarterly_reports: {
-        Row: {
-          capital_called_to_date: number
-          created_at: string
-          distributions_to_date: number
+          extracted_at: string | null
           fund_id: string
-          fx_rate_id: string | null
+          fund_total_contributions_usd: number
+          fund_total_nav_usd: number
           id: string
-          quarter_date: string
-          reported_gross_irr: number | null
-          reported_gross_tvpi: number | null
-          reported_nav: number
-          source_contributions: number | null
-          source_currency: string
-          source_distributions: number | null
-          source_nav: number | null
+          quarter_id: string
+          source_report_id: string | null
+          twh_contributions_usd: number
+          twh_distributions_usd: number
+          twh_nav_usd: number
           updated_at: string
         }
         Insert: {
-          capital_called_to_date?: number
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string
-          distributions_to_date?: number
+          extracted_at?: string | null
           fund_id: string
-          fx_rate_id?: string | null
+          fund_total_contributions_usd?: number
+          fund_total_nav_usd?: number
           id?: string
-          quarter_date: string
-          reported_gross_irr?: number | null
-          reported_gross_tvpi?: number | null
-          reported_nav?: number
-          source_contributions?: number | null
-          source_currency?: string
-          source_distributions?: number | null
-          source_nav?: number | null
+          quarter_id: string
+          source_report_id?: string | null
+          twh_contributions_usd?: number
+          twh_distributions_usd?: number
+          twh_nav_usd?: number
           updated_at?: string
         }
         Update: {
-          capital_called_to_date?: number
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           created_at?: string
-          distributions_to_date?: number
+          extracted_at?: string | null
           fund_id?: string
-          fx_rate_id?: string | null
+          fund_total_contributions_usd?: number
+          fund_total_nav_usd?: number
           id?: string
-          quarter_date?: string
-          reported_gross_irr?: number | null
-          reported_gross_tvpi?: number | null
-          reported_nav?: number
-          source_contributions?: number | null
-          source_currency?: string
-          source_distributions?: number | null
-          source_nav?: number | null
+          quarter_id?: string
+          source_report_id?: string | null
+          twh_contributions_usd?: number
+          twh_distributions_usd?: number
+          twh_nav_usd?: number
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "fund_quarterly_reports_fund_id_fkey"
+            foreignKeyName: "fund_quarter_snapshots_fund_id_fkey"
             columns: ["fund_id"]
             isOneToOne: false
             referencedRelation: "funds"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "fund_quarterly_reports_fx_rate_id_fkey"
-            columns: ["fx_rate_id"]
+            foreignKeyName: "fund_quarter_snapshots_quarter_id_fkey"
+            columns: ["quarter_id"]
             isOneToOne: false
-            referencedRelation: "fx_rates"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      fund_reporting_patterns: {
-        Row: {
-          avg_days_to_report: number | null
-          created_at: string
-          fund_id: string
-          id: string
-          last_received_days: number | null
-          notes: string | null
-          report_type: string
-          typical_format: string | null
-          typical_sender_email: string | null
-          updated_at: string
-        }
-        Insert: {
-          avg_days_to_report?: number | null
-          created_at?: string
-          fund_id: string
-          id?: string
-          last_received_days?: number | null
-          notes?: string | null
-          report_type?: string
-          typical_format?: string | null
-          typical_sender_email?: string | null
-          updated_at?: string
-        }
-        Update: {
-          avg_days_to_report?: number | null
-          created_at?: string
-          fund_id?: string
-          id?: string
-          last_received_days?: number | null
-          notes?: string | null
-          report_type?: string
-          typical_format?: string | null
-          typical_sender_email?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "fund_reporting_patterns_fund_id_fkey"
-            columns: ["fund_id"]
-            isOneToOne: false
-            referencedRelation: "funds"
+            referencedRelation: "quarters"
             referencedColumns: ["id"]
           },
         ]
       }
       funds: {
         Row: {
-          carry_percentage: number
-          commitment_amount: number
-          company_industries: string | null
+          archived: boolean
           created_at: string
-          currency: string
-          fund_name: string
-          geography: string | null
-          hurdle_rate: number
           id: string
-          management_fee_rate: number
-          ownership_percentage: number
+          name: string
+          reporting_currency: string
+          short_name: string | null
           start_date: string | null
-          strategy: string | null
-          target_industries: string | null
-          theme: string | null
           updated_at: string
-          vintage_year: number | null
         }
         Insert: {
-          carry_percentage?: number
-          commitment_amount?: number
-          company_industries?: string | null
+          archived?: boolean
           created_at?: string
-          currency?: string
-          fund_name: string
-          geography?: string | null
-          hurdle_rate?: number
           id?: string
-          management_fee_rate?: number
-          ownership_percentage?: number
+          name: string
+          reporting_currency?: string
+          short_name?: string | null
           start_date?: string | null
-          strategy?: string | null
-          target_industries?: string | null
-          theme?: string | null
           updated_at?: string
-          vintage_year?: number | null
         }
         Update: {
-          carry_percentage?: number
-          commitment_amount?: number
-          company_industries?: string | null
+          archived?: boolean
           created_at?: string
-          currency?: string
-          fund_name?: string
-          geography?: string | null
-          hurdle_rate?: number
           id?: string
-          management_fee_rate?: number
-          ownership_percentage?: number
+          name?: string
+          reporting_currency?: string
+          short_name?: string | null
           start_date?: string | null
-          strategy?: string | null
-          target_industries?: string | null
-          theme?: string | null
           updated_at?: string
-          vintage_year?: number | null
         }
         Relationships: []
       }
       fx_rates: {
         Row: {
           created_at: string
-          currency_pair: string
+          currency: string
+          date: string
           id: string
-          rate: number
-          rate_date: string
-          source: string
+          note: string | null
+          source: string | null
+          usd_per_unit: number
         }
         Insert: {
           created_at?: string
-          currency_pair: string
+          currency: string
+          date: string
           id?: string
-          rate: number
-          rate_date: string
-          source?: string
+          note?: string | null
+          source?: string | null
+          usd_per_unit: number
         }
         Update: {
           created_at?: string
-          currency_pair?: string
+          currency?: string
+          date?: string
           id?: string
-          rate?: number
-          rate_date?: string
-          source?: string
+          note?: string | null
+          source?: string | null
+          usd_per_unit?: number
         }
         Relationships: []
       }
-      highlight_entries: {
+      highlights: {
         Row: {
-          body: string
+          body_md: string
+          category: string
           created_at: string
-          entity_name: string
+          draft: boolean
           id: string
-          quarter_date: string
-          update_type: string
-          updated_at: string
-          url: string | null
+          last_edited_at: string
+          last_edited_by: string | null
+          position: number
+          quarter_id: string
         }
         Insert: {
-          body?: string
+          body_md: string
+          category: string
           created_at?: string
-          entity_name: string
+          draft?: boolean
           id?: string
-          quarter_date: string
-          update_type?: string
-          updated_at?: string
-          url?: string | null
+          last_edited_at?: string
+          last_edited_by?: string | null
+          position?: number
+          quarter_id: string
         }
         Update: {
-          body?: string
+          body_md?: string
+          category?: string
           created_at?: string
-          entity_name?: string
+          draft?: boolean
           id?: string
-          quarter_date?: string
-          update_type?: string
-          updated_at?: string
-          url?: string | null
-        }
-        Relationships: []
-      }
-      pcap_extractions: {
-        Row: {
-          confidence_scores: Json
-          created_at: string
-          document_path: string | null
-          extracted_data: Json
-          extraction_notes: string | null
-          extraction_status: string
-          fund_id: string
-          id: string
-          quarter: string
-          quarter_date: string
-          reviewed_at: string | null
-          reviewed_by: string | null
-          updated_at: string
-        }
-        Insert: {
-          confidence_scores?: Json
-          created_at?: string
-          document_path?: string | null
-          extracted_data?: Json
-          extraction_notes?: string | null
-          extraction_status?: string
-          fund_id: string
-          id?: string
-          quarter: string
-          quarter_date: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          updated_at?: string
-        }
-        Update: {
-          confidence_scores?: Json
-          created_at?: string
-          document_path?: string | null
-          extracted_data?: Json
-          extraction_notes?: string | null
-          extraction_status?: string
-          fund_id?: string
-          id?: string
-          quarter?: string
-          quarter_date?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          updated_at?: string
+          last_edited_at?: string
+          last_edited_by?: string | null
+          position?: number
+          quarter_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "pcap_extractions_fund_id_fkey"
-            columns: ["fund_id"]
+            foreignKeyName: "highlights_quarter_id_fkey"
+            columns: ["quarter_id"]
             isOneToOne: false
-            referencedRelation: "funds"
+            referencedRelation: "quarters"
             referencedColumns: ["id"]
           },
         ]
       }
-      portfolio_snapshots: {
+      profiles: {
         Row: {
+          avatar_url: string | null
           created_at: string
+          email: string | null
+          full_name: string | null
           id: string
-          lp_nav: number
-          notes: string | null
-          quarter_date: string
+          updated_at: string
         }
         Insert: {
+          avatar_url?: string | null
           created_at?: string
-          id?: string
-          lp_nav?: number
-          notes?: string | null
-          quarter_date: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string
         }
         Update: {
+          avatar_url?: string | null
           created_at?: string
+          email?: string | null
+          full_name?: string | null
           id?: string
-          lp_nav?: number
-          notes?: string | null
-          quarter_date?: string
+          updated_at?: string
         }
         Relationships: []
       }
-      quarterly_commentary: {
+      quarter_share_tokens: {
         Row: {
-          body: string
-          created_at: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
           id: string
-          quarter_date: string
-          section: string
-          sort_order: number | null
-          updated_at: string | null
+          quarter_id: string
+          revoked: boolean
+          token: string
         }
         Insert: {
-          body: string
-          created_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
           id?: string
-          quarter_date: string
-          section: string
-          sort_order?: number | null
-          updated_at?: string | null
+          quarter_id: string
+          revoked?: boolean
+          token: string
         }
         Update: {
-          body?: string
-          created_at?: string | null
-          id?: string
-          quarter_date?: string
-          section?: string
-          sort_order?: number | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      quarterly_history: {
-        Row: {
-          computation_source: string
-          confirmed_at: string | null
-          confirmed_by: string | null
-          contribution: number
-          created_at: string
-          distribution: number
-          dpi: number
-          gross_irr: number
-          gross_tvpi: number
-          id: string
-          locked: boolean
-          nav: number
-          net_irr: number
-          net_tvpi: number
-          pic: number
-          quarter: string
-          quarter_date: string
-          rvpi: number
-          total_called: number
-          total_commitment: number
-          total_distributed: number
-          total_nav: number
-          unfunded: number
-        }
-        Insert: {
-          computation_source?: string
-          confirmed_at?: string | null
-          confirmed_by?: string | null
-          contribution?: number
           created_at?: string
-          distribution?: number
-          dpi?: number
-          gross_irr?: number
-          gross_tvpi?: number
+          created_by?: string | null
+          expires_at?: string | null
           id?: string
-          locked?: boolean
-          nav?: number
-          net_irr?: number
-          net_tvpi?: number
-          pic?: number
-          quarter: string
-          quarter_date: string
-          rvpi?: number
-          total_called?: number
-          total_commitment?: number
-          total_distributed?: number
-          total_nav?: number
-          unfunded?: number
+          quarter_id?: string
+          revoked?: boolean
+          token?: string
         }
-        Update: {
-          computation_source?: string
-          confirmed_at?: string | null
-          confirmed_by?: string | null
-          contribution?: number
-          created_at?: string
-          distribution?: number
-          dpi?: number
-          gross_irr?: number
-          gross_tvpi?: number
-          id?: string
-          locked?: boolean
-          nav?: number
-          net_irr?: number
-          net_tvpi?: number
-          pic?: number
-          quarter?: string
-          quarter_date?: string
-          rvpi?: number
-          total_called?: number
-          total_commitment?: number
-          total_distributed?: number
-          total_nav?: number
-          unfunded?: number
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "quarter_share_tokens_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: false
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+        ]
       }
-      quarterly_report_tracking: {
+      quarters: {
         Row: {
-          approved_at: string | null
           created_at: string
-          days_since_quarter_end: number | null
-          document_path: string | null
-          expected_by: string | null
-          fund_id: string
+          fiscal_quarter: number
+          fiscal_year: number
           id: string
-          notes: string | null
-          processing_completed_at: string | null
-          processing_started_at: string | null
-          quarter: string
-          quarter_date: string
-          received_at: string | null
-          received_via: string | null
-          report_type: string
-          reviewed_by: string | null
+          label: string
+          locked_at: string | null
+          quarter_end_date: string
           status: string
           updated_at: string
         }
         Insert: {
-          approved_at?: string | null
           created_at?: string
-          days_since_quarter_end?: number | null
-          document_path?: string | null
-          expected_by?: string | null
-          fund_id: string
+          fiscal_quarter: number
+          fiscal_year: number
           id?: string
-          notes?: string | null
-          processing_completed_at?: string | null
-          processing_started_at?: string | null
-          quarter: string
-          quarter_date: string
-          received_at?: string | null
-          received_via?: string | null
-          report_type?: string
-          reviewed_by?: string | null
+          label: string
+          locked_at?: string | null
+          quarter_end_date: string
           status?: string
           updated_at?: string
         }
         Update: {
-          approved_at?: string | null
           created_at?: string
-          days_since_quarter_end?: number | null
-          document_path?: string | null
-          expected_by?: string | null
-          fund_id?: string
+          fiscal_quarter?: number
+          fiscal_year?: number
           id?: string
-          notes?: string | null
-          processing_completed_at?: string | null
-          processing_started_at?: string | null
-          quarter?: string
-          quarter_date?: string
-          received_at?: string | null
-          received_via?: string | null
-          report_type?: string
-          reviewed_by?: string | null
+          label?: string
+          locked_at?: string | null
+          quarter_end_date?: string
           status?: string
           updated_at?: string
         }
+        Relationships: []
+      }
+      source_documents: {
+        Row: {
+          direct_id: string | null
+          doc_type: string
+          fund_id: string | null
+          id: string
+          original_filename: string | null
+          quarter_id: string | null
+          status: string
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          direct_id?: string | null
+          doc_type: string
+          fund_id?: string | null
+          id?: string
+          original_filename?: string | null
+          quarter_id?: string | null
+          status?: string
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          direct_id?: string | null
+          doc_type?: string
+          fund_id?: string | null
+          id?: string
+          original_filename?: string | null
+          quarter_id?: string | null
+          status?: string
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "quarterly_report_tracking_fund_id_fkey"
+            foreignKeyName: "source_documents_direct_id_fkey"
+            columns: ["direct_id"]
+            isOneToOne: false
+            referencedRelation: "directs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "source_documents_fund_id_fkey"
             columns: ["fund_id"]
             isOneToOne: false
             referencedRelation: "funds"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "source_documents_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: false
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
         ]
       }
-      reconciliation_checks: {
+      taxonomy_items: {
         Row: {
-          actual_value: number | null
-          check_type: string
-          created_at: string | null
-          description: string
-          entity_name: string | null
-          expected_value: number | null
+          archived: boolean
+          created_at: string
           id: string
-          quarter_date: string
-          resolved: boolean | null
-          resolved_at: string | null
-          resolved_by: string | null
-          severity: string
-          variance_pct: number | null
+          kind: string
+          sort_order: number
+          value: string
         }
         Insert: {
-          actual_value?: number | null
-          check_type: string
-          created_at?: string | null
-          description: string
-          entity_name?: string | null
-          expected_value?: number | null
+          archived?: boolean
+          created_at?: string
           id?: string
-          quarter_date: string
-          resolved?: boolean | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          severity: string
-          variance_pct?: number | null
+          kind: string
+          sort_order?: number
+          value: string
         }
         Update: {
-          actual_value?: number | null
-          check_type?: string
-          created_at?: string | null
-          description?: string
-          entity_name?: string | null
-          expected_value?: number | null
+          archived?: boolean
+          created_at?: string
           id?: string
-          quarter_date?: string
-          resolved?: boolean | null
-          resolved_at?: string | null
-          resolved_by?: string | null
-          severity?: string
-          variance_pct?: number | null
+          kind?: string
+          sort_order?: number
+          value?: string
         }
         Relationships: []
       }
-      staged_direct_imports: {
+      twh_ledger_entries: {
         Row: {
-          co_investors: string | null
-          company_name: string
-          cost_basis: number | null
-          created_at: string | null
-          current_valuation: number | null
-          geography: string | null
+          amount_usd: number
+          category: string
+          counterparty: string | null
+          created_at: string
+          created_by: string | null
+          date: string
+          description: string | null
+          id: string
+          reconciled: boolean
+          source_document_id: string | null
+        }
+        Insert: {
+          amount_usd: number
+          category: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          date: string
+          description?: string | null
+          id?: string
+          reconciled?: boolean
+          source_document_id?: string | null
+        }
+        Update: {
+          amount_usd?: number
+          category?: string
+          counterparty?: string | null
+          created_at?: string
+          created_by?: string | null
+          date?: string
+          description?: string | null
+          id?: string
+          reconciled?: boolean
+          source_document_id?: string | null
+        }
+        Relationships: []
+      }
+      underlying_holdings: {
+        Row: {
+          company_id: string
+          created_at: string
+          fund_cost_usd: number
+          fund_fmv_usd: number
+          fund_id: string
+          fund_proceeds_usd: number
           id: string
           instrument: string | null
           investment_date: string | null
-          ownership_percentage: number | null
-          quarter_date: string | null
-          raw_extraction: Json | null
-          reviewed_at: string | null
-          reviewed_by: string | null
-          reviewer_notes: string | null
+          quarter_id: string
           round: string | null
-          source_file_name: string | null
-          source_type: string
-          status: string
-          strategy: string | null
-          updated_at: string | null
+          source_report_id: string | null
+          updated_at: string
         }
         Insert: {
-          co_investors?: string | null
-          company_name: string
-          cost_basis?: number | null
-          created_at?: string | null
-          current_valuation?: number | null
-          geography?: string | null
+          company_id: string
+          created_at?: string
+          fund_cost_usd?: number
+          fund_fmv_usd?: number
+          fund_id: string
+          fund_proceeds_usd?: number
           id?: string
           instrument?: string | null
           investment_date?: string | null
-          ownership_percentage?: number | null
-          quarter_date?: string | null
-          raw_extraction?: Json | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          reviewer_notes?: string | null
+          quarter_id: string
           round?: string | null
-          source_file_name?: string | null
-          source_type: string
-          status?: string
-          strategy?: string | null
-          updated_at?: string | null
+          source_report_id?: string | null
+          updated_at?: string
         }
         Update: {
-          co_investors?: string | null
-          company_name?: string
-          cost_basis?: number | null
-          created_at?: string | null
-          current_valuation?: number | null
-          geography?: string | null
-          id?: string
-          instrument?: string | null
-          investment_date?: string | null
-          ownership_percentage?: number | null
-          quarter_date?: string | null
-          raw_extraction?: Json | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          reviewer_notes?: string | null
-          round?: string | null
-          source_file_name?: string | null
-          source_type?: string
-          status?: string
-          strategy?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      staged_fund_extractions: {
-        Row: {
-          confidence_score: number | null
-          created_at: string | null
-          extracted_at: string | null
-          extracted_capital_called: number | null
-          extracted_commitment: number | null
-          extracted_companies: Json | null
-          extracted_distributions: number | null
-          extracted_dpi: number | null
-          extracted_gross_irr: number | null
-          extracted_gross_tvpi: number | null
-          extracted_nav: number | null
-          extracted_net_irr: number | null
-          extracted_net_tvpi: number | null
-          extracted_pic: number | null
-          extracted_rvpi: number | null
-          extracted_unfunded: number | null
-          extraction_model: string | null
-          fund_id: string
-          id: string
-          quarter_date: string
-          raw_extraction: Json | null
-          reviewed_at: string | null
-          reviewed_by: string | null
-          reviewer_notes: string | null
-          source_file_name: string | null
-          source_file_path: string | null
-          source_url: string | null
-          status: string
-          updated_at: string | null
-        }
-        Insert: {
-          confidence_score?: number | null
-          created_at?: string | null
-          extracted_at?: string | null
-          extracted_capital_called?: number | null
-          extracted_commitment?: number | null
-          extracted_companies?: Json | null
-          extracted_distributions?: number | null
-          extracted_dpi?: number | null
-          extracted_gross_irr?: number | null
-          extracted_gross_tvpi?: number | null
-          extracted_nav?: number | null
-          extracted_net_irr?: number | null
-          extracted_net_tvpi?: number | null
-          extracted_pic?: number | null
-          extracted_rvpi?: number | null
-          extracted_unfunded?: number | null
-          extraction_model?: string | null
-          fund_id: string
-          id?: string
-          quarter_date: string
-          raw_extraction?: Json | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          reviewer_notes?: string | null
-          source_file_name?: string | null
-          source_file_path?: string | null
-          source_url?: string | null
-          status?: string
-          updated_at?: string | null
-        }
-        Update: {
-          confidence_score?: number | null
-          created_at?: string | null
-          extracted_at?: string | null
-          extracted_capital_called?: number | null
-          extracted_commitment?: number | null
-          extracted_companies?: Json | null
-          extracted_distributions?: number | null
-          extracted_dpi?: number | null
-          extracted_gross_irr?: number | null
-          extracted_gross_tvpi?: number | null
-          extracted_nav?: number | null
-          extracted_net_irr?: number | null
-          extracted_net_tvpi?: number | null
-          extracted_pic?: number | null
-          extracted_rvpi?: number | null
-          extracted_unfunded?: number | null
-          extraction_model?: string | null
+          company_id?: string
+          created_at?: string
+          fund_cost_usd?: number
+          fund_fmv_usd?: number
           fund_id?: string
+          fund_proceeds_usd?: number
           id?: string
-          quarter_date?: string
-          raw_extraction?: Json | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          reviewer_notes?: string | null
-          source_file_name?: string | null
-          source_file_path?: string | null
-          source_url?: string | null
-          status?: string
-          updated_at?: string | null
+          instrument?: string | null
+          investment_date?: string | null
+          quarter_id?: string
+          round?: string | null
+          source_report_id?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "staged_fund_extractions_fund_id_fkey"
+            foreignKeyName: "underlying_holdings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "underlying_holdings_fund_id_fkey"
             columns: ["fund_id"]
             isOneToOne: false
             referencedRelation: "funds"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      staged_internal_data: {
-        Row: {
-          body: string | null
-          cashflow_amount: number | null
-          cashflow_description: string | null
-          cashflow_type: string | null
-          created_at: string | null
-          data_type: string
-          entity_name: string | null
-          id: string
-          lp_nav: number | null
-          nav_notes: string | null
-          quarter_date: string
-          reviewed_at: string | null
-          reviewed_by: string | null
-          reviewer_notes: string | null
-          status: string
-          submitted_by: string | null
-          update_type: string | null
-          updated_at: string | null
-          url: string | null
-        }
-        Insert: {
-          body?: string | null
-          cashflow_amount?: number | null
-          cashflow_description?: string | null
-          cashflow_type?: string | null
-          created_at?: string | null
-          data_type: string
-          entity_name?: string | null
-          id?: string
-          lp_nav?: number | null
-          nav_notes?: string | null
-          quarter_date: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          reviewer_notes?: string | null
-          status?: string
-          submitted_by?: string | null
-          update_type?: string | null
-          updated_at?: string | null
-          url?: string | null
-        }
-        Update: {
-          body?: string | null
-          cashflow_amount?: number | null
-          cashflow_description?: string | null
-          cashflow_type?: string | null
-          created_at?: string | null
-          data_type?: string
-          entity_name?: string | null
-          id?: string
-          lp_nav?: number | null
-          nav_notes?: string | null
-          quarter_date?: string
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          reviewer_notes?: string | null
-          status?: string
-          submitted_by?: string | null
-          update_type?: string | null
-          updated_at?: string | null
-          url?: string | null
-        }
-        Relationships: []
-      }
-      underlying_portfolio_holdings: {
-        Row: {
-          company_industries: string | null
-          company_name: string
-          created_at: string
-          fmv: number
-          fund_id: string | null
-          id: string
-          investment_cost: number
-          notes: string | null
-          proceeds: number
-          quarter_date: string
-          region: string | null
-          sector: string | null
-          target_industries: string | null
-          theme: string | null
-          twh_cost: number
-          twh_fmv: number
-          twh_proceeds: number
-          type: string | null
-        }
-        Insert: {
-          company_industries?: string | null
-          company_name: string
-          created_at?: string
-          fmv?: number
-          fund_id?: string | null
-          id?: string
-          investment_cost?: number
-          notes?: string | null
-          proceeds?: number
-          quarter_date: string
-          region?: string | null
-          sector?: string | null
-          target_industries?: string | null
-          theme?: string | null
-          twh_cost?: number
-          twh_fmv?: number
-          twh_proceeds?: number
-          type?: string | null
-        }
-        Update: {
-          company_industries?: string | null
-          company_name?: string
-          created_at?: string
-          fmv?: number
-          fund_id?: string | null
-          id?: string
-          investment_cost?: number
-          notes?: string | null
-          proceeds?: number
-          quarter_date?: string
-          region?: string | null
-          sector?: string | null
-          target_industries?: string | null
-          theme?: string | null
-          twh_cost?: number
-          twh_fmv?: number
-          twh_proceeds?: number
-          type?: string | null
-        }
-        Relationships: [
           {
-            foreignKeyName: "underlying_portfolio_holdings_fund_id_fkey"
-            columns: ["fund_id"]
+            foreignKeyName: "underlying_holdings_quarter_id_fkey"
+            columns: ["quarter_id"]
             isOneToOne: false
-            referencedRelation: "funds"
+            referencedRelation: "quarters"
             referencedColumns: ["id"]
           },
         ]
       }
-      underlying_portfolio_transactions: {
+      user_roles: {
         Row: {
-          company_name: string
           created_at: string
-          fmv: number
-          fund_name: string
           id: string
-          instrument: string | null
-          investment_cost: number
-          proceeds: number
-          quarter_date: string
-          round: string | null
-          status: string | null
-          transaction_date: string | null
-          twh_cost: number
-          twh_fmv: number
-          twh_pct: number
-          twh_proceeds: number
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Insert: {
-          company_name: string
           created_at?: string
-          fmv?: number
-          fund_name: string
           id?: string
-          instrument?: string | null
-          investment_cost?: number
-          proceeds?: number
-          quarter_date: string
-          round?: string | null
-          status?: string | null
-          transaction_date?: string | null
-          twh_cost?: number
-          twh_fmv?: number
-          twh_pct?: number
-          twh_proceeds?: number
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
         }
         Update: {
-          company_name?: string
           created_at?: string
-          fmv?: number
-          fund_name?: string
           id?: string
-          instrument?: string | null
-          investment_cost?: number
-          proceeds?: number
-          quarter_date?: string
-          round?: string | null
-          status?: string | null
-          transaction_date?: string | null
-          twh_cost?: number
-          twh_fmv?: number
-          twh_pct?: number
-          twh_proceeds?: number
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
         }
         Relationships: []
       }
@@ -1237,10 +908,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "viewer"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1367,6 +1045,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "viewer"],
+    },
   },
 } as const
