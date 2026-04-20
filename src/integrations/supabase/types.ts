@@ -35,6 +35,39 @@ export type Database = {
         }
         Relationships: []
       }
+      audit_log: {
+        Row: {
+          action: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          performed_by: string
+          quarter_date: string | null
+          target_id: string | null
+          target_table: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          performed_by: string
+          quarter_date?: string | null
+          target_id?: string | null
+          target_table: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          performed_by?: string
+          quarter_date?: string | null
+          target_id?: string | null
+          target_table?: string
+        }
+        Relationships: []
+      }
       direct_investments: {
         Row: {
           co_investors: string | null
@@ -156,6 +189,65 @@ export type Database = {
           },
         ]
       }
+      fund_extraction_templates: {
+        Row: {
+          created_at: string | null
+          document_type: string
+          extraction_notes: string | null
+          field_mappings: Json
+          fund_id: string
+          id: string
+          is_active: boolean
+          notes: string | null
+          report_format: string
+          sample_document_url: string | null
+          sample_extraction: Json | null
+          template_name: string | null
+          template_version: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          document_type?: string
+          extraction_notes?: string | null
+          field_mappings?: Json
+          fund_id: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          report_format?: string
+          sample_document_url?: string | null
+          sample_extraction?: Json | null
+          template_name?: string | null
+          template_version?: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          document_type?: string
+          extraction_notes?: string | null
+          field_mappings?: Json
+          fund_id?: string
+          id?: string
+          is_active?: boolean
+          notes?: string | null
+          report_format?: string
+          sample_document_url?: string | null
+          sample_extraction?: Json | null
+          template_name?: string | null
+          template_version?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_extraction_templates_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_financial_statements: {
         Row: {
           confirmed: boolean
@@ -233,11 +325,16 @@ export type Database = {
           created_at: string
           distributions_to_date: number
           fund_id: string
+          fx_rate_id: string | null
           id: string
           quarter_date: string
           reported_gross_irr: number | null
           reported_gross_tvpi: number | null
           reported_nav: number
+          source_contributions: number | null
+          source_currency: string
+          source_distributions: number | null
+          source_nav: number | null
           updated_at: string
         }
         Insert: {
@@ -245,11 +342,16 @@ export type Database = {
           created_at?: string
           distributions_to_date?: number
           fund_id: string
+          fx_rate_id?: string | null
           id?: string
           quarter_date: string
           reported_gross_irr?: number | null
           reported_gross_tvpi?: number | null
           reported_nav?: number
+          source_contributions?: number | null
+          source_currency?: string
+          source_distributions?: number | null
+          source_nav?: number | null
           updated_at?: string
         }
         Update: {
@@ -257,16 +359,75 @@ export type Database = {
           created_at?: string
           distributions_to_date?: number
           fund_id?: string
+          fx_rate_id?: string | null
           id?: string
           quarter_date?: string
           reported_gross_irr?: number | null
           reported_gross_tvpi?: number | null
           reported_nav?: number
+          source_contributions?: number | null
+          source_currency?: string
+          source_distributions?: number | null
+          source_nav?: number | null
           updated_at?: string
         }
         Relationships: [
           {
             foreignKeyName: "fund_quarterly_reports_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_quarterly_reports_fx_rate_id_fkey"
+            columns: ["fx_rate_id"]
+            isOneToOne: false
+            referencedRelation: "fx_rates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fund_reporting_patterns: {
+        Row: {
+          avg_days_to_report: number | null
+          created_at: string
+          fund_id: string
+          id: string
+          last_received_days: number | null
+          notes: string | null
+          report_type: string
+          typical_format: string | null
+          typical_sender_email: string | null
+          updated_at: string
+        }
+        Insert: {
+          avg_days_to_report?: number | null
+          created_at?: string
+          fund_id: string
+          id?: string
+          last_received_days?: number | null
+          notes?: string | null
+          report_type?: string
+          typical_format?: string | null
+          typical_sender_email?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avg_days_to_report?: number | null
+          created_at?: string
+          fund_id?: string
+          id?: string
+          last_received_days?: number | null
+          notes?: string | null
+          report_type?: string
+          typical_format?: string | null
+          typical_sender_email?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_reporting_patterns_fund_id_fkey"
             columns: ["fund_id"]
             isOneToOne: false
             referencedRelation: "funds"
@@ -334,6 +495,122 @@ export type Database = {
         }
         Relationships: []
       }
+      fx_rates: {
+        Row: {
+          created_at: string
+          currency_pair: string
+          id: string
+          rate: number
+          rate_date: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          currency_pair: string
+          id?: string
+          rate: number
+          rate_date: string
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          currency_pair?: string
+          id?: string
+          rate?: number
+          rate_date?: string
+          source?: string
+        }
+        Relationships: []
+      }
+      highlight_entries: {
+        Row: {
+          body: string
+          created_at: string
+          entity_name: string
+          id: string
+          quarter_date: string
+          update_type: string
+          updated_at: string
+          url: string | null
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          entity_name: string
+          id?: string
+          quarter_date: string
+          update_type?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          entity_name?: string
+          id?: string
+          quarter_date?: string
+          update_type?: string
+          updated_at?: string
+          url?: string | null
+        }
+        Relationships: []
+      }
+      pcap_extractions: {
+        Row: {
+          confidence_scores: Json
+          created_at: string
+          document_path: string | null
+          extracted_data: Json
+          extraction_notes: string | null
+          extraction_status: string
+          fund_id: string
+          id: string
+          quarter: string
+          quarter_date: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          confidence_scores?: Json
+          created_at?: string
+          document_path?: string | null
+          extracted_data?: Json
+          extraction_notes?: string | null
+          extraction_status?: string
+          fund_id: string
+          id?: string
+          quarter: string
+          quarter_date: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          confidence_scores?: Json
+          created_at?: string
+          document_path?: string | null
+          extracted_data?: Json
+          extraction_notes?: string | null
+          extraction_status?: string
+          fund_id?: string
+          id?: string
+          quarter?: string
+          quarter_date?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcap_extractions_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portfolio_snapshots: {
         Row: {
           created_at: string
@@ -358,11 +635,45 @@ export type Database = {
         }
         Relationships: []
       }
+      quarterly_commentary: {
+        Row: {
+          body: string
+          created_at: string | null
+          id: string
+          quarter_date: string
+          section: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string | null
+          id?: string
+          quarter_date: string
+          section: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string | null
+          id?: string
+          quarter_date?: string
+          section?: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       quarterly_history: {
         Row: {
+          computation_source: string
+          confirmed_at: string | null
+          confirmed_by: string | null
           contribution: number
           created_at: string
           distribution: number
+          dpi: number
           gross_irr: number
           gross_tvpi: number
           id: string
@@ -370,13 +681,24 @@ export type Database = {
           nav: number
           net_irr: number
           net_tvpi: number
+          pic: number
           quarter: string
           quarter_date: string
+          rvpi: number
+          total_called: number
+          total_commitment: number
+          total_distributed: number
+          total_nav: number
+          unfunded: number
         }
         Insert: {
+          computation_source?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           contribution?: number
           created_at?: string
           distribution?: number
+          dpi?: number
           gross_irr?: number
           gross_tvpi?: number
           id?: string
@@ -384,13 +706,24 @@ export type Database = {
           nav?: number
           net_irr?: number
           net_tvpi?: number
+          pic?: number
           quarter: string
           quarter_date: string
+          rvpi?: number
+          total_called?: number
+          total_commitment?: number
+          total_distributed?: number
+          total_nav?: number
+          unfunded?: number
         }
         Update: {
+          computation_source?: string
+          confirmed_at?: string | null
+          confirmed_by?: string | null
           contribution?: number
           created_at?: string
           distribution?: number
+          dpi?: number
           gross_irr?: number
           gross_tvpi?: number
           id?: string
@@ -398,8 +731,376 @@ export type Database = {
           nav?: number
           net_irr?: number
           net_tvpi?: number
+          pic?: number
           quarter?: string
           quarter_date?: string
+          rvpi?: number
+          total_called?: number
+          total_commitment?: number
+          total_distributed?: number
+          total_nav?: number
+          unfunded?: number
+        }
+        Relationships: []
+      }
+      quarterly_report_tracking: {
+        Row: {
+          approved_at: string | null
+          created_at: string
+          days_since_quarter_end: number | null
+          document_path: string | null
+          expected_by: string | null
+          fund_id: string
+          id: string
+          notes: string | null
+          processing_completed_at: string | null
+          processing_started_at: string | null
+          quarter: string
+          quarter_date: string
+          received_at: string | null
+          received_via: string | null
+          report_type: string
+          reviewed_by: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          approved_at?: string | null
+          created_at?: string
+          days_since_quarter_end?: number | null
+          document_path?: string | null
+          expected_by?: string | null
+          fund_id: string
+          id?: string
+          notes?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
+          quarter: string
+          quarter_date: string
+          received_at?: string | null
+          received_via?: string | null
+          report_type?: string
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_at?: string | null
+          created_at?: string
+          days_since_quarter_end?: number | null
+          document_path?: string | null
+          expected_by?: string | null
+          fund_id?: string
+          id?: string
+          notes?: string | null
+          processing_completed_at?: string | null
+          processing_started_at?: string | null
+          quarter?: string
+          quarter_date?: string
+          received_at?: string | null
+          received_via?: string | null
+          report_type?: string
+          reviewed_by?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quarterly_report_tracking_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reconciliation_checks: {
+        Row: {
+          actual_value: number | null
+          check_type: string
+          created_at: string | null
+          description: string
+          entity_name: string | null
+          expected_value: number | null
+          id: string
+          quarter_date: string
+          resolved: boolean | null
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          variance_pct: number | null
+        }
+        Insert: {
+          actual_value?: number | null
+          check_type: string
+          created_at?: string | null
+          description: string
+          entity_name?: string | null
+          expected_value?: number | null
+          id?: string
+          quarter_date: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity: string
+          variance_pct?: number | null
+        }
+        Update: {
+          actual_value?: number | null
+          check_type?: string
+          created_at?: string | null
+          description?: string
+          entity_name?: string | null
+          expected_value?: number | null
+          id?: string
+          quarter_date?: string
+          resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          variance_pct?: number | null
+        }
+        Relationships: []
+      }
+      staged_direct_imports: {
+        Row: {
+          co_investors: string | null
+          company_name: string
+          cost_basis: number | null
+          created_at: string | null
+          current_valuation: number | null
+          geography: string | null
+          id: string
+          instrument: string | null
+          investment_date: string | null
+          ownership_percentage: number | null
+          quarter_date: string | null
+          raw_extraction: Json | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          round: string | null
+          source_file_name: string | null
+          source_type: string
+          status: string
+          strategy: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          co_investors?: string | null
+          company_name: string
+          cost_basis?: number | null
+          created_at?: string | null
+          current_valuation?: number | null
+          geography?: string | null
+          id?: string
+          instrument?: string | null
+          investment_date?: string | null
+          ownership_percentage?: number | null
+          quarter_date?: string | null
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          round?: string | null
+          source_file_name?: string | null
+          source_type: string
+          status?: string
+          strategy?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          co_investors?: string | null
+          company_name?: string
+          cost_basis?: number | null
+          created_at?: string | null
+          current_valuation?: number | null
+          geography?: string | null
+          id?: string
+          instrument?: string | null
+          investment_date?: string | null
+          ownership_percentage?: number | null
+          quarter_date?: string | null
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          round?: string | null
+          source_file_name?: string | null
+          source_type?: string
+          status?: string
+          strategy?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      staged_fund_extractions: {
+        Row: {
+          confidence_score: number | null
+          created_at: string | null
+          extracted_at: string | null
+          extracted_capital_called: number | null
+          extracted_commitment: number | null
+          extracted_companies: Json | null
+          extracted_distributions: number | null
+          extracted_dpi: number | null
+          extracted_gross_irr: number | null
+          extracted_gross_tvpi: number | null
+          extracted_nav: number | null
+          extracted_net_irr: number | null
+          extracted_net_tvpi: number | null
+          extracted_pic: number | null
+          extracted_rvpi: number | null
+          extracted_unfunded: number | null
+          extraction_model: string | null
+          fund_id: string
+          id: string
+          quarter_date: string
+          raw_extraction: Json | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          source_file_name: string | null
+          source_file_path: string | null
+          source_url: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          confidence_score?: number | null
+          created_at?: string | null
+          extracted_at?: string | null
+          extracted_capital_called?: number | null
+          extracted_commitment?: number | null
+          extracted_companies?: Json | null
+          extracted_distributions?: number | null
+          extracted_dpi?: number | null
+          extracted_gross_irr?: number | null
+          extracted_gross_tvpi?: number | null
+          extracted_nav?: number | null
+          extracted_net_irr?: number | null
+          extracted_net_tvpi?: number | null
+          extracted_pic?: number | null
+          extracted_rvpi?: number | null
+          extracted_unfunded?: number | null
+          extraction_model?: string | null
+          fund_id: string
+          id?: string
+          quarter_date: string
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          source_url?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          confidence_score?: number | null
+          created_at?: string | null
+          extracted_at?: string | null
+          extracted_capital_called?: number | null
+          extracted_commitment?: number | null
+          extracted_companies?: Json | null
+          extracted_distributions?: number | null
+          extracted_dpi?: number | null
+          extracted_gross_irr?: number | null
+          extracted_gross_tvpi?: number | null
+          extracted_nav?: number | null
+          extracted_net_irr?: number | null
+          extracted_net_tvpi?: number | null
+          extracted_pic?: number | null
+          extracted_rvpi?: number | null
+          extracted_unfunded?: number | null
+          extraction_model?: string | null
+          fund_id?: string
+          id?: string
+          quarter_date?: string
+          raw_extraction?: Json | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          source_file_name?: string | null
+          source_file_path?: string | null
+          source_url?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staged_fund_extractions_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staged_internal_data: {
+        Row: {
+          body: string | null
+          cashflow_amount: number | null
+          cashflow_description: string | null
+          cashflow_type: string | null
+          created_at: string | null
+          data_type: string
+          entity_name: string | null
+          id: string
+          lp_nav: number | null
+          nav_notes: string | null
+          quarter_date: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          reviewer_notes: string | null
+          status: string
+          submitted_by: string | null
+          update_type: string | null
+          updated_at: string | null
+          url: string | null
+        }
+        Insert: {
+          body?: string | null
+          cashflow_amount?: number | null
+          cashflow_description?: string | null
+          cashflow_type?: string | null
+          created_at?: string | null
+          data_type: string
+          entity_name?: string | null
+          id?: string
+          lp_nav?: number | null
+          nav_notes?: string | null
+          quarter_date: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string
+          submitted_by?: string | null
+          update_type?: string | null
+          updated_at?: string | null
+          url?: string | null
+        }
+        Update: {
+          body?: string | null
+          cashflow_amount?: number | null
+          cashflow_description?: string | null
+          cashflow_type?: string | null
+          created_at?: string | null
+          data_type?: string
+          entity_name?: string | null
+          id?: string
+          lp_nav?: number | null
+          nav_notes?: string | null
+          quarter_date?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          reviewer_notes?: string | null
+          status?: string
+          submitted_by?: string | null
+          update_type?: string | null
+          updated_at?: string | null
+          url?: string | null
         }
         Relationships: []
       }
