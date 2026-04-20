@@ -220,14 +220,24 @@ const HEADER_ROW = 3; // 0-indexed (xlsx row 4)
 const DATA_START = 4; // 0-indexed (xlsx row 5)
 
 // ---------- Funds ----------
+// Primary table: column A holds a sequential "#" (1, 2, 3, …). When we hit a
+// numbered row with a blank Fund Name in column B, the primary list is over —
+// stop before encountering the "TOTAL" row or the secondary "Portfolio Fund / RVPI"
+// table that follows below.
 function parseFundsSheet(ws: XLSX.WorkSheet): ParsedFundRow[] {
   const rows = readSheet(ws);
   const out: ParsedFundRow[] = [];
   for (let i = DATA_START; i < rows.length; i++) {
     const r = rows[i] ?? [];
+    const idx = r[COL("A")];
     const name = str(r[COL("B")]);
+    // Stop condition: numbered slot with no fund name → table exhausted.
+    if (idx != null && idx !== "" && !name) break;
+    // Also stop once we leave the numbered region entirely.
+    if ((idx == null || idx === "") && !name) continue;
+    if ((idx == null || idx === "") && name) break; // start of secondary table (e.g., "Portfolio Fund")
     if (!name) continue;
-    if (isSectionLabel(name)) continue;
+    if (isSectionLabel(name)) break;
     out.push({
       fundName: name,
       startDate: dateStr(r[COL("C")]),
@@ -251,14 +261,20 @@ function parseFundsSheet(ws: XLSX.WorkSheet): ParsedFundRow[] {
 }
 
 // ---------- Directs ----------
+// Same numbered-slot convention as Funds. Stop at the first numbered row with
+// no Company Name in column B, or when leaving the numbered region.
 function parseDirectsSheet(ws: XLSX.WorkSheet): ParsedDirectRow[] {
   const rows = readSheet(ws);
   const out: ParsedDirectRow[] = [];
   for (let i = DATA_START; i < rows.length; i++) {
     const r = rows[i] ?? [];
+    const idx = r[COL("A")];
     const name = str(r[COL("B")]);
+    if (idx != null && idx !== "" && !name) break;
+    if ((idx == null || idx === "") && !name) continue;
+    if ((idx == null || idx === "") && name) break;
     if (!name) continue;
-    if (isSectionLabel(name)) continue;
+    if (isSectionLabel(name)) break;
     out.push({
       companyName: name,
       date: dateStr(r[COL("C")]),
