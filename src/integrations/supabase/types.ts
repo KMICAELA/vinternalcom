@@ -926,6 +926,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      compute_quarter_metrics: {
+        Args: { _quarter_id: string }
+        Returns: undefined
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -934,6 +938,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      xirr: { Args: { _amounts: number[]; _dates: string[] }; Returns: number }
     }
     Enums: {
       app_role: "admin" | "viewer"

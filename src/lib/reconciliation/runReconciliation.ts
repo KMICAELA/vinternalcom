@@ -71,16 +71,38 @@ export async function runReconciliation(
   sections.push(buildSectionResult("funds", "Funds", fundIdentityRows));
 
   // ===== DIRECTS =====
+  // Scope: only directs that exist in the selected quarter — i.e. those with
+  // a row in direct_quarter_snapshots for this quarter_id. This matches the
+  // xlsx, which only contains directs that existed on/before quarter_end_date.
   // Identity = (Company Name, Date) — Earth AI appears twice at different dates.
-  const [directsRes, dqsRes, companiesRes] = await Promise.all([
-    supabase.from("directs").select("id, company_id, investment_date, instrument, round, twh_cost_usd"),
+  const [quarterRes, dqsRes, companiesRes] = await Promise.all([
+    supabase.from("quarters").select("quarter_end_date").eq("id", quarterId).maybeSingle(),
     supabase.from("direct_quarter_snapshots").select("direct_id, twh_fmv_usd, twh_proceeds_usd").eq("quarter_id", quarterId),
     supabase.from("companies").select("id, legal_name"),
   ]);
-  const directs = directsRes.data ?? [];
+  const quarterEndDate = quarterRes.data?.quarter_end_date ?? null;
   const dqs = new Map((dqsRes.data ?? []).map((d) => [d.direct_id, d]));
   const companies = companiesRes.data ?? [];
   const companiesById = new Map(companies.map((c) => [c.id, c]));
+
+  // Pull only directs that are in-scope for this quarter:
+  //   1. Have a snapshot in direct_quarter_snapshots for this quarter_id, OR
+  //   2. Have an investment_date on or before this quarter's end_date.
+  // Use OR to capture pre-snapshot directs that legitimately existed in the period.
+  let directsQuery = supabase
+    .from("directs")
+    .select("id, company_id, investment_date, instrument, round, twh_cost_usd");
+  if (dqs.size > 0 && quarterEndDate) {
+    directsQuery = directsQuery.or(
+      `id.in.(${Array.from(dqs.keys()).join(",")}),investment_date.lte.${quarterEndDate}`,
+    );
+  } else if (quarterEndDate) {
+    directsQuery = directsQuery.lte("investment_date", quarterEndDate);
+  } else if (dqs.size > 0) {
+    directsQuery = directsQuery.in("id", Array.from(dqs.keys()));
+  }
+  const directsRes = await directsQuery;
+  const directs = directsRes.data ?? [];
 
   const directsByKey = new Map<string, typeof directs[number]>();
   for (const d of directs) {
