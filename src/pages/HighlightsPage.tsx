@@ -265,6 +265,19 @@ const HighlightsPage = () => {
         </div>
       </div>
 
+      {shareUrl && (
+        <Card className="p-3 bg-card border-border flex items-center justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Public share link</div>
+            <div className="text-xs text-foreground font-mono truncate">{shareUrl}</div>
+          </div>
+          <Button variant="outline" size="sm" onClick={copyShareUrl}>
+            <Copy className="h-3.5 w-3.5" />
+            Copy
+          </Button>
+        </Card>
+      )}
+
       {loading ? (
         <Card className="p-12 bg-card border-border">
           <div className="flex items-center justify-center text-muted-foreground text-sm">Loading…</div>
