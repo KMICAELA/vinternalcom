@@ -1,0 +1,1 @@
+TRUNCATE TABLE cash_flows, direct_quarter_snapshots, underlying_holdings, fund_quarter_snapshots, fund_commitments, directs, companies, funds, quarters RESTART IDENTITY CASCADE;
