@@ -26,12 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, AlertTriangle, FileX, Upload, Download, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, FileX, Upload, Download, Loader2, Database } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { parseWorkbook, detectQuarterFromFilename } from "@/lib/reconciliation/parseXlsx";
 import { runReconciliation } from "@/lib/reconciliation/runReconciliation";
 import { exportReconciliation } from "@/lib/reconciliation/exportRecon";
+import { ingestWorkbook, type IngestSummary } from "@/lib/reconciliation/ingestWorkbook";
 import { fmtUSD, fmtPct, fmtMultiple } from "@/lib/format";
 import type { ReconciliationResult, DiffRow, FieldKind, Status } from "@/lib/reconciliation/types";
 import { toast } from "sonner";
@@ -93,6 +94,8 @@ const ReconciliationPage = () => {
   const [file, setFile] = useState<File | null>(null);
   const [quarterId, setQuarterId] = useState<string>("");
   const [running, setRunning] = useState(false);
+  const [ingesting, setIngesting] = useState(false);
+  const [ingestSummary, setIngestSummary] = useState<IngestSummary | null>(null);
   const [result, setResult] = useState<ReconciliationResult | null>(null);
   const [filter, setFilter] = useState<"all" | "issues">("all");
 
@@ -134,6 +137,31 @@ const ReconciliationPage = () => {
       toast.error(err instanceof Error ? err.message : "Reconciliation failed");
     } finally {
       setRunning(false);
+    }
+  };
+
+  const handleIngest = async () => {
+    if (!file || !quarterId) return;
+    if (!confirm(
+      "This will TRUNCATE underlying_holdings for the selected quarter and re-insert " +
+      "every row from the workbook with per-tranche granularity. Direct quarter snapshots " +
+      "will be upserted. Continue?",
+    )) return;
+    setIngesting(true);
+    setIngestSummary(null);
+    try {
+      const parsed = await parseWorkbook(file);
+      const summary = await ingestWorkbook(parsed, quarterId);
+      setIngestSummary(summary);
+      toast.success(
+        `Ingest complete — underlying ${summary.underlyingBefore} → ${summary.underlyingAfter}, ` +
+        `directs snapshots ${summary.directsSnapshotsBefore} → ${summary.directsSnapshotsAfter}`,
+      );
+    } catch (err) {
+      console.error(err);
+      toast.error(err instanceof Error ? err.message : "Ingest failed");
+    } finally {
+      setIngesting(false);
     }
   };
 
@@ -184,10 +212,20 @@ const ReconciliationPage = () => {
               </SelectContent>
             </Select>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleRun} disabled={!file || !quarterId || running} className="gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <Button onClick={handleRun} disabled={!file || !quarterId || running || ingesting} className="gap-2">
               {running ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {running ? "Running…" : "Run reconciliation"}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={handleIngest}
+              disabled={!file || !quarterId || running || ingesting}
+              className="gap-2"
+              title="Truncate this quarter's underlying_holdings and re-insert per-tranche rows from the workbook"
+            >
+              {ingesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Database className="h-4 w-4" />}
+              {ingesting ? "Ingesting…" : "Ingest workbook"}
             </Button>
             {result && (
               <Button variant="outline" onClick={() => exportReconciliation(result)} className="gap-2">
@@ -196,6 +234,32 @@ const ReconciliationPage = () => {
             )}
           </div>
         </div>
+        {ingestSummary && (
+          <div className="mt-4 pt-4 border-t border-border text-xs font-mono text-muted-foreground space-y-1">
+            <div>
+              Underlying holdings: <span className="text-foreground">{ingestSummary.underlyingBefore}</span> →{" "}
+              <span className="text-emerald-500">{ingestSummary.underlyingAfter}</span>{" "}
+              ({ingestSummary.underlyingInserted} inserted, {ingestSummary.underlyingSkipped.length} skipped)
+            </div>
+            <div>
+              Direct quarter snapshots: <span className="text-foreground">{ingestSummary.directsSnapshotsBefore}</span> →{" "}
+              <span className="text-emerald-500">{ingestSummary.directsSnapshotsAfter}</span>{" "}
+              ({ingestSummary.directsSnapshotsUpserted} upserted, {ingestSummary.directsSkipped.length} skipped)
+            </div>
+            {ingestSummary.underlyingSkipped.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-amber-500">
+                  {ingestSummary.underlyingSkipped.length} underlying rows skipped
+                </summary>
+                <ul className="mt-1 ml-4 space-y-0.5 max-h-40 overflow-auto">
+                  {ingestSummary.underlyingSkipped.slice(0, 50).map((s, i) => (
+                    <li key={i}>· {s.row.companyName} / {s.row.fundName} — {s.reason}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Summary banner */}

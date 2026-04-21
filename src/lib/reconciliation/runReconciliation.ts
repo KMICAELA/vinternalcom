@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ParsedWorkbook } from "./parseXlsx";
 import { buildSectionResult, norm } from "./compare";
+import { resolveFundName } from "./fundAliases";
 import type { ReconciliationResult, SectionResult } from "./types";
 
 /**
@@ -182,7 +183,9 @@ export async function runReconciliation(
   }
 
   for (const srcFund of parsed.funds) {
-    const sysFund = fundsByName.get(norm(srcFund.fundName));
+    const canonical = resolveFundName(srcFund.fundName);
+    const sysFund =
+      fundsByName.get(norm(canonical)) ?? fundsByName.get(norm(srcFund.fundName));
     const c = sysFund ? commits.get(sysFund.id) : null;
     const s = sysFund ? fqs.get(sysFund.id) : null;
     if (sysFund) seenFundIds.add(sysFund.id);
@@ -344,11 +347,11 @@ export async function runReconciliation(
   // ===== UNDERLYING HOLDINGS =====
   const uhRes = await supabase
     .from("underlying_holdings")
-    .select("id, company_id, fund_id, investment_date, instrument, round, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd")
+    .select("*")
     .eq("quarter_id", quarterId);
-  const uh = uhRes.data ?? [];
+  const uh = (uhRes.data ?? []) as any[];
   const fundsById = new Map(funds.map((f) => [f.id, f]));
-  const uhByKey = new Map<string, (typeof uh)[number]>();
+  const uhByKey = new Map<string, any>();
   for (const h of uh) {
     const co = companiesById.get(h.company_id);
     const fd = fundsById.get(h.fund_id);
@@ -388,6 +391,7 @@ export async function runReconciliation(
     ratio(sumOrNull(fmv, proc), cost);
 
   for (const u of parsed.underlying) {
+    // Parser already canonicalised u.fundName via resolveFundName.
     const key = compositeUnderlyingKey(u.companyName, u.fundName, u.date);
     const matched = uhByKey.get(key);
     if (matched) seenUhIds.add(matched.id);
@@ -398,10 +402,10 @@ export async function runReconciliation(
       fmv: matched?.fund_fmv_usd ?? null,
       proceeds: matched?.fund_proceeds_usd ?? null,
       moic: uhMoicSys(matched?.fund_cost_usd ?? null, matched?.fund_fmv_usd ?? null, matched?.fund_proceeds_usd ?? null),
-      twhPct: null as number | null, // not tracked per holding in DB
-      twhCost: null as number | null,
-      twhFmv: null as number | null,
-      twhProceeds: null as number | null,
+      twhPct: matched?.twh_ownership_pct ?? null,
+      twhCost: matched?.twh_cost_usd ?? null,
+      twhFmv: matched?.twh_fmv_usd ?? null,
+      twhProceeds: matched?.twh_proceeds_usd ?? null,
     };
     uhIdentityRows.push({ identity: ident, fields: buildUhFields(u, sys) });
   }
@@ -416,10 +420,10 @@ export async function runReconciliation(
       fmv: h.fund_fmv_usd ?? null,
       proceeds: h.fund_proceeds_usd ?? null,
       moic: uhMoicSys(h.fund_cost_usd ?? null, h.fund_fmv_usd ?? null, h.fund_proceeds_usd ?? null),
-      twhPct: null,
-      twhCost: null,
-      twhFmv: null,
-      twhProceeds: null,
+      twhPct: h.twh_ownership_pct ?? null,
+      twhCost: h.twh_cost_usd ?? null,
+      twhFmv: h.twh_fmv_usd ?? null,
+      twhProceeds: h.twh_proceeds_usd ?? null,
     };
     const blank = {
       date: null,

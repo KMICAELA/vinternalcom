@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx";
+import { resolveFundName } from "./fundAliases";
 
 /**
  * Header-aware, self-healing parser for TWH-1 Portfolio Metrics_*.xlsx.
@@ -206,36 +207,54 @@ const str = (v: unknown): string | null => {
   return s === "" ? null : s;
 };
 
+/**
+ * Reject Excel-epoch artifacts (1899-12-30, 1899-12-31, 1900-01-00 etc.)
+ * that surface when the parser hits a "blank" date cell that's actually
+ * formatted as a date but contains 0/1/2.
+ */
+const isEpochArtifact = (iso: string): boolean => {
+  if (!iso) return true;
+  const y = parseInt(iso.slice(0, 4), 10);
+  return !Number.isFinite(y) || y < 1990;
+};
+
 const dateStr = (v: unknown, ctx?: string): string | null => {
   if (v === null || v === undefined || v === "") return null;
+  let iso: string | null = null;
   if (v instanceof Date) {
     const y = v.getUTCFullYear();
     const m = String(v.getUTCMonth() + 1).padStart(2, "0");
     const d = String(v.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-  if (typeof v === "number") {
+    iso = `${y}-${m}-${d}`;
+  } else if (typeof v === "number") {
     if (!Number.isFinite(v) || v < 1) return null;
     const epoch = Date.UTC(1899, 11, 30);
     const ms = epoch + Math.round(v) * 86400000;
     const d = new Date(ms);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-  }
-  if (typeof v === "string") {
+    iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  } else if (typeof v === "string") {
     const s = v.trim();
     if (!s) return null;
-    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-    const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (us) {
-      let yy = parseInt(us[3], 10);
-      if (yy < 100) yy += 2000;
-      return `${yy}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+    const isoM = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoM) iso = `${isoM[1]}-${isoM[2]}-${isoM[3]}`;
+    else {
+      const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        let yy = parseInt(us[3], 10);
+        if (yy < 100) yy += 2000;
+        iso = `${yy}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+      } else {
+        if (ctx) console.warn(`[parser] non-date value in date column ${ctx}: "${s}"`);
+        return null;
+      }
     }
-    if (ctx) console.warn(`[parser] non-date value in date column ${ctx}: "${s}"`);
+  }
+  if (!iso) return null;
+  if (isEpochArtifact(iso)) {
+    if (ctx) console.warn(`[parser] epoch-artifact date rejected in ${ctx}: "${iso}"`);
     return null;
   }
-  return null;
+  return iso;
 };
 
 // ------------------------------------------------------------------
@@ -396,17 +415,27 @@ function parseDirectsSheet(ws: XLSX.WorkSheet): {
     const name = str(cellAt(r, cName));
     if (!name) continue;
     if (isSectionLabel(name)) continue;
+    const date = dateStr(cellAt(r, cDate), `Directs.Date row ${i + 1}`);
+    const investmentCost = num(cellAt(r, cInvCost));
+    const fmv = num(cellAt(r, cFmv));
+    const proceeds = num(cellAt(r, cProceeds));
+    const twhCost = num(cellAt(r, cTwhCost));
+    // Phantom-row guard: a Directs row with no date AND no monetary value
+    // is a placeholder (e.g., # 3-10 in 1Q25). Skip silently.
+    if (!date && investmentCost == null && fmv == null && proceeds == null && twhCost == null) {
+      continue;
+    }
     out.push({
       companyName: name,
-      date: dateStr(cellAt(r, cDate), `Directs.Date row ${i + 1}`),
+      date,
       instrument: str(cellAt(r, cInstrument)),
       round: str(cellAt(r, cRound)),
-      investmentCost: num(cellAt(r, cInvCost)),
-      fmv: num(cellAt(r, cFmv)),
-      proceeds: num(cellAt(r, cProceeds)),
+      investmentCost,
+      fmv,
+      proceeds,
       moic: num(cellAt(r, cMoic)),
       twhPct: num(cellAt(r, cTwhPct)),
-      twhCost: num(cellAt(r, cTwhCost)),
+      twhCost,
       twhFmv: num(cellAt(r, cTwhFmv)),
       twhProceeds: num(cellAt(r, cTwhProceeds)),
       coInvestors: str(cellAt(r, cCoInvestors)),
@@ -455,7 +484,9 @@ function parseUnderlyingSheet(ws: XLSX.WorkSheet): {
     if (isSectionLabel(name) || isSectionLabel(fund)) continue;
     out.push({
       companyName: name,
-      fundName: fund,
+      // Canonicalise xlsx fund short names ("Cantos") -> DB legal_name
+      // ("Cantos Ventures IV, LP") so identity match works downstream.
+      fundName: resolveFundName(fund),
       status: str(cellAt(r, cStatus)),
       date: dateStr(cellAt(r, cDate), `Underl.Date row ${i + 1}`),
       instrument: str(cellAt(r, cInstrument)),
