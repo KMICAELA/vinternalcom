@@ -225,6 +225,14 @@ const ReconciliationPage = () => {
                   {result.quarterLabel} · {result.matchedFields} match · {result.overTolerance} over tol. ·{" "}
                   {result.missing} missing
                 </div>
+                {result.headerRows && Object.keys(result.headerRows).length > 0 && (
+                  <div className="text-[11px] text-muted-foreground/80 mt-1 font-mono">
+                    Header rows:{" "}
+                    {Object.entries(result.headerRows)
+                      .map(([sheet, idx]) => `${sheet}=row ${idx + 1}`)
+                      .join(" · ")}
+                  </div>
+                )}
               </div>
             </div>
             <div className="flex gap-2">
