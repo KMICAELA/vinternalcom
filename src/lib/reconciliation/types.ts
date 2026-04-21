@@ -34,6 +34,8 @@ export interface ReconciliationResult {
   matchedFields: number;
   overTolerance: number;
   missing: number;
+  /** Diagnostic metadata: 0-indexed header row resolved per sheet by the parser. */
+  headerRows?: Record<string, number>;
 }
 
 // Tolerances per the spec
