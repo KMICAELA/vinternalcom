@@ -26,12 +26,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckCircle2, AlertTriangle, FileX, Upload, Download, Loader2 } from "lucide-react";
+import { CheckCircle2, AlertTriangle, FileX, Upload, Download, Loader2, Database } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { parseWorkbook, detectQuarterFromFilename } from "@/lib/reconciliation/parseXlsx";
 import { runReconciliation } from "@/lib/reconciliation/runReconciliation";
 import { exportReconciliation } from "@/lib/reconciliation/exportRecon";
+import { ingestWorkbook, type IngestSummary } from "@/lib/reconciliation/ingestWorkbook";
 import { fmtUSD, fmtPct, fmtMultiple } from "@/lib/format";
 import type { ReconciliationResult, DiffRow, FieldKind, Status } from "@/lib/reconciliation/types";
 import { toast } from "sonner";
