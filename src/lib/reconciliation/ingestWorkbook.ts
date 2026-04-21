@@ -105,7 +105,9 @@ export async function ingestWorkbook(
   }
 
   // Build all rows for this quarter.
-  const rowsToInsert: Array<Record<string, unknown>> = [];
+  // NOTE: cast to `any` because the Supabase types are auto-generated
+  // and may lag the migration that adds the TWH columns.
+  const rowsToInsert: any[] = [];
   for (const u of parsed.underlying) {
     const canonicalFund = resolveFundName(u.fundName);
     const fundId = fundsByName.get(norm(canonicalFund));
@@ -133,7 +135,7 @@ export async function ingestWorkbook(
   const chunkSize = 500;
   for (let i = 0; i < rowsToInsert.length; i += chunkSize) {
     const slice = rowsToInsert.slice(i, i + chunkSize);
-    const { error } = await supabase.from("underlying_holdings").insert(slice);
+    const { error } = await supabase.from("underlying_holdings").insert(slice as any);
     if (error) throw new Error(`Underlying insert chunk ${i / chunkSize} failed: ${error.message}`);
     summary.underlyingInserted += slice.length;
   }
@@ -155,7 +157,7 @@ export async function ingestWorkbook(
     directsByKey.set(key, d.id);
   }
 
-  const dqsRows: Array<Record<string, unknown>> = [];
+  const dqsRows: any[] = [];
   for (const dr of parsed.directs) {
     if (!dr.companyName || !dr.date) {
       summary.directsSkipped.push({ reason: "Missing name/date", row: dr });
@@ -178,7 +180,7 @@ export async function ingestWorkbook(
   if (dqsRows.length > 0) {
     const { error: upErr } = await supabase
       .from("direct_quarter_snapshots")
-      .upsert(dqsRows, { onConflict: "direct_id,quarter_id" });
+      .upsert(dqsRows as any, { onConflict: "direct_id,quarter_id" });
     if (upErr) throw new Error(`direct_quarter_snapshots upsert failed: ${upErr.message}`);
     summary.directsSnapshotsUpserted = dqsRows.length;
   }
