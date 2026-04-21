@@ -59,8 +59,14 @@ export function buildSectionResult(
   identityRows: { identity: string; fields: FieldSpec[] }[],
 ): SectionResult {
   const rows: DiffRow[] = [];
+  // Dedup: each (identity, field) pair must be emitted at most once,
+  // regardless of how many src/sys rows match. First emission wins.
+  const emitted = new Set<string>();
   for (const ir of identityRows) {
     for (const f of ir.fields) {
+      const key = `${norm(ir.identity)}||${norm(f.field)}`;
+      if (emitted.has(key)) continue;
+      emitted.add(key);
       const { delta, status } = compareValue(f.src, f.sys, f.kind);
       rows.push({
         section,

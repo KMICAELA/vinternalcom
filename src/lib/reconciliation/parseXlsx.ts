@@ -1,13 +1,13 @@
 import * as XLSX from "xlsx";
 
 /**
- * Header-aware parser for TWH-1 Portfolio Metrics_*.xlsx workbooks.
+ * Header-aware, self-healing parser for TWH-1 Portfolio Metrics_*.xlsx.
  *
- * For every sheet, header row is row 4 (1-indexed) and data starts at row 5.
- * We build a header→column-index map from row 4 BEFORE reading any data row,
- * then look up each field by canonical header name (with aliases). Columns
- * that don't exist in a given workbook are returned as null — never silently
- * shifted to neighboring columns.
+ * Header row is NOT hardcoded. For each sheet, we read raw rows with
+ * blankrows: true (so visual row indices don't collapse), then scan the
+ * first 10 rows for one that contains the expected anchor tokens. The
+ * resolved 0-indexed header row is logged + returned as metadata so we
+ * can surface it in the reconciliation run.
  *
  * Sheet conventions (case-sensitive sheet names):
  *   - "Funds"          → fund identity + commitments + quarter snapshot
@@ -45,6 +45,11 @@ export interface ParsedDirectRow {
   date: string | null;
   instrument: string | null;
   round: string | null;
+  investmentCost: number | null;
+  fmv: number | null;
+  proceeds: number | null;
+  moic: number | null;
+  twhPct: number | null;
   twhCost: number | null;
   twhFmv: number | null;
   twhProceeds: number | null;
@@ -128,6 +133,15 @@ export interface InventoryTotals {
   twhMoic: number | null;
 }
 
+export type SheetName =
+  | "Funds"
+  | "Directs"
+  | "Underl. Port."
+  | "Inventory"
+  | "Net CF"
+  | "G CF"
+  | "Port. Comments";
+
 export interface ParsedWorkbook {
   funds: ParsedFundRow[];
   directs: ParsedDirectRow[];
@@ -139,6 +153,12 @@ export interface ParsedWorkbook {
   commentary: ParsedCommentaryRow[];
   metrics: ParsedMetrics;
   detectedQuarter: { fy: number; fq: number } | null;
+  /**
+   * Resolved 0-indexed header row per sheet (for diagnostics / run metadata).
+   * E.g. { Funds: 3, Directs: 3, "Underl. Port.": 3 } — meaning row 4 in Excel.
+   * -1 if anchors couldn't be located on that sheet.
+   */
+  headerRows: Partial<Record<SheetName, number>>;
 }
 
 // ------------------------------------------------------------------
@@ -166,7 +186,7 @@ const num = (v: unknown): number | null => {
   if (typeof v === "string") {
     const t = v.trim();
     if (!t) return null;
-    if (t.startsWith("#")) return null; // Excel error like "#DIV/0!"
+    if (t.startsWith("#")) return null;
     const cleaned = t.replace(/[$,\s]/g, "");
     if (cleaned.endsWith("%")) {
       const n = parseFloat(cleaned.slice(0, -1));
@@ -186,14 +206,9 @@ const str = (v: unknown): string | null => {
   return s === "" ? null : s;
 };
 
-/**
- * Robust date coercion. Never lets a non-date string (e.g. "Pref. Equity") slip
- * through as a date — returns null + warns instead.
- */
 const dateStr = (v: unknown, ctx?: string): string | null => {
   if (v === null || v === undefined || v === "") return null;
   if (v instanceof Date) {
-    // Drop time component, treat as a calendar date.
     const y = v.getUTCFullYear();
     const m = String(v.getUTCMonth() + 1).padStart(2, "0");
     const d = String(v.getUTCDate()).padStart(2, "0");
@@ -201,7 +216,6 @@ const dateStr = (v: unknown, ctx?: string): string | null => {
   }
   if (typeof v === "number") {
     if (!Number.isFinite(v) || v < 1) return null;
-    // Excel serial date — days since 1899-12-30 (UTC).
     const epoch = Date.UTC(1899, 11, 30);
     const ms = epoch + Math.round(v) * 86400000;
     const d = new Date(ms);
@@ -210,17 +224,14 @@ const dateStr = (v: unknown, ctx?: string): string | null => {
   if (typeof v === "string") {
     const s = v.trim();
     if (!s) return null;
-    // ISO yyyy-mm-dd or yyyy-mm-ddThh:mm
     const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-    // mm/dd/yyyy or m/d/yy
     const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
     if (us) {
       let yy = parseInt(us[3], 10);
       if (yy < 100) yy += 2000;
       return `${yy}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
     }
-    // Anything else (e.g. "Pref. Equity") → not a date.
     if (ctx) console.warn(`[parser] non-date value in date column ${ctx}: "${s}"`);
     return null;
   }
@@ -228,8 +239,7 @@ const dateStr = (v: unknown, ctx?: string): string | null => {
 };
 
 // ------------------------------------------------------------------
-// Header map: build a case-insensitive normalized header → column-index
-// map from row 4 of a sheet, then look up by alias list.
+// Header map + anchor-based header row detection
 // ------------------------------------------------------------------
 
 type HeaderMap = Map<string, number>;
@@ -240,24 +250,16 @@ const normHeader = (h: unknown): string =>
     .trim()
     .toLowerCase();
 
-function buildHeaderMap(rows: unknown[][]): HeaderMap {
-  const headerRow = rows[3] ?? []; // row 4 (0-indexed 3)
+function buildHeaderMap(row: unknown[]): HeaderMap {
   const map: HeaderMap = new Map();
-  for (let c = 0; c < headerRow.length; c++) {
-    const h = normHeader(headerRow[c]);
+  for (let c = 0; c < row.length; c++) {
+    const h = normHeader(row[c]);
     if (!h) continue;
-    // First occurrence wins — if the sheet has a duplicate header (e.g. the
-    // mislabeled "TWH Proceeds" column on Underl. Port.), we keep the first
-    // one as the canonical position.
     if (!map.has(h)) map.set(h, c);
   }
   return map;
 }
 
-/**
- * Resolve the column index for the first matching alias. Returns -1 if no
- * alias is found. Field is then treated as null for every data row.
- */
 function colIdx(map: HeaderMap, aliases: string[]): number {
   for (const a of aliases) {
     const idx = map.get(normHeader(a));
@@ -274,47 +276,69 @@ function readSheet(ws: XLSX.WorkSheet): unknown[][] {
     header: 1,
     defval: null,
     raw: true,
-    blankrows: false,
+    blankrows: true, // preserve visual row indices so anchor scan is reliable
   });
 }
 
-const HEADER_ROW_IDX = 3; // 0-indexed: row 4
-const DATA_START_IDX = 4; // 0-indexed: row 5
+/**
+ * Scan the first `maxScan` rows for a row that satisfies the anchor predicate.
+ * Returns the 0-indexed row, or -1 if no row matches. Logs the resolved index.
+ */
+function findHeaderRow(
+  rows: unknown[][],
+  sheetName: string,
+  anchors: string[][],
+  maxScan = 10,
+): number {
+  const limit = Math.min(maxScan, rows.length);
+  for (let i = 0; i < limit; i++) {
+    const map = buildHeaderMap(rows[i] ?? []);
+    const allAnchorsHit = anchors.every((aliasGroup) =>
+      aliasGroup.some((alias) => map.has(normHeader(alias))),
+    );
+    if (allAnchorsHit) {
+      console.info(`[parser] "${sheetName}" header row resolved at row ${i + 1} (0-indexed ${i})`);
+      return i;
+    }
+  }
+  console.warn(`[parser] "${sheetName}" header row NOT FOUND in first ${limit} rows`);
+  return -1;
+}
 
 // ------------------------------------------------------------------
 // Funds
 // ------------------------------------------------------------------
-function parseFundsSheet(ws: XLSX.WorkSheet): ParsedFundRow[] {
+function parseFundsSheet(ws: XLSX.WorkSheet): { rows: ParsedFundRow[]; headerRow: number } {
   const rows = readSheet(ws);
-  const map = buildHeaderMap(rows);
-  const cIdx = colIdx(map, ["#"]);
+  const headerRow = findHeaderRow(rows, "Funds", [
+    ["Fund Name"],
+    ["TWH Commitment"],
+  ]);
+  if (headerRow < 0) return { rows: [], headerRow };
+  const map = buildHeaderMap(rows[headerRow] ?? []);
   const cName = colIdx(map, ["Fund Name"]);
-  const cStart = colIdx(map, ["Start Date"]);
-  const cTotalCommit = colIdx(map, ["Total Commitments"]);
+  const cStart = colIdx(map, ["Start Date", "Investment Date"]);
+  const cTotalCommit = colIdx(map, ["Total Commitments", "Commitment", "Commitments"]);
   const cTwhCommit = colIdx(map, ["TWH Commitment"]);
   const cTwhPct = colIdx(map, ["TWH %", "TWH Ownership %", "TWH%"]);
-  const cTotalContrib = colIdx(map, ["Total Contributions"]);
+  const cTotalContrib = colIdx(map, ["Total Contributions", "Contributions"]);
   const cTwhContrib = colIdx(map, ["TWH Contributions"]);
-  const cTotalProceeds = colIdx(map, ["Total Proceeds"]);
-  const cTotalDistrib = colIdx(map, ["Total Distributions"]);
+  const cTotalProceeds = colIdx(map, ["Total Proceeds", "Proceeds"]);
+  const cTotalDistrib = colIdx(map, ["Total Distributions", "Distributions"]);
   const cTwhDistrib = colIdx(map, ["TWH Distributions"]);
   const cInvCost = colIdx(map, ["Investment Cost"]);
   const cTwhCost = colIdx(map, ["TWH Cost"]);
-  const cPortValue = colIdx(map, ["Portfolio Value"]);
+  const cPortValue = colIdx(map, ["Portfolio Value", "Total Value"]);
   const cTwhValue = colIdx(map, ["TWH Value"]);
   const cNav = colIdx(map, ["NAV", "Fund NAV"]);
   const cTwhNav = colIdx(map, ["TWH NAV"]);
 
   const out: ParsedFundRow[] = [];
-  for (let i = DATA_START_IDX; i < rows.length; i++) {
+  for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
-    const idx = cellAt(r, cIdx);
     const name = str(cellAt(r, cName));
-    if (idx != null && idx !== "" && !name) break;
-    if ((idx == null || idx === "") && !name) continue;
-    if ((idx == null || idx === "") && name) break;
     if (!name) continue;
-    if (isSectionLabel(name)) break;
+    if (isSectionLabel(name)) break; // TOTAL / Subtotal terminates fund list
     out.push({
       fundName: name,
       startDate: dateStr(cellAt(r, cStart), "Funds.StartDate"),
@@ -334,22 +358,32 @@ function parseFundsSheet(ws: XLSX.WorkSheet): ParsedFundRow[] {
       twhNav: num(cellAt(r, cTwhNav)),
     });
   }
-  return out;
+  return { rows: out, headerRow };
 }
 
 // ------------------------------------------------------------------
 // Directs
 // ------------------------------------------------------------------
-// Iterate to the end of the sheet, skipping any row where Company Name is
-// blank (placeholder rows like # 3-10 in 1Q25). Don't bail early on first
-// blank row.
-function parseDirectsSheet(ws: XLSX.WorkSheet): ParsedDirectRow[] {
+function parseDirectsSheet(ws: XLSX.WorkSheet): {
+  rows: ParsedDirectRow[];
+  headerRow: number;
+} {
   const rows = readSheet(ws);
-  const map = buildHeaderMap(rows);
-  const cName = colIdx(map, ["Company Name"]);
-  const cDate = colIdx(map, ["Date", "Investment Date"]);
+  const headerRow = findHeaderRow(rows, "Directs", [
+    ["Company", "Company Name"],
+    ["Investment Date", "Date"],
+  ]);
+  if (headerRow < 0) return { rows: [], headerRow };
+  const map = buildHeaderMap(rows[headerRow] ?? []);
+  const cName = colIdx(map, ["Company Name", "Company"]);
+  const cDate = colIdx(map, ["Investment Date", "Date"]);
   const cInstrument = colIdx(map, ["Instrument"]);
   const cRound = colIdx(map, ["Round"]);
+  const cInvCost = colIdx(map, ["Investment Cost"]);
+  const cFmv = colIdx(map, ["FMV"]);
+  const cProceeds = colIdx(map, ["Proceeds"]);
+  const cMoic = colIdx(map, ["MOIC"]);
+  const cTwhPct = colIdx(map, ["TWH %", "TWH Ownership %", "TWH%"]);
   const cTwhCost = colIdx(map, ["TWH Cost"]);
   const cTwhFmv = colIdx(map, ["TWH FMV"]);
   const cTwhProceeds = colIdx(map, ["TWH Proceeds"]);
@@ -357,16 +391,21 @@ function parseDirectsSheet(ws: XLSX.WorkSheet): ParsedDirectRow[] {
   const cNote = colIdx(map, ["Note (if applicable)", "Note", "Notes"]);
 
   const out: ParsedDirectRow[] = [];
-  for (let i = DATA_START_IDX; i < rows.length; i++) {
+  for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
     const name = str(cellAt(r, cName));
-    if (!name) continue; // placeholder/blank row — skip, don't bail.
+    if (!name) continue;
     if (isSectionLabel(name)) continue;
     out.push({
       companyName: name,
       date: dateStr(cellAt(r, cDate), `Directs.Date row ${i + 1}`),
       instrument: str(cellAt(r, cInstrument)),
       round: str(cellAt(r, cRound)),
+      investmentCost: num(cellAt(r, cInvCost)),
+      fmv: num(cellAt(r, cFmv)),
+      proceeds: num(cellAt(r, cProceeds)),
+      moic: num(cellAt(r, cMoic)),
+      twhPct: num(cellAt(r, cTwhPct)),
       twhCost: num(cellAt(r, cTwhCost)),
       twhFmv: num(cellAt(r, cTwhFmv)),
       twhProceeds: num(cellAt(r, cTwhProceeds)),
@@ -374,37 +413,41 @@ function parseDirectsSheet(ws: XLSX.WorkSheet): ParsedDirectRow[] {
       note: str(cellAt(r, cNote)),
     });
   }
-  return out;
+  return { rows: out, headerRow };
 }
 
 // ------------------------------------------------------------------
 // Underl. Port.
 // ------------------------------------------------------------------
-// 1Q25 has NO "Status" column. 2Q25+ have it at column C. Header-aware
-// lookup handles both shapes.
-function parseUnderlyingSheet(ws: XLSX.WorkSheet): ParsedUnderlyingRow[] {
+function parseUnderlyingSheet(ws: XLSX.WorkSheet): {
+  rows: ParsedUnderlyingRow[];
+  headerRow: number;
+} {
   const rows = readSheet(ws);
-  const map = buildHeaderMap(rows);
-  const cName = colIdx(map, ["Company Name"]);
+  const headerRow = findHeaderRow(rows, "Underl. Port.", [
+    ["Company Name", "Company"],
+    ["Fund"],
+    ["Investment Cost"],
+  ]);
+  if (headerRow < 0) return { rows: [], headerRow };
+  const map = buildHeaderMap(rows[headerRow] ?? []);
+  const cName = colIdx(map, ["Company Name", "Company"]);
   const cFund = colIdx(map, ["Fund"]);
   const cStatus = colIdx(map, ["Status"]); // -1 in 1Q25
-  const cDate = colIdx(map, ["Date", "Investment Date"]);
+  const cDate = colIdx(map, ["Investment Date", "Date"]);
   const cInstrument = colIdx(map, ["Instrument"]);
   const cRound = colIdx(map, ["Round"]);
   const cInvCost = colIdx(map, ["Investment Cost"]);
   const cFmv = colIdx(map, ["FMV"]);
   const cProceeds = colIdx(map, ["Proceeds"]);
   const cMoic = colIdx(map, ["MOIC"]);
-  const cTwhPct = colIdx(map, ["TWH %", "TWH%"]);
+  const cTwhPct = colIdx(map, ["TWH %", "TWH Ownership %", "TWH%"]);
   const cTwhCost = colIdx(map, ["TWH Cost"]);
   const cTwhFmv = colIdx(map, ["TWH FMV"]);
   const cTwhProceeds = colIdx(map, ["TWH Proceeds"]);
-  // Note: column O / column N may both read "TWH Proceeds" (mislabel — actually
-  // TWH MOIC). buildHeaderMap keeps the first occurrence, so cTwhProceeds is
-  // correctly the real proceeds column.
 
   const out: ParsedUnderlyingRow[] = [];
-  for (let i = DATA_START_IDX; i < rows.length; i++) {
+  for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
     const name = str(cellAt(r, cName));
     const fund = str(cellAt(r, cFund));
@@ -427,7 +470,7 @@ function parseUnderlyingSheet(ws: XLSX.WorkSheet): ParsedUnderlyingRow[] {
       twhProceeds: num(cellAt(r, cTwhProceeds)),
     });
   }
-  return out;
+  return { rows: out, headerRow };
 }
 
 // ------------------------------------------------------------------
@@ -436,10 +479,17 @@ function parseUnderlyingSheet(ws: XLSX.WorkSheet): ParsedUnderlyingRow[] {
 function parseInventorySheet(ws: XLSX.WorkSheet): {
   rows: ParsedInventoryRow[];
   totals: InventoryTotals;
+  headerRow: number;
 } {
   const rows = readSheet(ws);
-  const map = buildHeaderMap(rows);
-  const cName = colIdx(map, ["Company Name"]);
+  const headerRow = findHeaderRow(rows, "Inventory", [
+    ["Company Name", "Company"],
+    ["TWH Cost"],
+  ]);
+  const emptyTotals: InventoryTotals = { twhCost: null, twhFmv: null, twhProceeds: null, twhMoic: null };
+  if (headerRow < 0) return { rows: [], totals: emptyTotals, headerRow };
+  const map = buildHeaderMap(rows[headerRow] ?? []);
+  const cName = colIdx(map, ["Company Name", "Company"]);
   const cCommercial = colIdx(map, ["Commercial Name"]);
   const cUrl = colIdx(map, ["URL"]);
   const cStatus = colIdx(map, ["Status"]);
@@ -466,23 +516,18 @@ function parseInventorySheet(ws: XLSX.WorkSheet): {
   const cMoic = colIdx(map, ["MOIC"]);
   const cNotes = colIdx(map, ["Notes (if applicable)", "Notes", "Note"]);
 
-  // Totals from row 2 (0-indexed 1) — these are positional fixtures on the
-  // Inventory sheet (not driven by headers).
+  // Totals are positional fixtures on Inventory row 2.
   const r2 = rows[1] ?? [];
-  const colJ = 9; // J column (0-indexed)
-  const colK = 10;
-  const colL = 11;
-  const colM = 12;
   const totals: InventoryTotals = {
-    twhCost: num(r2[colJ]),
-    twhFmv: num(r2[colK]),
-    twhProceeds: num(r2[colL]),
-    twhMoic: num(r2[colM]),
+    twhCost: num(r2[9]),
+    twhFmv: num(r2[10]),
+    twhProceeds: num(r2[11]),
+    twhMoic: num(r2[12]),
   };
 
   const out: ParsedInventoryRow[] = [];
   let currentSection: "directs" | "funds_underlying" | null = null;
-  for (let i = DATA_START_IDX; i < rows.length; i++) {
+  for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
     const a = str(cellAt(r, cName));
     if (!a) continue;
@@ -519,16 +564,24 @@ function parseInventorySheet(ws: XLSX.WorkSheet): {
       notes: str(cellAt(r, cNotes)),
     });
   }
-  return { rows: out, totals };
+  return { rows: out, totals, headerRow };
 }
 
 // ------------------------------------------------------------------
 // Port. Comments
 // ------------------------------------------------------------------
-function parseCommentarySheet(ws: XLSX.WorkSheet): ParsedCommentaryRow[] {
+function parseCommentarySheet(ws: XLSX.WorkSheet): {
+  rows: ParsedCommentaryRow[];
+  headerRow: number;
+} {
   const rows = readSheet(ws);
-  const map = buildHeaderMap(rows);
-  const cName = colIdx(map, ["Company Name"]);
+  const headerRow = findHeaderRow(rows, "Port. Comments", [
+    ["Company Name", "Company"],
+    ["Theme", "Thesis"],
+  ]);
+  if (headerRow < 0) return { rows: [], headerRow };
+  const map = buildHeaderMap(rows[headerRow] ?? []);
+  const cName = colIdx(map, ["Company Name", "Company"]);
   const cRegion = colIdx(map, ["Region"]);
   const cType = colIdx(map, ["Type"]);
   const cThesis = colIdx(map, ["Thesis"]);
@@ -548,7 +601,7 @@ function parseCommentarySheet(ws: XLSX.WorkSheet): ParsedCommentaryRow[] {
   const cChallenges = colIdx(map, ["Challenges"]);
 
   const out: ParsedCommentaryRow[] = [];
-  for (let i = DATA_START_IDX; i < rows.length; i++) {
+  for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
     const name = str(cellAt(r, cName));
     if (!name || isSectionLabel(name)) continue;
@@ -565,27 +618,35 @@ function parseCommentarySheet(ws: XLSX.WorkSheet): ParsedCommentaryRow[] {
       challenges: str(cellAt(r, cChallenges)),
     });
   }
-  return out;
+  return { rows: out, headerRow };
 }
 
 // ------------------------------------------------------------------
 // Cash flow sheets (Net CF / G CF)
 // ------------------------------------------------------------------
-function parseCashflowSheet(ws: XLSX.WorkSheet): ParsedCashflowRow[] {
+function parseCashflowSheet(
+  ws: XLSX.WorkSheet,
+  sheetName: string,
+): { rows: ParsedCashflowRow[]; headerRow: number } {
   const rows = readSheet(ws);
-  const map = buildHeaderMap(rows);
+  const headerRow = findHeaderRow(rows, sheetName, [
+    ["Date"],
+    ["TWH Contributions", "Contributions"],
+  ]);
+  if (headerRow < 0) return { rows: [], headerRow };
+  const map = buildHeaderMap(rows[headerRow] ?? []);
   const cDate = colIdx(map, ["Date"]);
   const cPortfolio = colIdx(map, ["Portfolio", "Fund", "Portfolio/Fund"]);
-  const cContrib = colIdx(map, ["TWH Contributions"]);
-  const cDistrib = colIdx(map, ["TWH Distributions"]);
+  const cContrib = colIdx(map, ["TWH Contributions", "Contributions"]);
+  const cDistrib = colIdx(map, ["TWH Distributions", "Distributions"]);
   const cFmv = colIdx(map, ["FMV/NAV", "FMV / NAV", "NAV", "FMV"]);
   const cCf = colIdx(map, ["CF", "Net CF"]);
   const cNote = colIdx(map, ["Note (if applicable)", "Note", "Notes"]);
 
   const out: ParsedCashflowRow[] = [];
-  for (let i = DATA_START_IDX; i < rows.length; i++) {
+  for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
-    const date = dateStr(cellAt(r, cDate), `CF.Date row ${i + 1}`);
+    const date = dateStr(cellAt(r, cDate), `${sheetName}.Date row ${i + 1}`);
     const portfolio = str(cellAt(r, cPortfolio));
     const contrib = num(cellAt(r, cContrib));
     const distrib = num(cellAt(r, cDistrib));
@@ -594,29 +655,16 @@ function parseCashflowSheet(ws: XLSX.WorkSheet): ParsedCashflowRow[] {
     const note = str(cellAt(r, cNote));
     if (!date && !portfolio && contrib == null && distrib == null && fmv == null && cf == null) continue;
     if (portfolio && isSectionLabel(portfolio) && contrib == null && distrib == null && fmv == null && cf == null) continue;
-    out.push({
-      date,
-      portfolio,
-      twhContributions: contrib,
-      twhDistributions: distrib,
-      fmvNav: fmv,
-      cf,
-      note,
-    });
+    out.push({ date, portfolio, twhContributions: contrib, twhDistributions: distrib, fmvNav: fmv, cf, note });
   }
-  return out;
+  return { rows: out, headerRow };
 }
 
 // ------------------------------------------------------------------
 // Banner metrics from row 2 of Net CF / G CF (G2 = TVPI, H2 = IRR)
 // ------------------------------------------------------------------
 function parseMetrics(wb: XLSX.WorkBook): ParsedMetrics {
-  const result: ParsedMetrics = {
-    netTvpi: null,
-    netIrr: null,
-    grossTvpi: null,
-    grossIrr: null,
-  };
+  const result: ParsedMetrics = { netTvpi: null, netIrr: null, grossTvpi: null, grossIrr: null };
   const netCf = wb.Sheets["Net CF"];
   if (netCf) {
     result.netTvpi = num(netCf["G2"]?.v);
@@ -646,21 +694,44 @@ export async function parseWorkbook(file: File): Promise<ParsedWorkbook> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array", cellDates: true });
   const get = (n: string) => wb.Sheets[n];
+  const headerRows: Partial<Record<SheetName, number>> = {};
+
+  const fundsParsed = get("Funds") ? parseFundsSheet(get("Funds")) : { rows: [], headerRow: -1 };
+  if (get("Funds")) headerRows["Funds"] = fundsParsed.headerRow;
+
+  const directsParsed = get("Directs") ? parseDirectsSheet(get("Directs")) : { rows: [], headerRow: -1 };
+  if (get("Directs")) headerRows["Directs"] = directsParsed.headerRow;
+
+  const underlyingParsed = get("Underl. Port.") ? parseUnderlyingSheet(get("Underl. Port.")) : { rows: [], headerRow: -1 };
+  if (get("Underl. Port.")) headerRows["Underl. Port."] = underlyingParsed.headerRow;
 
   const inv = get("Inventory")
     ? parseInventorySheet(get("Inventory"))
-    : { rows: [], totals: { twhCost: null, twhFmv: null, twhProceeds: null, twhMoic: null } };
+    : { rows: [], totals: { twhCost: null, twhFmv: null, twhProceeds: null, twhMoic: null }, headerRow: -1 };
+  if (get("Inventory")) headerRows["Inventory"] = inv.headerRow;
+
+  const netCfParsed = get("Net CF") ? parseCashflowSheet(get("Net CF"), "Net CF") : { rows: [], headerRow: -1 };
+  if (get("Net CF")) headerRows["Net CF"] = netCfParsed.headerRow;
+
+  const grossCfParsed = get("G CF") ? parseCashflowSheet(get("G CF"), "G CF") : { rows: [], headerRow: -1 };
+  if (get("G CF")) headerRows["G CF"] = grossCfParsed.headerRow;
+
+  const commentaryParsed = get("Port. Comments") ? parseCommentarySheet(get("Port. Comments")) : { rows: [], headerRow: -1 };
+  if (get("Port. Comments")) headerRows["Port. Comments"] = commentaryParsed.headerRow;
+
+  console.info("[parser] resolved header rows:", headerRows);
 
   return {
-    funds: get("Funds") ? parseFundsSheet(get("Funds")) : [],
-    directs: get("Directs") ? parseDirectsSheet(get("Directs")) : [],
-    underlying: get("Underl. Port.") ? parseUnderlyingSheet(get("Underl. Port.")) : [],
+    funds: fundsParsed.rows,
+    directs: directsParsed.rows,
+    underlying: underlyingParsed.rows,
     inventory: inv.rows,
     inventoryTotals: inv.totals,
-    netCf: get("Net CF") ? parseCashflowSheet(get("Net CF")) : [],
-    grossCf: get("G CF") ? parseCashflowSheet(get("G CF")) : [],
-    commentary: get("Port. Comments") ? parseCommentarySheet(get("Port. Comments")) : [],
+    netCf: netCfParsed.rows,
+    grossCf: grossCfParsed.rows,
+    commentary: commentaryParsed.rows,
     metrics: parseMetrics(wb),
     detectedQuarter: detectQuarterFromFilename(file.name),
+    headerRows,
   };
 }

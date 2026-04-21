@@ -3,11 +3,76 @@ import type { ParsedWorkbook } from "./parseXlsx";
 import { buildSectionResult, norm } from "./compare";
 import type { ReconciliationResult, SectionResult } from "./types";
 
+/**
+ * Field whitelists per section. Exported so tests can assert their length to
+ * prevent silent truncation during refactors.
+ */
+export const FUNDS_FIELDS = [
+  "Commitment",
+  "Contributions",
+  "Distributions",
+  "NAV",
+  "Total Value",
+  "TVPI",
+  "DPI",
+  "IRR",
+  "MOIC",
+  "Investment Date",
+  "TWH Ownership %",
+  "TWH Commitment",
+  "TWH Contributions",
+  "TWH Distributions",
+  "TWH NAV",
+  "TWH Value",
+] as const;
+
+export const DIRECTS_FIELDS = [
+  "Investment Date",
+  "Investment Cost",
+  "FMV",
+  "Proceeds",
+  "MOIC",
+  "TWH Ownership %",
+  "TWH Cost",
+  "TWH FMV",
+  "TWH Proceeds",
+] as const;
+
+export const UNDERLYING_FIELDS = [
+  "Investment Date",
+  "Investment Cost",
+  "FMV",
+  "Proceeds",
+  "MOIC",
+  "TWH Ownership %",
+  "TWH Cost",
+  "TWH FMV",
+  "TWH Proceeds",
+] as const;
+
 const fmtDate = (d: string | null | undefined): string => (d ? d.slice(0, 10) : "");
 const compositeDirectKey = (name: string, date: string | null) =>
   `${norm(name)}||${fmtDate(date)}`;
 const compositeUnderlyingKey = (name: string, fund: string, date: string | null) =>
   `${norm(name)}||${norm(fund)}||${fmtDate(date)}`;
+
+const ratio = (num: number | null | undefined, den: number | null | undefined): number | null => {
+  if (num == null || den == null) return null;
+  if (!Number.isFinite(num) || !Number.isFinite(den) || den === 0) return null;
+  return num / den;
+};
+
+const sumOrNull = (...vals: Array<number | null | undefined>): number | null => {
+  let total = 0;
+  let any = false;
+  for (const v of vals) {
+    if (v == null) continue;
+    if (!Number.isFinite(v)) continue;
+    total += v;
+    any = true;
+  }
+  return any ? total : null;
+};
 
 export async function runReconciliation(
   parsed: ParsedWorkbook,
@@ -19,20 +84,102 @@ export async function runReconciliation(
   // ===== FUNDS =====
   const [fundsRes, commitRes, fqsRes] = await Promise.all([
     supabase.from("funds").select("id, name, start_date"),
-    supabase.from("fund_commitments").select("fund_id, twh_commitment_usd, total_fund_commitment_usd, twh_ownership_pct"),
+    supabase
+      .from("fund_commitments")
+      .select("fund_id, twh_commitment_usd, total_fund_commitment_usd, twh_ownership_pct"),
     supabase
       .from("fund_quarter_snapshots")
-      .select("fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd")
+      .select(
+        "fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd",
+      )
       .eq("quarter_id", quarterId),
   ]);
   const funds = fundsRes.data ?? [];
   const commits = new Map((commitRes.data ?? []).map((c) => [c.fund_id, c]));
   const fqs = new Map((fqsRes.data ?? []).map((s) => [s.fund_id, s]));
 
-  // Strict exact match by normalized fund name
   const fundsByName = new Map(funds.map((f) => [norm(f.name), f]));
   const seenFundIds = new Set<string>();
   const fundIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
+
+  const buildFundFields = (
+    src: ReturnType<typeof buildSrcFund>,
+    sys: ReturnType<typeof buildSysFund>,
+  ) => [
+    { field: "Commitment", src: src.totalCommitment, sys: sys.totalCommitment, kind: "currency" as const },
+    { field: "Contributions", src: src.totalContributions, sys: sys.totalContributions, kind: "currency" as const },
+    { field: "Distributions", src: src.totalDistributions, sys: sys.totalDistributions, kind: "currency" as const },
+    { field: "NAV", src: src.fundTotalNav, sys: sys.fundTotalNav, kind: "currency" as const },
+    { field: "Total Value", src: src.totalValue, sys: sys.totalValue, kind: "currency" as const },
+    { field: "TVPI", src: src.tvpi, sys: sys.tvpi, kind: "ratio" as const },
+    { field: "DPI", src: src.dpi, sys: sys.dpi, kind: "ratio" as const },
+    { field: "IRR", src: src.irr, sys: sys.irr, kind: "irr" as const },
+    { field: "MOIC", src: src.moic, sys: sys.moic, kind: "ratio" as const },
+    { field: "Investment Date", src: src.startDate, sys: sys.startDate, kind: "date" as const },
+    { field: "TWH Ownership %", src: src.twhPct, sys: sys.twhPct, kind: "percent" as const },
+    { field: "TWH Commitment", src: src.twhCommitment, sys: sys.twhCommitment, kind: "currency" as const },
+    { field: "TWH Contributions", src: src.twhContributions, sys: sys.twhContributions, kind: "currency" as const },
+    { field: "TWH Distributions", src: src.twhDistributions, sys: sys.twhDistributions, kind: "currency" as const },
+    { field: "TWH NAV", src: src.twhNav, sys: sys.twhNav, kind: "currency" as const },
+    { field: "TWH Value", src: src.twhValue, sys: sys.twhValue, kind: "currency" as const },
+  ];
+
+  function buildSrcFund(srcFund: ParsedWorkbook["funds"][number]) {
+    const totalValue = sumOrNull(srcFund.fundTotalNav, srcFund.totalDistributions);
+    const twhValueComputed = sumOrNull(srcFund.twhNav, srcFund.twhDistributions);
+    return {
+      startDate: srcFund.startDate,
+      totalCommitment: srcFund.totalCommitments,
+      twhCommitment: srcFund.twhCommitment,
+      twhPct: srcFund.twhPct,
+      totalContributions: srcFund.totalContributions,
+      twhContributions: srcFund.twhContributions,
+      totalDistributions: srcFund.totalDistributions,
+      twhDistributions: srcFund.twhDistributions,
+      fundTotalNav: srcFund.fundTotalNav,
+      twhNav: srcFund.twhNav,
+      twhValue: srcFund.twhValue ?? twhValueComputed,
+      totalValue,
+      tvpi: ratio(totalValue, srcFund.totalContributions),
+      dpi: ratio(srcFund.totalDistributions, srcFund.totalContributions),
+      moic: ratio(totalValue, srcFund.totalContributions),
+      irr: null as number | null, // not present in xlsx Funds rows
+    };
+  }
+
+  function buildSysFund(
+    f: { start_date: string | null } | null,
+    c: { total_fund_commitment_usd: number | null; twh_commitment_usd: number | null; twh_ownership_pct: number | null } | null | undefined,
+    s: {
+      fund_total_contributions_usd: number | null;
+      fund_total_nav_usd: number | null;
+      twh_contributions_usd: number | null;
+      twh_distributions_usd: number | null;
+      twh_nav_usd: number | null;
+    } | null | undefined,
+  ) {
+    const totalDistributions = null as number | null; // DB doesn't track Total fund Distributions today
+    const totalValue = sumOrNull(s?.fund_total_nav_usd ?? null, totalDistributions);
+    const twhValueComputed = sumOrNull(s?.twh_nav_usd ?? null, s?.twh_distributions_usd ?? null);
+    return {
+      startDate: f?.start_date ?? null,
+      totalCommitment: c?.total_fund_commitment_usd ?? null,
+      twhCommitment: c?.twh_commitment_usd ?? null,
+      twhPct: c?.twh_ownership_pct ?? null,
+      totalContributions: s?.fund_total_contributions_usd ?? null,
+      twhContributions: s?.twh_contributions_usd ?? null,
+      totalDistributions,
+      twhDistributions: s?.twh_distributions_usd ?? null,
+      fundTotalNav: s?.fund_total_nav_usd ?? null,
+      twhNav: s?.twh_nav_usd ?? null,
+      twhValue: twhValueComputed,
+      totalValue,
+      tvpi: ratio(totalValue, s?.fund_total_contributions_usd ?? null),
+      dpi: ratio(totalDistributions, s?.fund_total_contributions_usd ?? null),
+      moic: ratio(totalValue, s?.fund_total_contributions_usd ?? null),
+      irr: null as number | null,
+    };
+  }
 
   for (const srcFund of parsed.funds) {
     const sysFund = fundsByName.get(norm(srcFund.fundName));
@@ -41,43 +188,47 @@ export async function runReconciliation(
     if (sysFund) seenFundIds.add(sysFund.id);
     fundIdentityRows.push({
       identity: srcFund.fundName,
-      fields: [
-        { field: "Start Date", src: srcFund.startDate, sys: sysFund?.start_date ?? null, kind: "date" },
-        { field: "Total Commitments", src: srcFund.totalCommitments, sys: c?.total_fund_commitment_usd ?? null, kind: "currency" },
-        { field: "TWH Commitment", src: srcFund.twhCommitment, sys: c?.twh_commitment_usd ?? null, kind: "currency" },
-        { field: "TWH Ownership %", src: srcFund.twhPct, sys: c?.twh_ownership_pct ?? null, kind: "percent" },
-        { field: "Total Contributions", src: srcFund.totalContributions, sys: s?.fund_total_contributions_usd ?? null, kind: "currency" },
-        { field: "TWH Contributions", src: srcFund.twhContributions, sys: s?.twh_contributions_usd ?? null, kind: "currency" },
-        { field: "TWH Distributions", src: srcFund.twhDistributions, sys: s?.twh_distributions_usd ?? null, kind: "currency" },
-        { field: "TWH NAV", src: srcFund.twhNav, sys: s?.twh_nav_usd ?? null, kind: "currency" },
-        { field: "Fund Total NAV", src: srcFund.fundTotalNav, sys: s?.fund_total_nav_usd ?? null, kind: "currency" },
-      ],
+      fields: buildFundFields(buildSrcFund(srcFund), buildSysFund(sysFund ?? null, c, s)),
     });
   }
-  // funds in DB missing from source workbook
   for (const f of funds) {
     if (seenFundIds.has(f.id)) continue;
     const c = commits.get(f.id);
     const s = fqs.get(f.id);
     if (!c && !s) continue;
+    const sysSide = buildSysFund(f, c, s);
+    const blank = {
+      startDate: null,
+      totalCommitment: null,
+      twhCommitment: null,
+      twhPct: null,
+      totalContributions: null,
+      twhContributions: null,
+      totalDistributions: null,
+      twhDistributions: null,
+      fundTotalNav: null,
+      twhNav: null,
+      twhValue: null,
+      totalValue: null,
+      tvpi: null,
+      dpi: null,
+      moic: null,
+      irr: null,
+    };
     fundIdentityRows.push({
       identity: f.name,
-      fields: [
-        { field: "TWH Commitment", src: null, sys: c?.twh_commitment_usd ?? null, kind: "currency" },
-        { field: "TWH NAV", src: null, sys: s?.twh_nav_usd ?? null, kind: "currency" },
-      ],
+      fields: buildFundFields(blank, sysSide),
     });
   }
   sections.push(buildSectionResult("funds", "Funds", fundIdentityRows));
 
   // ===== DIRECTS =====
-  // Scope: ONLY directs that have a direct_quarter_snapshots row for this
-  // quarter_id. A direct without a snapshot for the selected quarter didn't
-  // exist yet from a reporting standpoint, so it should not appear in the
-  // reconciliation.
-  // Identity = (Company Name, Date) — Earth AI appears twice at different dates.
+  // Scope: ONLY directs with a direct_quarter_snapshots row for this quarter_id.
   const [dqsRes, companiesRes] = await Promise.all([
-    supabase.from("direct_quarter_snapshots").select("direct_id, twh_fmv_usd, twh_proceeds_usd").eq("quarter_id", quarterId),
+    supabase
+      .from("direct_quarter_snapshots")
+      .select("direct_id, twh_fmv_usd, twh_proceeds_usd")
+      .eq("quarter_id", quarterId),
     supabase.from("companies").select("id, legal_name"),
   ]);
   const dqs = new Map((dqsRes.data ?? []).map((d) => [d.direct_id, d]));
@@ -90,10 +241,19 @@ export async function runReconciliation(
         .from("directs")
         .select("id, company_id, investment_date, instrument, round, twh_cost_usd")
         .in("id", inScopeDirectIds)
-    : { data: [] as Array<{ id: string; company_id: string; investment_date: string | null; instrument: string | null; round: string | null; twh_cost_usd: number }> };
+    : {
+        data: [] as Array<{
+          id: string;
+          company_id: string;
+          investment_date: string | null;
+          instrument: string | null;
+          round: string | null;
+          twh_cost_usd: number;
+        }>,
+      };
   const directs = directsRes.data ?? [];
 
-  const directsByKey = new Map<string, typeof directs[number]>();
+  const directsByKey = new Map<string, (typeof directs)[number]>();
   for (const d of directs) {
     const co = companiesById.get(d.company_id);
     if (!co) continue;
@@ -103,49 +263,92 @@ export async function runReconciliation(
   const seenDirectIds = new Set<string>();
   const directIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
 
+  const buildDirectFields = (
+    src: {
+      date: string | null;
+      investmentCost: number | null;
+      fmv: number | null;
+      proceeds: number | null;
+      moic: number | null;
+      twhPct: number | null;
+      twhCost: number | null;
+      twhFmv: number | null;
+      twhProceeds: number | null;
+    },
+    sys: typeof src,
+  ) => [
+    { field: "Investment Date", src: src.date, sys: sys.date, kind: "date" as const },
+    { field: "Investment Cost", src: src.investmentCost, sys: sys.investmentCost, kind: "currency" as const },
+    { field: "FMV", src: src.fmv, sys: sys.fmv, kind: "currency" as const },
+    { field: "Proceeds", src: src.proceeds, sys: sys.proceeds, kind: "currency" as const },
+    { field: "MOIC", src: src.moic, sys: sys.moic, kind: "ratio" as const },
+    { field: "TWH Ownership %", src: src.twhPct, sys: sys.twhPct, kind: "percent" as const },
+    { field: "TWH Cost", src: src.twhCost, sys: sys.twhCost, kind: "currency" as const },
+    { field: "TWH FMV", src: src.twhFmv, sys: sys.twhFmv, kind: "currency" as const },
+    { field: "TWH Proceeds", src: src.twhProceeds, sys: sys.twhProceeds, kind: "currency" as const },
+  ];
+
+  const directMoicSys = (cost: number | null, fmv: number | null, proc: number | null): number | null =>
+    ratio(sumOrNull(fmv, proc), cost);
+
   for (const srcD of parsed.directs) {
     const key = compositeDirectKey(srcD.companyName, srcD.date);
     const matched = directsByKey.get(key);
     if (matched) seenDirectIds.add(matched.id);
     const snap = matched ? dqs.get(matched.id) : null;
+    const sys = {
+      date: matched?.investment_date ?? null,
+      investmentCost: null as number | null, // not tracked separately in DB
+      fmv: null as number | null,
+      proceeds: null as number | null,
+      moic: directMoicSys(matched?.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
+      twhPct: null as number | null,
+      twhCost: matched?.twh_cost_usd ?? null,
+      twhFmv: snap?.twh_fmv_usd ?? null,
+      twhProceeds: snap?.twh_proceeds_usd ?? null,
+    };
     const ident = `${srcD.companyName} · ${fmtDate(srcD.date)}`;
-    directIdentityRows.push({
-      identity: ident,
-      fields: [
-        { field: "Round", src: srcD.round, sys: matched?.round ?? null, kind: "text" },
-        { field: "Instrument", src: srcD.instrument, sys: matched?.instrument ?? null, kind: "text" },
-        { field: "TWH Cost", src: srcD.twhCost, sys: matched?.twh_cost_usd ?? null, kind: "currency" },
-        { field: "TWH FMV", src: srcD.twhFmv, sys: snap?.twh_fmv_usd ?? null, kind: "currency" },
-        { field: "TWH Proceeds", src: srcD.twhProceeds, sys: snap?.twh_proceeds_usd ?? null, kind: "currency" },
-      ],
-    });
+    directIdentityRows.push({ identity: ident, fields: buildDirectFields(srcD, sys) });
   }
-  // In-scope directs (with a quarter snapshot) that are missing from the xlsx.
   for (const d of directs) {
     if (seenDirectIds.has(d.id)) continue;
     const co = companiesById.get(d.company_id);
     const snap = dqs.get(d.id);
     const ident = `${co?.legal_name ?? "(unknown)"} · ${fmtDate(d.investment_date)}`;
-    directIdentityRows.push({
-      identity: ident,
-      fields: [
-        { field: "TWH Cost", src: null, sys: d.twh_cost_usd ?? null, kind: "currency" },
-        { field: "TWH FMV", src: null, sys: snap?.twh_fmv_usd ?? null, kind: "currency" },
-        { field: "TWH Proceeds", src: null, sys: snap?.twh_proceeds_usd ?? null, kind: "currency" },
-      ],
-    });
+    const sys = {
+      date: d.investment_date,
+      investmentCost: null,
+      fmv: null,
+      proceeds: null,
+      moic: directMoicSys(d.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
+      twhPct: null,
+      twhCost: d.twh_cost_usd ?? null,
+      twhFmv: snap?.twh_fmv_usd ?? null,
+      twhProceeds: snap?.twh_proceeds_usd ?? null,
+    };
+    const blank = {
+      date: null,
+      investmentCost: null,
+      fmv: null,
+      proceeds: null,
+      moic: null,
+      twhPct: null,
+      twhCost: null,
+      twhFmv: null,
+      twhProceeds: null,
+    };
+    directIdentityRows.push({ identity: ident, fields: buildDirectFields(blank, sys) });
   }
   sections.push(buildSectionResult("directs", "Directs", directIdentityRows));
 
   // ===== UNDERLYING HOLDINGS =====
-  // Identity = (Company Name, Fund, Date)
   const uhRes = await supabase
     .from("underlying_holdings")
     .select("id, company_id, fund_id, investment_date, instrument, round, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd")
     .eq("quarter_id", quarterId);
   const uh = uhRes.data ?? [];
   const fundsById = new Map(funds.map((f) => [f.id, f]));
-  const uhByKey = new Map<string, typeof uh[number]>();
+  const uhByKey = new Map<string, (typeof uh)[number]>();
   for (const h of uh) {
     const co = companiesById.get(h.company_id);
     const fd = fundsById.get(h.fund_id);
@@ -156,33 +359,80 @@ export async function runReconciliation(
   const seenUhIds = new Set<string>();
   const uhIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
 
+  const buildUhFields = (
+    src: {
+      date: string | null;
+      investmentCost: number | null;
+      fmv: number | null;
+      proceeds: number | null;
+      moic: number | null;
+      twhPct: number | null;
+      twhCost: number | null;
+      twhFmv: number | null;
+      twhProceeds: number | null;
+    },
+    sys: typeof src,
+  ) => [
+    { field: "Investment Date", src: src.date, sys: sys.date, kind: "date" as const },
+    { field: "Investment Cost", src: src.investmentCost, sys: sys.investmentCost, kind: "currency" as const },
+    { field: "FMV", src: src.fmv, sys: sys.fmv, kind: "currency" as const },
+    { field: "Proceeds", src: src.proceeds, sys: sys.proceeds, kind: "currency" as const },
+    { field: "MOIC", src: src.moic, sys: sys.moic, kind: "ratio" as const },
+    { field: "TWH Ownership %", src: src.twhPct, sys: sys.twhPct, kind: "percent" as const },
+    { field: "TWH Cost", src: src.twhCost, sys: sys.twhCost, kind: "currency" as const },
+    { field: "TWH FMV", src: src.twhFmv, sys: sys.twhFmv, kind: "currency" as const },
+    { field: "TWH Proceeds", src: src.twhProceeds, sys: sys.twhProceeds, kind: "currency" as const },
+  ];
+
+  const uhMoicSys = (cost: number | null, fmv: number | null, proc: number | null): number | null =>
+    ratio(sumOrNull(fmv, proc), cost);
+
   for (const u of parsed.underlying) {
     const key = compositeUnderlyingKey(u.companyName, u.fundName, u.date);
     const matched = uhByKey.get(key);
     if (matched) seenUhIds.add(matched.id);
     const ident = `${u.companyName} · ${u.fundName} · ${fmtDate(u.date)}`;
-    uhIdentityRows.push({
-      identity: ident,
-      fields: [
-        { field: "Round", src: u.round, sys: matched?.round ?? null, kind: "text" },
-        { field: "Instrument", src: u.instrument, sys: matched?.instrument ?? null, kind: "text" },
-        { field: "Investment Cost", src: u.investmentCost, sys: matched?.fund_cost_usd ?? null, kind: "currency" },
-        { field: "FMV", src: u.fmv, sys: matched?.fund_fmv_usd ?? null, kind: "currency" },
-        { field: "Proceeds", src: u.proceeds, sys: matched?.fund_proceeds_usd ?? null, kind: "currency" },
-      ],
-    });
+    const sys = {
+      date: matched?.investment_date ?? null,
+      investmentCost: matched?.fund_cost_usd ?? null,
+      fmv: matched?.fund_fmv_usd ?? null,
+      proceeds: matched?.fund_proceeds_usd ?? null,
+      moic: uhMoicSys(matched?.fund_cost_usd ?? null, matched?.fund_fmv_usd ?? null, matched?.fund_proceeds_usd ?? null),
+      twhPct: null as number | null, // not tracked per holding in DB
+      twhCost: null as number | null,
+      twhFmv: null as number | null,
+      twhProceeds: null as number | null,
+    };
+    uhIdentityRows.push({ identity: ident, fields: buildUhFields(u, sys) });
   }
   for (const h of uh) {
     if (seenUhIds.has(h.id)) continue;
     const co = companiesById.get(h.company_id);
     const fd = fundsById.get(h.fund_id);
-    uhIdentityRows.push({
-      identity: `${co?.legal_name ?? "?"} · ${fd?.name ?? "?"} · ${fmtDate(h.investment_date)}`,
-      fields: [
-        { field: "Investment Cost", src: null, sys: h.fund_cost_usd ?? null, kind: "currency" },
-        { field: "FMV", src: null, sys: h.fund_fmv_usd ?? null, kind: "currency" },
-      ],
-    });
+    const ident = `${co?.legal_name ?? "?"} · ${fd?.name ?? "?"} · ${fmtDate(h.investment_date)}`;
+    const sys = {
+      date: h.investment_date,
+      investmentCost: h.fund_cost_usd ?? null,
+      fmv: h.fund_fmv_usd ?? null,
+      proceeds: h.fund_proceeds_usd ?? null,
+      moic: uhMoicSys(h.fund_cost_usd ?? null, h.fund_fmv_usd ?? null, h.fund_proceeds_usd ?? null),
+      twhPct: null,
+      twhCost: null,
+      twhFmv: null,
+      twhProceeds: null,
+    };
+    const blank = {
+      date: null,
+      investmentCost: null,
+      fmv: null,
+      proceeds: null,
+      moic: null,
+      twhPct: null,
+      twhCost: null,
+      twhFmv: null,
+      twhProceeds: null,
+    };
+    uhIdentityRows.push({ identity: ident, fields: buildUhFields(blank, sys) });
   }
   sections.push(buildSectionResult("underlying", "Underlying Holdings", uhIdentityRows));
 
@@ -216,5 +466,10 @@ export async function runReconciliation(
     { totalFields: 0, matchedFields: 0, overTolerance: 0, missing: 0 },
   );
 
-  return { quarterId, quarterLabel, sections, ...totals };
+  const headerRowsRecord: Record<string, number> = {};
+  for (const [k, v] of Object.entries(parsed.headerRows ?? {})) {
+    if (typeof v === "number") headerRowsRecord[k] = v;
+  }
+
+  return { quarterId, quarterLabel, sections, ...totals, headerRows: headerRowsRecord };
 }
