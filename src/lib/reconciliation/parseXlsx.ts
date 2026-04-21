@@ -415,17 +415,27 @@ function parseDirectsSheet(ws: XLSX.WorkSheet): {
     const name = str(cellAt(r, cName));
     if (!name) continue;
     if (isSectionLabel(name)) continue;
+    const date = dateStr(cellAt(r, cDate), `Directs.Date row ${i + 1}`);
+    const investmentCost = num(cellAt(r, cInvCost));
+    const fmv = num(cellAt(r, cFmv));
+    const proceeds = num(cellAt(r, cProceeds));
+    const twhCost = num(cellAt(r, cTwhCost));
+    // Phantom-row guard: a Directs row with no date AND no monetary value
+    // is a placeholder (e.g., # 3-10 in 1Q25). Skip silently.
+    if (!date && investmentCost == null && fmv == null && proceeds == null && twhCost == null) {
+      continue;
+    }
     out.push({
       companyName: name,
-      date: dateStr(cellAt(r, cDate), `Directs.Date row ${i + 1}`),
+      date,
       instrument: str(cellAt(r, cInstrument)),
       round: str(cellAt(r, cRound)),
-      investmentCost: num(cellAt(r, cInvCost)),
-      fmv: num(cellAt(r, cFmv)),
-      proceeds: num(cellAt(r, cProceeds)),
+      investmentCost,
+      fmv,
+      proceeds,
       moic: num(cellAt(r, cMoic)),
       twhPct: num(cellAt(r, cTwhPct)),
-      twhCost: num(cellAt(r, cTwhCost)),
+      twhCost,
       twhFmv: num(cellAt(r, cTwhFmv)),
       twhProceeds: num(cellAt(r, cTwhProceeds)),
       coInvestors: str(cellAt(r, cCoInvestors)),
@@ -474,7 +484,9 @@ function parseUnderlyingSheet(ws: XLSX.WorkSheet): {
     if (isSectionLabel(name) || isSectionLabel(fund)) continue;
     out.push({
       companyName: name,
-      fundName: fund,
+      // Canonicalise xlsx fund short names ("Cantos") -> DB legal_name
+      // ("Cantos Ventures IV, LP") so identity match works downstream.
+      fundName: resolveFundName(fund),
       status: str(cellAt(r, cStatus)),
       date: dateStr(cellAt(r, cDate), `Underl.Date row ${i + 1}`),
       instrument: str(cellAt(r, cInstrument)),
