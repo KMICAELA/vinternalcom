@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ParsedWorkbook } from "./parseXlsx";
 import { buildSectionResult, norm } from "./compare";
+import { resolveFundName } from "./fundAliases";
 import type { ReconciliationResult, SectionResult } from "./types";
 
 /**
@@ -182,7 +183,9 @@ export async function runReconciliation(
   }
 
   for (const srcFund of parsed.funds) {
-    const sysFund = fundsByName.get(norm(srcFund.fundName));
+    const canonical = resolveFundName(srcFund.fundName);
+    const sysFund =
+      fundsByName.get(norm(canonical)) ?? fundsByName.get(norm(srcFund.fundName));
     const c = sysFund ? commits.get(sysFund.id) : null;
     const s = sysFund ? fqs.get(sysFund.id) : null;
     if (sysFund) seenFundIds.add(sysFund.id);
