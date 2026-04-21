@@ -206,36 +206,54 @@ const str = (v: unknown): string | null => {
   return s === "" ? null : s;
 };
 
+/**
+ * Reject Excel-epoch artifacts (1899-12-30, 1899-12-31, 1900-01-00 etc.)
+ * that surface when the parser hits a "blank" date cell that's actually
+ * formatted as a date but contains 0/1/2.
+ */
+const isEpochArtifact = (iso: string): boolean => {
+  if (!iso) return true;
+  const y = parseInt(iso.slice(0, 4), 10);
+  return !Number.isFinite(y) || y < 1990;
+};
+
 const dateStr = (v: unknown, ctx?: string): string | null => {
   if (v === null || v === undefined || v === "") return null;
+  let iso: string | null = null;
   if (v instanceof Date) {
     const y = v.getUTCFullYear();
     const m = String(v.getUTCMonth() + 1).padStart(2, "0");
     const d = String(v.getUTCDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-  if (typeof v === "number") {
+    iso = `${y}-${m}-${d}`;
+  } else if (typeof v === "number") {
     if (!Number.isFinite(v) || v < 1) return null;
     const epoch = Date.UTC(1899, 11, 30);
     const ms = epoch + Math.round(v) * 86400000;
     const d = new Date(ms);
-    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-  }
-  if (typeof v === "string") {
+    iso = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  } else if (typeof v === "string") {
     const s = v.trim();
     if (!s) return null;
-    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-    const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (us) {
-      let yy = parseInt(us[3], 10);
-      if (yy < 100) yy += 2000;
-      return `${yy}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+    const isoM = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (isoM) iso = `${isoM[1]}-${isoM[2]}-${isoM[3]}`;
+    else {
+      const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+      if (us) {
+        let yy = parseInt(us[3], 10);
+        if (yy < 100) yy += 2000;
+        iso = `${yy}-${us[1].padStart(2, "0")}-${us[2].padStart(2, "0")}`;
+      } else {
+        if (ctx) console.warn(`[parser] non-date value in date column ${ctx}: "${s}"`);
+        return null;
+      }
     }
-    if (ctx) console.warn(`[parser] non-date value in date column ${ctx}: "${s}"`);
+  }
+  if (!iso) return null;
+  if (isEpochArtifact(iso)) {
+    if (ctx) console.warn(`[parser] epoch-artifact date rejected in ${ctx}: "${iso}"`);
     return null;
   }
-  return null;
+  return iso;
 };
 
 // ------------------------------------------------------------------
