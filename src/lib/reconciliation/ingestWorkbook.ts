@@ -118,6 +118,7 @@ export async function ingestWorkbook(
       fund_id: fundId,
       quarter_id: quarterId,
       company_id: companyId,
+      tranche_seq: u.trancheSeq,
       investment_date: u.date,
       instrument: u.instrument,
       round: u.round,
