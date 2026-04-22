@@ -248,9 +248,11 @@ export type Database = {
           created_at: string
           direct_id: string
           id: string
+          moic: number | null
           quarter_id: string
           source_report_id: string | null
           twh_fmv_usd: number
+          twh_ownership_pct: number | null
           twh_proceeds_usd: number
           updated_at: string
         }
@@ -258,9 +260,11 @@ export type Database = {
           created_at?: string
           direct_id: string
           id?: string
+          moic?: number | null
           quarter_id: string
           source_report_id?: string | null
           twh_fmv_usd?: number
+          twh_ownership_pct?: number | null
           twh_proceeds_usd?: number
           updated_at?: string
         }
@@ -268,9 +272,11 @@ export type Database = {
           created_at?: string
           direct_id?: string
           id?: string
+          moic?: number | null
           quarter_id?: string
           source_report_id?: string | null
           twh_fmv_usd?: number
+          twh_ownership_pct?: number | null
           twh_proceeds_usd?: number
           updated_at?: string
         }
@@ -434,13 +440,18 @@ export type Database = {
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
+          dpi: number | null
           extracted_at: string | null
           fund_id: string
           fund_total_contributions_usd: number
+          fund_total_distributions_usd: number | null
           fund_total_nav_usd: number
           id: string
+          irr: number | null
+          moic: number | null
           quarter_id: string
           source_report_id: string | null
+          tvpi: number | null
           twh_contributions_usd: number
           twh_distributions_usd: number
           twh_nav_usd: number
@@ -450,13 +461,18 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          dpi?: number | null
           extracted_at?: string | null
           fund_id: string
           fund_total_contributions_usd?: number
+          fund_total_distributions_usd?: number | null
           fund_total_nav_usd?: number
           id?: string
+          irr?: number | null
+          moic?: number | null
           quarter_id: string
           source_report_id?: string | null
+          tvpi?: number | null
           twh_contributions_usd?: number
           twh_distributions_usd?: number
           twh_nav_usd?: number
@@ -466,13 +482,18 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          dpi?: number | null
           extracted_at?: string | null
           fund_id?: string
           fund_total_contributions_usd?: number
+          fund_total_distributions_usd?: number | null
           fund_total_nav_usd?: number
           id?: string
+          irr?: number | null
+          moic?: number | null
           quarter_id?: string
           source_report_id?: string | null
+          tvpi?: number | null
           twh_contributions_usd?: number
           twh_distributions_usd?: number
           twh_nav_usd?: number
@@ -841,6 +862,7 @@ export type Database = {
           id: string
           instrument: string | null
           investment_date: string | null
+          moic: number | null
           quarter_id: string
           round: string | null
           source_report_id: string | null
@@ -861,6 +883,7 @@ export type Database = {
           id?: string
           instrument?: string | null
           investment_date?: string | null
+          moic?: number | null
           quarter_id: string
           round?: string | null
           source_report_id?: string | null
@@ -881,6 +904,7 @@ export type Database = {
           id?: string
           instrument?: string | null
           investment_date?: string | null
+          moic?: number | null
           quarter_id?: string
           round?: string | null
           source_report_id?: string | null
