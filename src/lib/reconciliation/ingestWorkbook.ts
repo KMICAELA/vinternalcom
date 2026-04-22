@@ -133,11 +133,33 @@ export async function ingestWorkbook(
   }
 
   // Insert in chunks of 500 to stay well under any payload limits.
+  const seen = new Map<string, (typeof rowsToInsert)[0]>();
+  for (const row of rowsToInsert) {
+    const key = `${row.fund_id}|${row.quarter_id}|${row.company_id}|${row.investment_date}|${row.tranche_seq}`;
+    if (seen.has(key)) {
+      console.error(
+        "INTRA-BATCH DUPLICATE on key", key,
+        "\n  first:", JSON.stringify(seen.get(key)),
+        "\n  second:", JSON.stringify(row),
+      );
+    }
+    seen.set(key, row);
+  }
+
   const chunkSize = 500;
   for (let i = 0; i < rowsToInsert.length; i += chunkSize) {
     const slice = rowsToInsert.slice(i, i + chunkSize);
     const { error } = await supabase.from("underlying_holdings").insert(slice as any);
-    if (error) throw new Error(`Underlying insert chunk ${i / chunkSize} failed: ${error.message}`);
+    if (error) {
+      console.error(
+        "Underlying insert chunk", i / chunkSize, "failed:",
+        error.message,
+        "details:", error.details,
+        "hint:", error.hint,
+        "code:", error.code,
+      );
+      throw new Error(`Underlying insert chunk ${i / chunkSize} failed: ${error.message}`);
+    }
     summary.underlyingInserted += slice.length;
   }
 
