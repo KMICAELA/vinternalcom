@@ -844,6 +844,7 @@ export type Database = {
           quarter_id: string
           round: string | null
           source_report_id: string | null
+          tranche_seq: number
           twh_cost_usd: number
           twh_fmv_usd: number
           twh_ownership_pct: number | null
@@ -863,6 +864,7 @@ export type Database = {
           quarter_id: string
           round?: string | null
           source_report_id?: string | null
+          tranche_seq?: number
           twh_cost_usd?: number
           twh_fmv_usd?: number
           twh_ownership_pct?: number | null
@@ -882,6 +884,7 @@ export type Database = {
           quarter_id?: string
           round?: string | null
           source_report_id?: string | null
+          tranche_seq?: number
           twh_cost_usd?: number
           twh_fmv_usd?: number
           twh_ownership_pct?: number | null
