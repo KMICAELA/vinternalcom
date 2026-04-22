@@ -423,7 +423,7 @@ export type Database = {
           {
             foreignKeyName: "fund_commitments_fund_id_fkey"
             columns: ["fund_id"]
-            isOneToOne: true
+            isOneToOne: false
             referencedRelation: "funds"
             referencedColumns: ["id"]
           },
