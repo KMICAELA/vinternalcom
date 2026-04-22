@@ -19,6 +19,14 @@ function compareValue(
   sys: number | string | null,
   kind: FieldKind,
 ): { delta: number | null; status: Status } {
+  if (kind === "currency") {
+    const srcZero = src === null || src === undefined || src === "" || src === 0;
+    const sysZero = sys === null || sys === undefined || sys === "" || sys === 0;
+    if (srcZero && sysZero) return { delta: 0, status: "match" };
+    if (srcZero) return { delta: null, status: "missing_in_source" };
+    if (sysZero) return { delta: null, status: "missing_in_system" };
+  }
+
   const srcMissing = src === null || src === undefined || src === "";
   const sysMissing = sys === null || sys === undefined || sys === "";
   if (srcMissing && sysMissing) return { delta: 0, status: "match" };

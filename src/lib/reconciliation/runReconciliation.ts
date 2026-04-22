@@ -93,7 +93,7 @@ export async function runReconciliation(
     supabase
       .from("fund_quarter_snapshots")
       .select(
-        "fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd",
+        "fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd, tvpi, dpi, moic, irr",
       )
       .eq("quarter_id", quarterId),
   ]);
@@ -143,10 +143,10 @@ export async function runReconciliation(
       twhNav: srcFund.twhNav,
       twhValue: srcFund.twhValue ?? twhValueComputed,
       totalValue,
-      tvpi: ratio(totalValue, srcFund.totalContributions),
-      dpi: ratio(srcFund.totalDistributions, srcFund.totalContributions),
-      moic: ratio(totalValue, srcFund.totalContributions),
-      irr: null as number | null, // not present in xlsx Funds rows
+      tvpi: srcFund.tvpi ?? ratio(totalValue, srcFund.totalContributions),
+      dpi: srcFund.dpi ?? ratio(srcFund.totalDistributions, srcFund.totalContributions),
+      moic: srcFund.moic ?? ratio(totalValue, srcFund.totalContributions),
+      irr: srcFund.irr,
     };
   }
 
@@ -159,9 +159,14 @@ export async function runReconciliation(
       twh_contributions_usd: number | null;
       twh_distributions_usd: number | null;
       twh_nav_usd: number | null;
+      fund_total_distributions_usd: number | null;
+      tvpi: number | null;
+      dpi: number | null;
+      moic: number | null;
+      irr: number | null;
     } | null | undefined,
   ) {
-    const totalDistributions = null as number | null; // DB doesn't track Total fund Distributions today
+    const totalDistributions = s?.fund_total_distributions_usd ?? null;
     const totalValue = sumOrNull(s?.fund_total_nav_usd ?? null, totalDistributions);
     const twhValueComputed = sumOrNull(s?.twh_nav_usd ?? null, s?.twh_distributions_usd ?? null);
     return {
@@ -177,10 +182,10 @@ export async function runReconciliation(
       twhNav: s?.twh_nav_usd ?? null,
       twhValue: twhValueComputed,
       totalValue,
-      tvpi: ratio(totalValue, s?.fund_total_contributions_usd ?? null),
-      dpi: ratio(totalDistributions, s?.fund_total_contributions_usd ?? null),
-      moic: ratio(totalValue, s?.fund_total_contributions_usd ?? null),
-      irr: null as number | null,
+      tvpi: s?.tvpi ?? ratio(totalValue, s?.fund_total_contributions_usd ?? null),
+      dpi: s?.dpi ?? ratio(totalDistributions, s?.fund_total_contributions_usd ?? null),
+      moic: s?.moic ?? ratio(totalValue, s?.fund_total_contributions_usd ?? null),
+      irr: s?.irr ?? null,
     };
   }
 
@@ -192,7 +197,7 @@ export async function runReconciliation(
     const s = sysFund ? fqs.get(sysFund.id) : null;
     if (sysFund) seenFundIds.add(sysFund.id);
     fundIdentityRows.push({
-      identity: srcFund.fundName,
+      identity: canonical,
       fields: buildFundFields(buildSrcFund(srcFund), buildSysFund(sysFund ?? null, c, s)),
     });
   }
@@ -232,7 +237,7 @@ export async function runReconciliation(
   const [dqsRes, companiesRes] = await Promise.all([
     supabase
       .from("direct_quarter_snapshots")
-      .select("direct_id, twh_fmv_usd, twh_proceeds_usd")
+      .select("direct_id, twh_fmv_usd, twh_proceeds_usd, moic, twh_ownership_pct")
       .eq("quarter_id", quarterId),
     supabase.from("companies").select("id, legal_name"),
   ]);
@@ -306,8 +311,8 @@ export async function runReconciliation(
       investmentCost: null as number | null, // not tracked separately in DB
       fmv: null as number | null,
       proceeds: null as number | null,
-      moic: directMoicSys(matched?.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
-      twhPct: null as number | null,
+      moic: snap?.moic ?? directMoicSys(matched?.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
+      twhPct: snap?.twh_ownership_pct ?? null,
       twhCost: matched?.twh_cost_usd ?? null,
       twhFmv: snap?.twh_fmv_usd ?? null,
       twhProceeds: snap?.twh_proceeds_usd ?? null,
@@ -325,8 +330,8 @@ export async function runReconciliation(
       investmentCost: null,
       fmv: null,
       proceeds: null,
-      moic: directMoicSys(d.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
-      twhPct: null,
+      moic: snap?.moic ?? directMoicSys(d.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
+      twhPct: snap?.twh_ownership_pct ?? null,
       twhCost: d.twh_cost_usd ?? null,
       twhFmv: snap?.twh_fmv_usd ?? null,
       twhProceeds: snap?.twh_proceeds_usd ?? null,
@@ -403,7 +408,7 @@ export async function runReconciliation(
       investmentCost: matched?.fund_cost_usd ?? null,
       fmv: matched?.fund_fmv_usd ?? null,
       proceeds: matched?.fund_proceeds_usd ?? null,
-      moic: uhMoicSys(matched?.fund_cost_usd ?? null, matched?.fund_fmv_usd ?? null, matched?.fund_proceeds_usd ?? null),
+      moic: matched?.moic ?? uhMoicSys(matched?.fund_cost_usd ?? null, matched?.fund_fmv_usd ?? null, matched?.fund_proceeds_usd ?? null),
       twhPct: matched?.twh_ownership_pct ?? null,
       twhCost: matched?.twh_cost_usd ?? null,
       twhFmv: matched?.twh_fmv_usd ?? null,
@@ -421,7 +426,7 @@ export async function runReconciliation(
       investmentCost: h.fund_cost_usd ?? null,
       fmv: h.fund_fmv_usd ?? null,
       proceeds: h.fund_proceeds_usd ?? null,
-      moic: uhMoicSys(h.fund_cost_usd ?? null, h.fund_fmv_usd ?? null, h.fund_proceeds_usd ?? null),
+      moic: h.moic ?? uhMoicSys(h.fund_cost_usd ?? null, h.fund_fmv_usd ?? null, h.fund_proceeds_usd ?? null),
       twhPct: h.twh_ownership_pct ?? null,
       twhCost: h.twh_cost_usd ?? null,
       twhFmv: h.twh_fmv_usd ?? null,
