@@ -436,13 +436,10 @@ function parseDirectsSheet(ws: XLSX.WorkSheet): {
     const fmv = num(cellAt(r, cFmv));
     const proceeds = num(cellAt(r, cProceeds));
     const twhCost = num(cellAt(r, cTwhCost));
-    const hasCompanyName = Boolean(name.trim());
+    const noCurrencyValue = [investmentCost, fmv, proceeds, twhCost].every((v) => v == null || v === 0);
     // Phantom-row guard: a Directs row with no date AND no monetary value
     // is a placeholder (e.g., # 3-10 in 1Q25). Skip silently.
-    if (!date && (twhCost == null || twhCost === 0) && !hasCompanyName) {
-      continue;
-    }
-    if (!date && investmentCost == null && fmv == null && proceeds == null && twhCost == null) {
+    if (!date && noCurrencyValue) {
       continue;
     }
     out.push({

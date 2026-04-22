@@ -237,7 +237,7 @@ export async function runReconciliation(
   const [dqsRes, companiesRes] = await Promise.all([
     supabase
       .from("direct_quarter_snapshots")
-      .select("direct_id, twh_fmv_usd, twh_proceeds_usd")
+      .select("direct_id, twh_fmv_usd, twh_proceeds_usd, moic, twh_ownership_pct")
       .eq("quarter_id", quarterId),
     supabase.from("companies").select("id, legal_name"),
   ]);
@@ -311,8 +311,8 @@ export async function runReconciliation(
       investmentCost: null as number | null, // not tracked separately in DB
       fmv: null as number | null,
       proceeds: null as number | null,
-      moic: directMoicSys(matched?.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
-      twhPct: null as number | null,
+      moic: snap?.moic ?? directMoicSys(matched?.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
+      twhPct: snap?.twh_ownership_pct ?? null,
       twhCost: matched?.twh_cost_usd ?? null,
       twhFmv: snap?.twh_fmv_usd ?? null,
       twhProceeds: snap?.twh_proceeds_usd ?? null,
@@ -330,8 +330,8 @@ export async function runReconciliation(
       investmentCost: null,
       fmv: null,
       proceeds: null,
-      moic: directMoicSys(d.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
-      twhPct: null,
+      moic: snap?.moic ?? directMoicSys(d.twh_cost_usd ?? null, snap?.twh_fmv_usd ?? null, snap?.twh_proceeds_usd ?? null),
+      twhPct: snap?.twh_ownership_pct ?? null,
       twhCost: d.twh_cost_usd ?? null,
       twhFmv: snap?.twh_fmv_usd ?? null,
       twhProceeds: snap?.twh_proceeds_usd ?? null,
@@ -408,7 +408,7 @@ export async function runReconciliation(
       investmentCost: matched?.fund_cost_usd ?? null,
       fmv: matched?.fund_fmv_usd ?? null,
       proceeds: matched?.fund_proceeds_usd ?? null,
-      moic: uhMoicSys(matched?.fund_cost_usd ?? null, matched?.fund_fmv_usd ?? null, matched?.fund_proceeds_usd ?? null),
+      moic: matched?.moic ?? uhMoicSys(matched?.fund_cost_usd ?? null, matched?.fund_fmv_usd ?? null, matched?.fund_proceeds_usd ?? null),
       twhPct: matched?.twh_ownership_pct ?? null,
       twhCost: matched?.twh_cost_usd ?? null,
       twhFmv: matched?.twh_fmv_usd ?? null,
@@ -426,7 +426,7 @@ export async function runReconciliation(
       investmentCost: h.fund_cost_usd ?? null,
       fmv: h.fund_fmv_usd ?? null,
       proceeds: h.fund_proceeds_usd ?? null,
-      moic: uhMoicSys(h.fund_cost_usd ?? null, h.fund_fmv_usd ?? null, h.fund_proceeds_usd ?? null),
+      moic: h.moic ?? uhMoicSys(h.fund_cost_usd ?? null, h.fund_fmv_usd ?? null, h.fund_proceeds_usd ?? null),
       twhPct: h.twh_ownership_pct ?? null,
       twhCost: h.twh_cost_usd ?? null,
       twhFmv: h.twh_fmv_usd ?? null,
