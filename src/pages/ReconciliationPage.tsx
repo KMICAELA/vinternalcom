@@ -151,12 +151,26 @@ const ReconciliationPage = () => {
     setIngestSummary(null);
     try {
       const parsed = await parseWorkbook(file);
+      console.info("[reconciliation] ingest parsed workbook", {
+        fileName: file.name,
+        quarterId,
+        funds: parsed.funds.length,
+        directs: parsed.directs.length,
+        underlying: parsed.underlying.length,
+      });
       const summary = await ingestWorkbook(parsed, quarterId);
+      console.info("[reconciliation] ingest returned summary", summary);
       setIngestSummary(summary);
-      toast.success(
-        `Ingest complete — underlying ${summary.underlyingBefore} → ${summary.underlyingAfter}, ` +
-        `directs snapshots ${summary.directsSnapshotsBefore} → ${summary.directsSnapshotsAfter}`,
-      );
+      const description = `Inserted ${summary.underlyingInserted} underlying rows, ${summary.fundsInserted} funds, ${summary.directsInserted} directs.`;
+      if (summary.underlyingInserted === 0 && summary.fundsInserted === 0 && summary.directsInserted === 0) {
+        toast.error("Ingest completed with zero inserts", {
+          description,
+        });
+      } else {
+        toast.success("Ingest complete", {
+          description,
+        });
+      }
     } catch (err) {
       console.error(err);
       toast.error(err instanceof Error ? err.message : "Ingest failed");
@@ -240,6 +254,10 @@ const ReconciliationPage = () => {
               Underlying holdings: <span className="text-foreground">{ingestSummary.underlyingBefore}</span> →{" "}
               <span className="text-emerald-500">{ingestSummary.underlyingAfter}</span>{" "}
               ({ingestSummary.underlyingInserted} inserted, {ingestSummary.underlyingSkipped.length} skipped)
+            </div>
+            <div>
+              Funds inserted: <span className="text-foreground">{ingestSummary.fundsInserted}</span> · Directs inserted:{" "}
+              <span className="text-foreground">{ingestSummary.directsInserted}</span>
             </div>
             <div>
               Direct quarter snapshots: <span className="text-foreground">{ingestSummary.directsSnapshotsBefore}</span> →{" "}

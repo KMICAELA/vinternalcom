@@ -21,6 +21,8 @@ export interface IngestSummary {
   underlyingBefore: number;
   underlyingAfter: number;
   underlyingInserted: number;
+  fundsInserted: number;
+  directsInserted: number;
   underlyingSkipped: { reason: string; row: ParsedUnderlyingRow }[];
   directsSnapshotsBefore: number;
   directsSnapshotsAfter: number;
@@ -41,6 +43,18 @@ async function resolveOrCreateCompany(legalName: string): Promise<string> {
     .insert({ legal_name: trimmed })
     .select("id")
     .single();
+  console.info("[ingest] companies insert result", {
+    legalName: trimmed,
+    rowCount: created ? 1 : 0,
+    error: error
+      ? {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        }
+      : null,
+  });
   if (error) throw error;
   return created.id;
 }
@@ -53,12 +67,21 @@ export async function ingestWorkbook(
     underlyingBefore: 0,
     underlyingAfter: 0,
     underlyingInserted: 0,
+    fundsInserted: 0,
+    directsInserted: 0,
     underlyingSkipped: [],
     directsSnapshotsBefore: 0,
     directsSnapshotsAfter: 0,
     directsSnapshotsUpserted: 0,
     directsSkipped: [],
   };
+
+  console.info("[ingest] start", {
+    quarterId,
+    parsedFunds: parsed.funds.length,
+    parsedDirects: parsed.directs.length,
+    parsedUnderlying: parsed.underlying.length,
+  });
 
   // Snapshot before-counts for the summary banner.
   const { count: uhBefore } = await supabase
@@ -79,6 +102,11 @@ export async function ingestWorkbook(
     supabase.from("companies").select("id, legal_name"),
     supabase.from("directs").select("id, company_id, investment_date, round, instrument"),
   ]);
+  console.info("[ingest] reference data loaded", {
+    funds: funds?.length ?? 0,
+    companies: companies?.length ?? 0,
+    directs: directs?.length ?? 0,
+  });
   const fundsByName = new Map((funds ?? []).map((f) => [norm(f.name), f.id]));
   const companiesByName = new Map((companies ?? []).map((c) => [norm(c.legal_name), c.id]));
 
@@ -87,6 +115,18 @@ export async function ingestWorkbook(
     .from("underlying_holdings")
     .delete()
     .eq("quarter_id", quarterId);
+  console.info("[ingest] underlying delete result", {
+    quarterId,
+    rowCount: summary.underlyingBefore,
+    error: delErr
+      ? {
+          message: delErr.message,
+          details: delErr.details,
+          hint: delErr.hint,
+          code: delErr.code,
+        }
+      : null,
+  });
   if (delErr) throw new Error(`Failed to clear underlying_holdings: ${delErr.message}`);
 
   // Pre-resolve any missing companies in a serial loop so we don't race.
@@ -160,6 +200,11 @@ export async function ingestWorkbook(
       );
       throw new Error(`Underlying insert chunk ${i / chunkSize} failed: ${error.message}`);
     }
+    console.info("[ingest] underlying insert result", {
+      chunkIndex: i / chunkSize,
+      rowCount: slice.length,
+      error: null,
+    });
     summary.underlyingInserted += slice.length;
   }
 
@@ -204,6 +249,17 @@ export async function ingestWorkbook(
     const { error: upErr } = await supabase
       .from("direct_quarter_snapshots")
       .upsert(dqsRows as any, { onConflict: "direct_id,quarter_id" });
+    console.info("[ingest] direct snapshot upsert result", {
+      rowCount: dqsRows.length,
+      error: upErr
+        ? {
+            message: upErr.message,
+            details: upErr.details,
+            hint: upErr.hint,
+            code: upErr.code,
+          }
+        : null,
+    });
     if (upErr) throw new Error(`direct_quarter_snapshots upsert failed: ${upErr.message}`);
     summary.directsSnapshotsUpserted = dqsRows.length;
   }
@@ -213,6 +269,8 @@ export async function ingestWorkbook(
     .select("id", { count: "exact", head: true })
     .eq("quarter_id", quarterId);
   summary.directsSnapshotsAfter = dqsAfter ?? 0;
+
+  console.info("[ingest] final summary", summary);
 
   return summary;
 }
