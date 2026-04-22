@@ -54,8 +54,10 @@ export const UNDERLYING_FIELDS = [
 const fmtDate = (d: string | null | undefined): string => (d ? d.slice(0, 10) : "");
 const compositeDirectKey = (name: string, date: string | null) =>
   `${norm(name)}||${fmtDate(date)}`;
-const compositeUnderlyingKey = (name: string, fund: string, date: string | null) =>
-  `${norm(name)}||${norm(fund)}||${fmtDate(date)}`;
+const compositeUnderlyingKey = (name: string, fund: string, date: string | null, trancheSeq: number | null | undefined) =>
+  `${norm(name)}||${norm(fund)}||${fmtDate(date)}||${trancheSeq ?? 1}`;
+const underlyingIdentity = (company: string, fund: string, date: string | null, trancheSeq: number | null | undefined) =>
+  `${company} · ${fund} · ${fmtDate(date)}${(trancheSeq ?? 1) > 1 ? ` · #${trancheSeq}` : ""}`;
 
 const ratio = (num: number | null | undefined, den: number | null | undefined): number | null => {
   if (num == null || den == null) return null;
@@ -356,7 +358,7 @@ export async function runReconciliation(
     const co = companiesById.get(h.company_id);
     const fd = fundsById.get(h.fund_id);
     if (!co || !fd) continue;
-    const key = compositeUnderlyingKey(co.legal_name, fd.name, h.investment_date);
+    const key = compositeUnderlyingKey(co.legal_name, fd.name, h.investment_date, h.tranche_seq);
     uhByKey.set(key, h);
   }
   const seenUhIds = new Set<string>();
@@ -392,10 +394,10 @@ export async function runReconciliation(
 
   for (const u of parsed.underlying) {
     // Parser already canonicalised u.fundName via resolveFundName.
-    const key = compositeUnderlyingKey(u.companyName, u.fundName, u.date);
+    const key = compositeUnderlyingKey(u.companyName, u.fundName, u.date, u.trancheSeq);
     const matched = uhByKey.get(key);
     if (matched) seenUhIds.add(matched.id);
-    const ident = `${u.companyName} · ${u.fundName} · ${fmtDate(u.date)}`;
+    const ident = underlyingIdentity(u.companyName, u.fundName, u.date, u.trancheSeq);
     const sys = {
       date: matched?.investment_date ?? null,
       investmentCost: matched?.fund_cost_usd ?? null,
@@ -413,7 +415,7 @@ export async function runReconciliation(
     if (seenUhIds.has(h.id)) continue;
     const co = companiesById.get(h.company_id);
     const fd = fundsById.get(h.fund_id);
-    const ident = `${co?.legal_name ?? "?"} · ${fd?.name ?? "?"} · ${fmtDate(h.investment_date)}`;
+    const ident = underlyingIdentity(co?.legal_name ?? "?", fd?.name ?? "?", h.investment_date, h.tranche_seq);
     const sys = {
       date: h.investment_date,
       investmentCost: h.fund_cost_usd ?? null,
