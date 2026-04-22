@@ -61,6 +61,7 @@ export interface ParsedDirectRow {
 export interface ParsedUnderlyingRow {
   companyName: string;
   fundName: string;
+  trancheSeq: number;
   status: string | null;
   date: string | null;
   instrument: string | null;
@@ -287,6 +288,9 @@ function colIdx(map: HeaderMap, aliases: string[]): number {
   return -1;
 }
 
+const trancheKey = (fund: string, company: string, date: string | null): string =>
+  `${normHeader(fund)}||${normHeader(company)}||${date ?? ""}`;
+
 const cellAt = (row: unknown[], idx: number): unknown =>
   idx < 0 || idx >= row.length ? null : row[idx];
 
@@ -473,22 +477,32 @@ function parseUnderlyingSheet(ws: XLSX.WorkSheet): {
   const cTwhPct = colIdx(map, ["TWH %", "TWH Ownership %", "TWH%"]);
   const cTwhCost = colIdx(map, ["TWH Cost"]);
   const cTwhFmv = colIdx(map, ["TWH FMV"]);
+  // The 1Q25 workbook labels both col M and col N as "TWH Proceeds";
+  // buildHeaderMap keeps the first occurrence, so this intentionally reads
+  // col M only. Col N is actually TWH MOIC and is ignored for now.
   const cTwhProceeds = colIdx(map, ["TWH Proceeds"]);
 
   const out: ParsedUnderlyingRow[] = [];
+  const trancheCounts = new Map<string, number>();
   for (let i = headerRow + 1; i < rows.length; i++) {
     const r = rows[i] ?? [];
     const name = str(cellAt(r, cName));
     const fund = str(cellAt(r, cFund));
     if (!name || !fund) continue;
     if (isSectionLabel(name) || isSectionLabel(fund)) continue;
+    const canonicalFund = resolveFundName(fund);
+    const date = dateStr(cellAt(r, cDate), `Underl.Date row ${i + 1}`);
+    const key = trancheKey(canonicalFund, name, date);
+    const trancheSeq = (trancheCounts.get(key) ?? 0) + 1;
+    trancheCounts.set(key, trancheSeq);
     out.push({
       companyName: name,
       // Canonicalise xlsx fund short names ("Cantos") -> DB legal_name
       // ("Cantos Ventures IV, LP") so identity match works downstream.
-      fundName: resolveFundName(fund),
+      fundName: canonicalFund,
+      trancheSeq,
       status: str(cellAt(r, cStatus)),
-      date: dateStr(cellAt(r, cDate), `Underl.Date row ${i + 1}`),
+      date,
       instrument: str(cellAt(r, cInstrument)),
       round: str(cellAt(r, cRound)),
       investmentCost: num(cellAt(r, cInvCost)),
