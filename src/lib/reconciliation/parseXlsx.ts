@@ -39,6 +39,10 @@ export interface ParsedFundRow {
   twhValue: number | null;
   fundTotalNav: number | null;
   twhNav: number | null;
+  tvpi: number | null;
+  dpi: number | null;
+  moic: number | null;
+  irr: number | null;
 }
 
 export interface ParsedDirectRow {
@@ -355,6 +359,10 @@ function parseFundsSheet(ws: XLSX.WorkSheet): { rows: ParsedFundRow[]; headerRow
   const cTwhValue = colIdx(map, ["TWH Value"]);
   const cNav = colIdx(map, ["NAV", "Fund NAV"]);
   const cTwhNav = colIdx(map, ["TWH NAV"]);
+  const cTvpi = colIdx(map, ["TVPI"]);
+  const cDpi = colIdx(map, ["DPI"]);
+  const cMoic = colIdx(map, ["MOIC"]);
+  const cIrr = colIdx(map, ["IRR"]);
 
   const out: ParsedFundRow[] = [];
   for (let i = headerRow + 1; i < rows.length; i++) {
@@ -379,6 +387,10 @@ function parseFundsSheet(ws: XLSX.WorkSheet): { rows: ParsedFundRow[]; headerRow
       twhValue: num(cellAt(r, cTwhValue)),
       fundTotalNav: num(cellAt(r, cNav)),
       twhNav: num(cellAt(r, cTwhNav)),
+      tvpi: num(cellAt(r, cTvpi)),
+      dpi: num(cellAt(r, cDpi)),
+      moic: num(cellAt(r, cMoic)),
+      irr: num(cellAt(r, cIrr)),
     });
   }
   return { rows: out, headerRow };
