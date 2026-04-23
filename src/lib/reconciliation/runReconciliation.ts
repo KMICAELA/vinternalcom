@@ -395,6 +395,9 @@ export async function runReconciliation(
   console.log("[recon] First 3 keys in uhByKey:", [...uhByKey.keys()].slice(0, 3));
   const seenUhIds = new Set<string>();
   const uhIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
+  const xlsxKeysArray = parsed.underlying.map((u) =>
+    compositeUnderlyingKey(u.companyName, u.fundName, u.date, u.trancheSeq),
+  );
 
   const buildUhFields = (
     src: {
@@ -424,10 +427,30 @@ export async function runReconciliation(
   const uhMoicSys = (cost: number | null, fmv: number | null, proc: number | null): number | null =>
     ratio(sumOrNull(fmv, proc), cost);
 
-  for (const u of parsed.underlying) {
+  for (const [index, u] of parsed.underlying.entries()) {
     // Parser already canonicalised u.fundName via resolveFundName.
-    const key = compositeUnderlyingKey(u.companyName, u.fundName, u.date, u.trancheSeq);
-    const matched = uhByKey.get(key);
+    const xlsxKey = xlsxKeysArray[index];
+    if (index === 0) {
+      const xlsxRow = u as typeof u & { investmentDate?: string | null };
+      console.log(
+        "[recon] xlsx first row raw:",
+        JSON.stringify({
+          companyName: xlsxRow.companyName,
+          fund: xlsxRow.fundName,
+          date: xlsxRow.investmentDate ?? xlsxRow.date,
+          dateType: typeof (xlsxRow.investmentDate ?? xlsxRow.date),
+          trancheSeq: xlsxRow.trancheSeq,
+        }),
+      );
+      console.log("[recon] xlsx key:", xlsxKey);
+      console.log("[recon] key found in uhByKey?", uhByKey.has(xlsxKey));
+      console.log(
+        "[recon] DB expected key:",
+        "agrippa industries inc.||lowercarbon 421.0 parallel fund, lp||2024-07-29||1",
+      );
+      console.log("[recon] First 3 xlsx-side keys:", xlsxKeysArray.slice(0, 3));
+    }
+    const matched = uhByKey.get(xlsxKey);
     if (matched) seenUhIds.add(matched.id);
     const ident = underlyingIdentity(u.companyName, u.fundName, u.date, u.trancheSeq);
     const sys = {
