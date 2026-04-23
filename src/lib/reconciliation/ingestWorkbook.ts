@@ -294,6 +294,9 @@ async function replaceUnderlyingHoldings(
   const chunkSize = 500;
   for (let i = 0; i < rows.length; i += chunkSize) {
     const slice = rows.slice(i, i + chunkSize);
+    if (i === 0 && slice[0]) {
+      console.log("[ingest] first underlying_holdings upsert payload", JSON.stringify(slice[0], null, 2));
+    }
     const { data, error } = await supabase.from("underlying_holdings").insert(slice as any).select("id");
     console.info("[ingest] underlying insert result", { chunkIndex: i / chunkSize, rowCount: data?.length ?? 0, error });
     if (error) {
