@@ -62,17 +62,21 @@ async function upsertCompanies(parsed: ParsedWorkbook): Promise<Map<string, stri
 }
 
 async function upsertFunds(parsed: ParsedWorkbook): Promise<{ fundsByName: Map<string, string>; insertedCount: number }> {
-  const names = new Map<string, string>();
+  console.info("[ingest] first parsed fund row", parsed.funds[0] ?? null);
+  const fundsByCanonicalName = new Map<string, { name: string; startDate: string | null }>();
   for (const f of parsed.funds) {
     const name = cleanName(resolveFundName(f.fundName));
-    if (name) names.set(norm(name), name);
+    if (name) fundsByCanonicalName.set(norm(name), { name, startDate: f.startDate ?? null });
   }
   for (const u of parsed.underlying) {
     const name = cleanName(resolveFundName(u.fundName));
-    if (name) names.set(norm(name), name);
+    if (name && !fundsByCanonicalName.has(norm(name))) fundsByCanonicalName.set(norm(name), { name, startDate: null });
   }
 
-  const payload = [...names.values()].map((name) => ({ name }));
+  const payload = [...fundsByCanonicalName.values()].map(({ name, startDate }) => ({
+    name,
+    start_date: startDate,
+  }));
   let insertedCount = 0;
   if (payload.length > 0) {
     const { data, error } = await supabase
@@ -87,7 +91,7 @@ async function upsertFunds(parsed: ParsedWorkbook): Promise<{ fundsByName: Map<s
   const { data: funds, error: selectError } = await supabase
     .from("funds")
     .select("id, name")
-    .in("name", [...names.values()]);
+    .in("name", [...fundsByCanonicalName.values()].map((f) => f.name));
   if (selectError) throw new Error(`funds select failed: ${selectError.message}`);
 
   return { fundsByName: new Map((funds ?? []).map((f) => [norm(f.name), f.id])), insertedCount };
