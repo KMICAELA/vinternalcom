@@ -82,6 +82,15 @@ export async function runReconciliation(
   quarterId: string,
   quarterLabel: string,
 ): Promise<ReconciliationResult> {
+  console.log("[recon] quarterId param:", quarterId);
+  console.log("[recon] quarterId type:", typeof quarterId);
+  const quarterLookupRes = await supabase
+    .from("quarters")
+    .select("label")
+    .eq("id", quarterId)
+    .maybeSingle();
+  console.log("[recon] resolved quarter label for this id:", quarterLookupRes.data?.label ?? null);
+
   const sections: SectionResult[] = [];
 
   // ===== FUNDS =====
@@ -97,6 +106,7 @@ export async function runReconciliation(
       )
       .eq("quarter_id", quarterId),
   ]);
+  console.log("[recon] fundQuarterSnapshotsRes rows:", fqsRes.data?.length, "error:", fqsRes.error);
   const funds = fundsRes.data ?? [];
   const commits = new Map((commitRes.data ?? []).map((c) => [c.fund_id, c]));
   const fqs = new Map((fqsRes.data ?? []).map((s) => [s.fund_id, s]));
@@ -241,9 +251,11 @@ export async function runReconciliation(
       .eq("quarter_id", quarterId),
     supabase.from("companies").select("id, legal_name"),
   ]);
+  console.log("[recon] directQuarterSnapshotsRes rows:", dqsRes.data?.length, "error:", dqsRes.error);
   const dqs = new Map((dqsRes.data ?? []).map((d) => [d.direct_id, d]));
   const companies = companiesRes.data ?? [];
   const companiesById = new Map(companies.map((c) => [c.id, c]));
+  console.log("[recon] companiesById size:", companiesById.size);
 
   const inScopeDirectIds = Array.from(dqs.keys());
   const directsRes = inScopeDirectIds.length
@@ -356,6 +368,7 @@ export async function runReconciliation(
     .from("underlying_holdings")
     .select("*")
     .eq("quarter_id", quarterId);
+  console.log("[recon] uhRes rows:", uhRes.data?.length, "error:", uhRes.error);
   const uh = (uhRes.data ?? []) as any[];
   const fundsById = new Map(funds.map((f) => [f.id, f]));
   const uhByKey = new Map<string, any>();
@@ -366,6 +379,20 @@ export async function runReconciliation(
     const key = compositeUnderlyingKey(co.legal_name, fd.name, h.investment_date, h.tranche_seq);
     uhByKey.set(key, h);
   }
+  console.log("[recon] fundsById size:", fundsById.size);
+  console.log("[recon] uhByKey size:", uhByKey.size);
+  console.log(
+    "[recon] Agrippa key lookup:",
+    uhByKey.has(
+      compositeUnderlyingKey(
+        "Agrippa Industries Inc.",
+        "Lowercarbon 421.0 Parallel Fund, LP",
+        "2024-07-29",
+        1,
+      ),
+    ),
+  );
+  console.log("[recon] First 3 keys in uhByKey:", [...uhByKey.keys()].slice(0, 3));
   const seenUhIds = new Set<string>();
   const uhIdentityRows: Parameters<typeof buildSectionResult>[2] = [];
 
