@@ -427,9 +427,13 @@ export async function runReconciliation(
   const uhMoicSys = (cost: number | null, fmv: number | null, proc: number | null): number | null =>
     ratio(sumOrNull(fmv, proc), cost);
 
+  console.log("[recon] BUILD-MARKER agrippa-diag-v2", { totalXlsxRows: parsed.underlying.length });
   for (const [index, u] of parsed.underlying.entries()) {
     // Parser already canonicalised u.fundName via resolveFundName.
     const xlsxKey = xlsxKeysArray[index];
+    if (typeof u.companyName === "string" && u.companyName.toLowerCase().includes("agrippa")) {
+      console.log("[recon] xlsx loop hit Agrippa at index", index, "companyName=", JSON.stringify(u.companyName));
+    }
     if (index === 0) {
       const xlsxRow = u as typeof u & { investmentDate?: string | null };
       console.log(
