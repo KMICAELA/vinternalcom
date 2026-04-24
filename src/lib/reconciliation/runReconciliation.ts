@@ -468,7 +468,7 @@ export async function runReconciliation(
       twhFmv: matched?.twh_fmv_usd ?? null,
       twhProceeds: matched?.twh_proceeds_usd ?? null,
     };
-    if (u.companyName === "Agrippa Industries Inc.") {
+    if (typeof u.companyName === "string" && u.companyName.toLowerCase().includes("agrippa")) {
       console.log("[recon] Agrippa matched DB row:", JSON.stringify(matched, null, 2));
       console.log("[recon] Agrippa xlsx row:", JSON.stringify(u, null, 2));
       console.log("[recon] Agrippa sys object passed to comparator:", JSON.stringify(sys, null, 2));
