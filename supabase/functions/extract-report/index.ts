@@ -283,7 +283,9 @@ serve(async (req) => {
       };
       return new Response(
         JSON.stringify({ draft, source_document_id: null, dry_run: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: extractionError ? 422 : 200 },
+        // Sandbox failures are data/results, not app errors. Return 200 so the UI can
+        // show the failed file inline without triggering a runtime error overlay.
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
     }
 

@@ -67,6 +67,10 @@ export interface ExtractionResult {
   sourceType: SourceType;
 }
 
+const RATE_LIMIT_RETRY_DELAYS_MS = [5000, 10000];
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * Run the AI extraction edge function in dry-run mode (no DB writes).
  * Used by the admin extraction sandbox to test extraction accuracy without touching live data.
@@ -97,36 +101,45 @@ export async function runExtractFile(opts: {
     body.email_text = text;
   }
 
-  const { data, error } = await supabase.functions.invoke("extract-report", { body });
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRY_DELAYS_MS.length; attempt += 1) {
+    const { data, error } = await supabase.functions.invoke("extract-report", { body });
 
-  if (error) {
-    // 422 returns the draft inside the error context
-    const ctx = (error as any).context;
-    let msg = error.message ?? "Extraction failed";
-    try {
-      const respText = await ctx?.text?.();
-      if (respText) {
-        const j = JSON.parse(respText);
-        if (j?.draft) {
-          return {
-            payload: j.draft.normalized_payload ?? null,
-            error: j.draft.error_message ?? msg,
-            sourceType,
-          };
+    let result: ExtractionResult;
+    if (error) {
+      const ctx = (error as any).context;
+      let msg = error.message ?? "Extraction failed";
+      try {
+        const respText = await ctx?.text?.();
+        if (respText) {
+          const j = JSON.parse(respText);
+          if (j?.draft) {
+            result = {
+              payload: j.draft.normalized_payload ?? null,
+              error: j.draft.error_message ?? msg,
+              sourceType,
+            };
+          } else {
+            result = { payload: null, error: j?.error ?? msg, sourceType };
+          }
+        } else {
+          result = { payload: null, error: msg, sourceType };
         }
-        if (j?.error) msg = j.error;
+      } catch {
+        result = { payload: null, error: msg, sourceType };
       }
-    } catch {
-      /* ignore */
+    } else {
+      const draft = data?.draft;
+      result = draft
+        ? { payload: draft.normalized_payload ?? null, error: draft.error_message ?? null, sourceType }
+        : { payload: null, error: "No draft returned", sourceType };
     }
-    return { payload: null, error: msg, sourceType };
+
+    if (result.error === "rate_limited" && attempt < RATE_LIMIT_RETRY_DELAYS_MS.length) {
+      await delay(RATE_LIMIT_RETRY_DELAYS_MS[attempt]);
+      continue;
+    }
+    return result;
   }
 
-  const draft = data?.draft;
-  if (!draft) return { payload: null, error: "No draft returned", sourceType };
-  return {
-    payload: draft.normalized_payload ?? null,
-    error: draft.error_message ?? null,
-    sourceType,
-  };
+  return { payload: null, error: "Extraction failed", sourceType };
 }

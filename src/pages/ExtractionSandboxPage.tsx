@@ -72,6 +72,8 @@ type SandboxFile = {
   sourceType?: SourceType;
 };
 
+const EXTRACTION_SPACING_MS = 2500;
+
 // Live DB compare snapshots per fund (and per direct company) for the chosen quarter
 type LiveFundSnap = {
   twh_contributions_usd: number;
@@ -98,6 +100,8 @@ const sourceIcon = (t?: SourceType) =>
 
 const numOrNull = (v: number | null | undefined): number | null =>
   v === null || v === undefined || Number.isNaN(v) ? null : Number(v);
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 // Merge fund-level fields from multiple files for the same fund: last-non-null wins
 function mergeFundFields(payloads: ExtractedPayload[]): {
@@ -280,20 +284,33 @@ export default function ExtractionSandboxPage() {
   async function runOne(f: SandboxFile) {
     setFiles((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: "extracting", error: undefined } : x)));
     const fundIdForApi = f.fundId === DIRECT_TAG ? null : f.fundId;
-    const res = await runExtractFile({ file: f.file, fundId: fundIdForApi, quarterId });
-    setFiles((prev) =>
-      prev.map((x) =>
-        x.id === f.id
-          ? {
-              ...x,
-              status: res.error && !res.payload ? "error" : "done",
-              payload: res.payload ?? undefined,
-              error: res.error ?? undefined,
-              sourceType: res.sourceType,
-            }
-          : x,
-      ),
-    );
+    try {
+      const res = await runExtractFile({ file: f.file, fundId: fundIdForApi, quarterId });
+      setFiles((prev) =>
+        prev.map((x) =>
+          x.id === f.id
+            ? {
+                ...x,
+                status: res.error && !res.payload ? "error" : "done",
+                payload: res.payload ?? undefined,
+                error: res.error ?? undefined,
+                sourceType: res.sourceType,
+              }
+            : x,
+        ),
+      );
+      return res;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Extraction failed";
+      setFiles((prev) =>
+        prev.map((x) =>
+          x.id === f.id
+            ? { ...x, status: "error", error: message }
+            : x,
+        ),
+      );
+      return { payload: null, error: message, sourceType: f.sourceType };
+    }
   }
 
   async function runAllPending() {
@@ -302,11 +319,17 @@ export default function ExtractionSandboxPage() {
       toast.error("Nothing to extract — tag each file with a fund first");
       return;
     }
-    // Sequential to avoid rate limits
-    for (const f of pending) {
-      await runOne(f);
+    let failed = 0;
+    for (const [index, f] of pending.entries()) {
+      if (index > 0) await wait(EXTRACTION_SPACING_MS);
+      const res = await runOne(f);
+      if (res.error && !res.payload) failed += 1;
     }
-    toast.success(`Extracted ${pending.length} file${pending.length === 1 ? "" : "s"}`);
+    if (failed > 0) {
+      toast.warning(`Extraction finished: ${pending.length - failed} succeeded, ${failed} failed`);
+    } else {
+      toast.success(`Extracted ${pending.length} file${pending.length === 1 ? "" : "s"}`);
+    }
   }
 
   // ──────────────── Aggregations ────────────────
