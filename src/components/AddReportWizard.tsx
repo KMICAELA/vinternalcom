@@ -255,7 +255,8 @@ export default function AddReportWizard({
     setBusy(true);
     setExtractionError(null);
     try {
-      const body: any = { source_type: sourceType, fund_id: fundId, quarter_id: quarterId };
+      const realQuarterId = await ensureRealQuarterId();
+      const body: any = { source_type: sourceType, fund_id: fundId, quarter_id: realQuarterId };
       if (sourceType === "pdf" && pdfFile) {
         body.file_name = pdfFile.name;
         body.pdf_base64 = await fileToBase64(pdfFile);
