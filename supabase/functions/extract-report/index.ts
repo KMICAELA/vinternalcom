@@ -194,21 +194,25 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Build a placeholder source_documents row so the draft has a valid FK.
-    const { data: sourceDoc, error: srcErr } = await supabase
-      .from("source_documents")
-      .insert({
-        fund_id: fund_id ?? null,
-        quarter_id: quarter_id ?? null,
-        doc_type: source_type === "pdf" ? "pdf_report" : source_type === "excel" ? "excel_report" : "email_report",
-        original_filename: file_name ?? null,
-        storage_path: `inline/${source_type}/${Date.now()}`,
-        status: "extracting",
-      })
-      .select("id")
-      .single();
-    if (srcErr) throw new Error(`source_documents insert failed: ${srcErr.message}`);
-    const source_document_id = sourceDoc.id as string;
+    // In dry_run mode (sandbox), skip ALL DB writes — no source_documents, no extraction_drafts.
+    let source_document_id: string | null = null;
+    if (!dry_run) {
+      // Build a placeholder source_documents row so the draft has a valid FK.
+      const { data: sourceDoc, error: srcErr } = await supabase
+        .from("source_documents")
+        .insert({
+          fund_id: fund_id ?? null,
+          quarter_id: quarter_id ?? null,
+          doc_type: source_type === "pdf" ? "pdf_report" : source_type === "excel" ? "excel_report" : "email_report",
+          original_filename: file_name ?? null,
+          storage_path: `inline/${source_type}/${Date.now()}`,
+          status: "extracting",
+        })
+        .select("id")
+        .single();
+      if (srcErr) throw new Error(`source_documents insert failed: ${srcErr.message}`);
+      source_document_id = sourceDoc.id as string;
+    }
 
     // Build user content per source type.
     let userBlocks: unknown[] = [];
