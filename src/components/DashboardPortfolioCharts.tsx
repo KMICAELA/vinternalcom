@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import {
-  ResponsiveContainer,
   BarChart,
   Bar,
   XAxis,
@@ -11,6 +10,7 @@ import {
   Cell,
   PieChart,
   Pie,
+  LabelList,
 } from "recharts";
 import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { AlertTriangle } from "lucide-react";
