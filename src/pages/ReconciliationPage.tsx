@@ -189,7 +189,17 @@ const ReconciliationPage = () => {
           Audit a TWH-1 Portfolio Metrics workbook against the live database for the selected
           quarter. Tolerances: $0.01 currency, 0.0001 ratios, 10 bps IRR.
         </p>
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-100/90">
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+          <div>
+            <span className="font-medium text-amber-200">Backfill order matters.</span>{" "}
+            When re-ingesting historical workbooks, run them <span className="font-mono">1Q25 → 2Q25 → 3Q25</span>{" "}
+            in chronological order. Inventory and Port. Comments fields (region, type, theme,
+            commentary) are upserted on each run, so the most recent quarter wins.
+          </div>
+        </div>
       </div>
+
 
       {/* Upload + run */}
       <Card className="p-6 bg-card border-border">
