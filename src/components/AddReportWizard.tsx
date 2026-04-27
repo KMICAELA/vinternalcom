@@ -399,7 +399,11 @@ export default function AddReportWizard({
                 <Select value={quarterId} onValueChange={setQuarterId}>
                   <SelectTrigger><SelectValue placeholder="Select quarter" /></SelectTrigger>
                   <SelectContent>
-                    {quarters.map((q) => <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>)}
+                    {quarters.map((q) => (
+                      <SelectItem key={q.id} value={q.id}>
+                        {q.label}{q.isFuture ? " · new" : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
