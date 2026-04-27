@@ -183,6 +183,7 @@ serve(async (req) => {
       excel_payload,         // { sheets: [{ name, rows: any[][] }] }
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
+      dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
     } = body ?? {};
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
@@ -193,21 +194,25 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Build a placeholder source_documents row so the draft has a valid FK.
-    const { data: sourceDoc, error: srcErr } = await supabase
-      .from("source_documents")
-      .insert({
-        fund_id: fund_id ?? null,
-        quarter_id: quarter_id ?? null,
-        doc_type: source_type === "pdf" ? "pdf_report" : source_type === "excel" ? "excel_report" : "email_report",
-        original_filename: file_name ?? null,
-        storage_path: `inline/${source_type}/${Date.now()}`,
-        status: "extracting",
-      })
-      .select("id")
-      .single();
-    if (srcErr) throw new Error(`source_documents insert failed: ${srcErr.message}`);
-    const source_document_id = sourceDoc.id as string;
+    // In dry_run mode (sandbox), skip ALL DB writes — no source_documents, no extraction_drafts.
+    let source_document_id: string | null = null;
+    if (!dry_run) {
+      // Build a placeholder source_documents row so the draft has a valid FK.
+      const { data: sourceDoc, error: srcErr } = await supabase
+        .from("source_documents")
+        .insert({
+          fund_id: fund_id ?? null,
+          quarter_id: quarter_id ?? null,
+          doc_type: source_type === "pdf" ? "pdf_report" : source_type === "excel" ? "excel_report" : "email_report",
+          original_filename: file_name ?? null,
+          storage_path: `inline/${source_type}/${Date.now()}`,
+          status: "extracting",
+        })
+        .select("id")
+        .single();
+      if (srcErr) throw new Error(`source_documents insert failed: ${srcErr.message}`);
+      source_document_id = sourceDoc.id as string;
+    }
 
     // Build user content per source type.
     let userBlocks: unknown[] = [];
@@ -263,6 +268,23 @@ serve(async (req) => {
       else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
       extractionError = e instanceof Error ? e.message : String(e);
+    }
+
+    // In dry_run mode, return the parsed payload without persisting anything.
+    if (dry_run) {
+      const draft = {
+        id: null,
+        status: extractionError ? "failed" : "pending_review",
+        normalized_payload: normalized,
+        fund_id: fund_id ?? null,
+        quarter_id: quarter_id ?? null,
+        source_type,
+        error_message: extractionError,
+      };
+      return new Response(
+        JSON.stringify({ draft, source_document_id: null, dry_run: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: extractionError ? 422 : 200 },
+      );
     }
 
     // Persist draft.
