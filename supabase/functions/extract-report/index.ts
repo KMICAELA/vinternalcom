@@ -183,6 +183,7 @@ serve(async (req) => {
       excel_payload,         // { sheets: [{ name, rows: any[][] }] }
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
+      dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
     } = body ?? {};
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
