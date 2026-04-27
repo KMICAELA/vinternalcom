@@ -43,7 +43,27 @@ type Payload = {
 };
 
 type Fund = { id: string; name: string; short_name: string | null };
-type Quarter = { id: string; label: string };
+type Quarter = { id: string; label: string; quarter_end_date?: string; fiscal_year?: number; fiscal_quarter?: number; isFuture?: boolean };
+
+// Given a quarter's fiscal_year + fiscal_quarter, produce the next N synthetic quarters.
+function nextQuarters(fy: number, fq: number, n: number): Quarter[] {
+  const out: Quarter[] = [];
+  let y = fy, q = fq;
+  for (let i = 0; i < n; i++) {
+    q += 1;
+    if (q > 4) { q = 1; y += 1; }
+    // Quarter end date = last day of quarter month (3, 6, 9, 12)
+    const endMonth = q * 3; // 1-indexed month
+    const endDate = new Date(y, endMonth, 0); // day 0 of next month = last day
+    const yyyy = endDate.getFullYear();
+    const mm = String(endDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(endDate.getDate()).padStart(2, "0");
+    const qed = `${yyyy}-${mm}-${dd}`;
+    const label = `${q}Q${String(y).slice(-2)}`;
+    out.push({ id: `new:${qed}`, label, quarter_end_date: qed, fiscal_year: y, fiscal_quarter: q, isFuture: true });
+  }
+  return out;
+}
 
 type DraftRow = {
   id: string;
