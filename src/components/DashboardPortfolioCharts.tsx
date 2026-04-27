@@ -12,7 +12,7 @@ import {
   Pie,
   LabelList,
 } from "recharts";
-import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer } from "@/components/ui/chart";
 import { AlertTriangle } from "lucide-react";
 import { INNOVATION_TYPES, normalizeInnovationType } from "@/lib/reconciliation/normalize";
 
@@ -193,7 +193,42 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
   }
 
   const total = rows.length;
-  const pct = (n: number) => (total > 0 ? `${Math.round((n / total) * 1000) / 10}%` : "0%");
+  const pct = (n: number) => (total > 0 ? `${Math.round((n / total) * 100)}%` : "0%");
+  const renderPieTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const p = payload[0];
+    const name = p?.name ?? p?.payload?.name;
+    const value = Number(p?.value ?? 0);
+    const color = p?.payload?.fill ?? p?.color;
+    return (
+      <div className="rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: color }} />
+          <span className="text-muted-foreground">{name}</span>
+          <span className="text-foreground tabular-nums">{value}</span>
+          <span className="text-muted-foreground tabular-nums">· {pct(value)}</span>
+        </div>
+      </div>
+    );
+  };
+  const renderBarTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const p = payload[0];
+    const row = p?.payload ?? {};
+    const name = row.name ?? p?.name;
+    const value = Number(p?.value ?? 0);
+    const color = p?.color ?? row.fill;
+    return (
+      <div className="rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: color }} />
+          <span className="text-muted-foreground">{name}</span>
+          <span className="text-foreground tabular-nums">{value}</span>
+          <span className="text-muted-foreground tabular-nums">· {pct(value)}</span>
+        </div>
+      </div>
+    );
+  };
   // Display label for industry: drop the redundant "Technology - " prefix.
   const shortIndustry = (name: string) =>
     name.startsWith("Technology - ") ? name.slice("Technology - ".length) : name;
@@ -246,7 +281,7 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
                 <Cell key={b.name} fill={TYPE_PALETTE[b.name] ?? PALETTE[0]} />
               ))}
             </Pie>
-            <Tooltip content={<ChartTooltipContent />} />
+            <Tooltip content={renderPieTooltip} />
           </PieChart>
         </ChartContainer>
         {renderDonutLegend(innovation.buckets, (b) => TYPE_PALETTE[b.name] ?? PALETTE[0])}
@@ -285,7 +320,7 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
               interval={0}
             />
             <Tooltip
-              content={<ChartTooltipContent nameKey="name" />}
+              content={renderBarTooltip}
               cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]}>
@@ -339,7 +374,7 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
                 />
               ))}
             </Pie>
-            <Tooltip content={<ChartTooltipContent />} />
+            <Tooltip content={renderPieTooltip} />
           </PieChart>
         </ChartContainer>
         {renderDonutLegend(region, (b, i) =>
