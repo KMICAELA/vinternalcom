@@ -104,8 +104,16 @@ export default function DashboardPage() {
               The full Funds, Directs, and Underlying Portfolio breakdowns are available from the sidebar.
             </div>
           </Card>
+
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+              Portfolio composition · {selected.label}
+            </h2>
+            <DashboardPortfolioCharts quarterId={selected.id} />
+          </div>
         </>
       )}
     </div>
   );
 }
+
