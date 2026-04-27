@@ -3,7 +3,8 @@ import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { fmtUSD, fmtMultiple, calcTvpi, calcDpi } from "@/lib/format";
-import { Briefcase, Target, TrendingUp, Wallet } from "lucide-react";
+import { Briefcase, TrendingUp, Wallet } from "lucide-react";
+import DashboardPortfolioCharts from "@/components/DashboardPortfolioCharts";
 
 type Totals = {
   twh_contributions: number;
