@@ -281,7 +281,7 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
                 <Cell key={b.name} fill={TYPE_PALETTE[b.name] ?? PALETTE[0]} />
               ))}
             </Pie>
-            <Tooltip content={<ChartTooltipContent />} />
+            <Tooltip content={renderPieTooltip} />
           </PieChart>
         </ChartContainer>
         {renderDonutLegend(innovation.buckets, (b) => TYPE_PALETTE[b.name] ?? PALETTE[0])}
