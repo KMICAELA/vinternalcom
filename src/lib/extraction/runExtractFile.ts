@@ -157,10 +157,15 @@ export async function runExtractFile(opts: {
         : { payload: null, error: "No draft returned", sourceType };
     }
 
-    if (result.error === "rate_limited" && attempt < RATE_LIMIT_RETRY_DELAYS_MS.length) {
-      await delay(RATE_LIMIT_RETRY_DELAYS_MS[attempt]);
+    const isRateLimited = !!result.error && result.error.startsWith("rate_limited");
+    if (isRateLimited && attempt < RATE_LIMIT_RETRY_DELAYS_MS.length) {
+      const hintMs = parseRetryAfterMs(result.error);
+      const waitMs = hintMs ?? RATE_LIMIT_RETRY_DELAYS_MS[attempt];
+      await delay(waitMs);
       continue;
     }
+    // Normalize error label so the UI shows a clean "rate_limited" without the hint suffix.
+    if (isRateLimited) result.error = "rate_limited";
     return result;
   }
 
