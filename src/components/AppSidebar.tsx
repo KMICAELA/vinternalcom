@@ -9,6 +9,7 @@ import {
   Wallet,
   Settings,
   ShieldCheck,
+  FlaskConical,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -42,7 +43,11 @@ export function AppSidebar() {
   const { role } = useAuth();
   const navItems =
     role === "admin"
-      ? [...items, { title: "Reconciliation", url: "/admin/reconciliation", icon: ShieldCheck }]
+      ? [
+          ...items,
+          { title: "Reconciliation", url: "/admin/reconciliation", icon: ShieldCheck },
+          { title: "Extraction Sandbox", url: "/admin/extraction-sandbox", icon: FlaskConical },
+        ]
       : items;
 
   return (
