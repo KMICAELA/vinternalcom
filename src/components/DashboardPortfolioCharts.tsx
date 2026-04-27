@@ -193,7 +193,42 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
   }
 
   const total = rows.length;
-  const pct = (n: number) => (total > 0 ? `${Math.round((n / total) * 1000) / 10}%` : "0%");
+  const pct = (n: number) => (total > 0 ? `${Math.round((n / total) * 100)}%` : "0%");
+  const renderPieTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const p = payload[0];
+    const name = p?.name ?? p?.payload?.name;
+    const value = Number(p?.value ?? 0);
+    const color = p?.payload?.fill ?? p?.color;
+    return (
+      <div className="rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: color }} />
+          <span className="text-muted-foreground">{name}</span>
+          <span className="text-foreground tabular-nums">{value}</span>
+          <span className="text-muted-foreground tabular-nums">· {pct(value)}</span>
+        </div>
+      </div>
+    );
+  };
+  const renderBarTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const p = payload[0];
+    const row = p?.payload ?? {};
+    const name = row.name ?? p?.name;
+    const value = Number(p?.value ?? 0);
+    const color = p?.color ?? row.fill;
+    return (
+      <div className="rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs shadow-md">
+        <div className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: color }} />
+          <span className="text-muted-foreground">{name}</span>
+          <span className="text-foreground tabular-nums">{value}</span>
+          <span className="text-muted-foreground tabular-nums">· {pct(value)}</span>
+        </div>
+      </div>
+    );
+  };
   // Display label for industry: drop the redundant "Technology - " prefix.
   const shortIndustry = (name: string) =>
     name.startsWith("Technology - ") ? name.slice("Technology - ".length) : name;
