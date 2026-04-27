@@ -67,10 +67,32 @@ export interface ExtractionResult {
   sourceType: SourceType;
 }
 
-// Exponential backoff for rate_limited responses: 2s, 4s, 8s (3 retries total).
-const RATE_LIMIT_RETRY_DELAYS_MS = [2000, 4000, 8000];
+// Exponential backoff for rate_limited responses: 15s, 30s, 60s (3 retries total).
+// These wait out Anthropic's per-minute ITPM window. If the 429 response includes
+// a retry-after hint (seconds or ISO timestamp), we honor that instead.
+const RATE_LIMIT_RETRY_DELAYS_MS = [15000, 30000, 60000];
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Parse Anthropic 429 hint. Format from edge function is "rate_limited[:hint]".
+// hint is either an integer number of seconds, or an ISO-8601 reset timestamp.
+function parseRetryAfterMs(errMsg: string | null | undefined): number | null {
+  if (!errMsg || !errMsg.startsWith("rate_limited")) return null;
+  const idx = errMsg.indexOf(":");
+  if (idx < 0) return null;
+  const hint = errMsg.slice(idx + 1).trim();
+  if (!hint) return null;
+  // numeric seconds
+  const asNum = Number(hint);
+  if (Number.isFinite(asNum) && asNum > 0) return Math.min(asNum * 1000, 90000);
+  // ISO timestamp
+  const t = Date.parse(hint);
+  if (Number.isFinite(t)) {
+    const ms = t - Date.now();
+    if (ms > 0) return Math.min(ms + 500, 90000);
+  }
+  return null;
+}
 
 /**
  * Run the AI extraction edge function in dry-run mode (no DB writes).
