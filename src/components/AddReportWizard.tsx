@@ -43,7 +43,27 @@ type Payload = {
 };
 
 type Fund = { id: string; name: string; short_name: string | null };
-type Quarter = { id: string; label: string };
+type Quarter = { id: string; label: string; quarter_end_date?: string; fiscal_year?: number; fiscal_quarter?: number; isFuture?: boolean };
+
+// Given a quarter's fiscal_year + fiscal_quarter, produce the next N synthetic quarters.
+function nextQuarters(fy: number, fq: number, n: number): Quarter[] {
+  const out: Quarter[] = [];
+  let y = fy, q = fq;
+  for (let i = 0; i < n; i++) {
+    q += 1;
+    if (q > 4) { q = 1; y += 1; }
+    // Quarter end date = last day of quarter month (3, 6, 9, 12)
+    const endMonth = q * 3; // 1-indexed month
+    const endDate = new Date(y, endMonth, 0); // day 0 of next month = last day
+    const yyyy = endDate.getFullYear();
+    const mm = String(endDate.getMonth() + 1).padStart(2, "0");
+    const dd = String(endDate.getDate()).padStart(2, "0");
+    const qed = `${yyyy}-${mm}-${dd}`;
+    const label = `${q}Q${String(y).slice(-2)}`;
+    out.push({ id: `new:${qed}`, label, quarter_end_date: qed, fiscal_year: y, fiscal_quarter: q, isFuture: true });
+  }
+  return out;
+}
 
 type DraftRow = {
   id: string;
@@ -135,10 +155,23 @@ export default function AddReportWizard({
     (async () => {
       const [{ data: f }, { data: q }] = await Promise.all([
         supabase.from("funds").select("id, name, short_name").eq("archived", false).order("name"),
-        supabase.from("quarters").select("id, label, quarter_end_date").order("quarter_end_date", { ascending: false }),
+        supabase.from("quarters").select("id, label, quarter_end_date, fiscal_year, fiscal_quarter").order("quarter_end_date", { ascending: false }),
       ]);
       setFunds(f ?? []);
-      setQuarters((q ?? []).map((x: any) => ({ id: x.id, label: x.label })));
+      const existing: Quarter[] = (q ?? []).map((x: any) => ({
+        id: x.id,
+        label: x.label,
+        quarter_end_date: x.quarter_end_date,
+        fiscal_year: x.fiscal_year,
+        fiscal_quarter: x.fiscal_quarter,
+      }));
+      // Synthesize the next 2 chronological quarters past the latest one
+      const latest = existing[0];
+      const synthetic = latest && latest.fiscal_year && latest.fiscal_quarter
+        ? nextQuarters(latest.fiscal_year, latest.fiscal_quarter, 2)
+        : [];
+      // Show synthetic first (most recent) then existing
+      setQuarters([...synthetic, ...existing]);
     })();
   }, [open]);
 
@@ -178,12 +211,52 @@ export default function AddReportWizard({
     return false;
   }, [sourceType, pdfFile, xlsxFile, emailText, emlFile, fundId, quarterId]);
 
+  // If quarterId is a synthetic "new:YYYY-MM-DD" placeholder, create the quarter row (or reuse if it
+  // already exists at that end-date), then return the real UUID. Updates local state so subsequent
+  // calls reuse the resolved id.
+  async function ensureRealQuarterId(): Promise<string> {
+    if (!quarterId.startsWith("new:")) return quarterId;
+    const synth = quarters.find((q) => q.id === quarterId);
+    if (!synth || !synth.quarter_end_date || !synth.fiscal_year || !synth.fiscal_quarter) {
+      throw new Error("Invalid synthetic quarter selection");
+    }
+    // Check if a row already exists at this quarter_end_date (race-safe)
+    const { data: existing } = await supabase
+      .from("quarters")
+      .select("id, label")
+      .eq("quarter_end_date", synth.quarter_end_date)
+      .maybeSingle();
+    let realId: string;
+    if (existing) {
+      realId = existing.id;
+    } else {
+      const { data: created, error: qErr } = await supabase
+        .from("quarters")
+        .insert({
+          label: synth.label,
+          fiscal_year: synth.fiscal_year,
+          fiscal_quarter: synth.fiscal_quarter,
+          quarter_end_date: synth.quarter_end_date,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (qErr) throw qErr;
+      realId = created.id;
+    }
+    // Swap synthetic out of local state, point selection at real id
+    setQuarters((prev) => prev.map((q) => (q.id === quarterId ? { ...q, id: realId, isFuture: false } : q)));
+    setQuarterId(realId);
+    return realId;
+  }
+
   async function runExtraction() {
     if (!canSubmitSource) return;
     setBusy(true);
     setExtractionError(null);
     try {
-      const body: any = { source_type: sourceType, fund_id: fundId, quarter_id: quarterId };
+      const realQuarterId = await ensureRealQuarterId();
+      const body: any = { source_type: sourceType, fund_id: fundId, quarter_id: realQuarterId };
       if (sourceType === "pdf" && pdfFile) {
         body.file_name = pdfFile.name;
         body.pdf_base64 = await fileToBase64(pdfFile);
@@ -239,10 +312,12 @@ export default function AddReportWizard({
     if (!draftId || !payload || !fundId || !quarterId) return;
     setBusy(true);
     try {
+      // Defensive: if user somehow lands here with a synthetic id (e.g. resumed draft), bootstrap it.
+      const realQuarterId = await ensureRealQuarterId();
       // Upsert fund_quarter_snapshots
       const snap = {
         fund_id: fundId,
-        quarter_id: quarterId,
+        quarter_id: realQuarterId,
         twh_contributions_usd: numOrZero(payload.twh_contributions_usd),
         twh_distributions_usd: numOrZero(payload.twh_distributions_usd),
         twh_nav_usd: numOrZero(payload.twh_nav_usd),
@@ -254,7 +329,7 @@ export default function AddReportWizard({
       const { data: existing } = await supabase
         .from("fund_quarter_snapshots")
         .select("id")
-        .eq("fund_id", fundId).eq("quarter_id", quarterId).maybeSingle();
+        .eq("fund_id", fundId).eq("quarter_id", realQuarterId).maybeSingle();
       const opSnap = existing
         ? supabase.from("fund_quarter_snapshots").update(snap).eq("id", existing.id)
         : supabase.from("fund_quarter_snapshots").insert(snap);
@@ -284,11 +359,11 @@ export default function AddReportWizard({
         const { data: existHold } = await supabase
           .from("underlying_holdings")
           .select("id")
-          .eq("fund_id", fundId).eq("quarter_id", quarterId).eq("company_id", companyId)
+          .eq("fund_id", fundId).eq("quarter_id", realQuarterId).eq("company_id", companyId)
           .maybeSingle();
         const row = {
           fund_id: fundId,
-          quarter_id: quarterId,
+          quarter_id: realQuarterId,
           company_id: companyId!,
           investment_date: h.investment_date || null,
           instrument: h.instrument || null,
@@ -366,7 +441,11 @@ export default function AddReportWizard({
                 <Select value={quarterId} onValueChange={setQuarterId}>
                   <SelectTrigger><SelectValue placeholder="Select quarter" /></SelectTrigger>
                   <SelectContent>
-                    {quarters.map((q) => <SelectItem key={q.id} value={q.id}>{q.label}</SelectItem>)}
+                    {quarters.map((q) => (
+                      <SelectItem key={q.id} value={q.id}>
+                        {q.label}{q.isFuture ? " · new" : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
