@@ -374,7 +374,7 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
                 />
               ))}
             </Pie>
-            <Tooltip content={<ChartTooltipContent />} />
+            <Tooltip content={renderPieTooltip} />
           </PieChart>
         </ChartContainer>
         {renderDonutLegend(region, (b, i) =>
