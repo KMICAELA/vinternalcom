@@ -155,10 +155,23 @@ export default function AddReportWizard({
     (async () => {
       const [{ data: f }, { data: q }] = await Promise.all([
         supabase.from("funds").select("id, name, short_name").eq("archived", false).order("name"),
-        supabase.from("quarters").select("id, label, quarter_end_date").order("quarter_end_date", { ascending: false }),
+        supabase.from("quarters").select("id, label, quarter_end_date, fiscal_year, fiscal_quarter").order("quarter_end_date", { ascending: false }),
       ]);
       setFunds(f ?? []);
-      setQuarters((q ?? []).map((x: any) => ({ id: x.id, label: x.label })));
+      const existing: Quarter[] = (q ?? []).map((x: any) => ({
+        id: x.id,
+        label: x.label,
+        quarter_end_date: x.quarter_end_date,
+        fiscal_year: x.fiscal_year,
+        fiscal_quarter: x.fiscal_quarter,
+      }));
+      // Synthesize the next 2 chronological quarters past the latest one
+      const latest = existing[0];
+      const synthetic = latest && latest.fiscal_year && latest.fiscal_quarter
+        ? nextQuarters(latest.fiscal_year, latest.fiscal_quarter, 2)
+        : [];
+      // Show synthetic first (most recent) then existing
+      setQuarters([...synthetic, ...existing]);
     })();
   }, [open]);
 
