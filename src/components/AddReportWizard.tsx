@@ -312,10 +312,12 @@ export default function AddReportWizard({
     if (!draftId || !payload || !fundId || !quarterId) return;
     setBusy(true);
     try {
+      // Defensive: if user somehow lands here with a synthetic id (e.g. resumed draft), bootstrap it.
+      const realQuarterId = await ensureRealQuarterId();
       // Upsert fund_quarter_snapshots
       const snap = {
         fund_id: fundId,
-        quarter_id: quarterId,
+        quarter_id: realQuarterId,
         twh_contributions_usd: numOrZero(payload.twh_contributions_usd),
         twh_distributions_usd: numOrZero(payload.twh_distributions_usd),
         twh_nav_usd: numOrZero(payload.twh_nav_usd),
