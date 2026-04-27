@@ -12,7 +12,7 @@ import {
   Pie,
   LabelList,
 } from "recharts";
-import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
+import { ChartContainer } from "@/components/ui/chart";
 import { AlertTriangle } from "lucide-react";
 import { INNOVATION_TYPES, normalizeInnovationType } from "@/lib/reconciliation/normalize";
 
