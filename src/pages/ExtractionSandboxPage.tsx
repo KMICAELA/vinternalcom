@@ -72,7 +72,11 @@ type SandboxFile = {
   sourceType?: SourceType;
 };
 
-const EXTRACTION_SPACING_MS = 2500;
+// Max number of extraction calls in flight at once. Anthropic's per-minute
+// token/request limits get hit fast when 9 PDFs fire simultaneously, so cap
+// concurrency at 2. The runExtractFile helper handles per-call retry/backoff
+// for rate_limited responses (2s → 4s → 8s, 3 retries).
+const EXTRACTION_CONCURRENCY = 2;
 
 // Live DB compare snapshots per fund (and per direct company) for the chosen quarter
 type LiveFundSnap = {
@@ -101,7 +105,7 @@ const sourceIcon = (t?: SourceType) =>
 const numOrNull = (v: number | null | undefined): number | null =>
   v === null || v === undefined || Number.isNaN(v) ? null : Number(v);
 
-const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 
 // Merge fund-level fields from multiple files for the same fund: last-non-null wins
 function mergeFundFields(payloads: ExtractedPayload[]): {
@@ -320,11 +324,21 @@ export default function ExtractionSandboxPage() {
       return;
     }
     let failed = 0;
-    for (const [index, f] of pending.entries()) {
-      if (index > 0) await wait(EXTRACTION_SPACING_MS);
-      const res = await runOne(f);
-      if (res.error && !res.payload) failed += 1;
-    }
+    // Concurrency-limited pool: at most EXTRACTION_CONCURRENCY runOne calls in flight.
+    let cursor = 0;
+    const worker = async () => {
+      while (true) {
+        const i = cursor++;
+        if (i >= pending.length) return;
+        const res = await runOne(pending[i]);
+        if (res.error && !res.payload) failed += 1;
+      }
+    };
+    const workers = Array.from(
+      { length: Math.min(EXTRACTION_CONCURRENCY, pending.length) },
+      () => worker(),
+    );
+    await Promise.all(workers);
     if (failed > 0) {
       toast.warning(`Extraction finished: ${pending.length - failed} succeeded, ${failed} failed`);
     } else {
