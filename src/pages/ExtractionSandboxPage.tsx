@@ -73,10 +73,17 @@ type SandboxFile = {
 };
 
 // Max number of extraction calls in flight at once. Anthropic's per-minute
-// token/request limits get hit fast when 9 PDFs fire simultaneously, so cap
-// concurrency at 2. The runExtractFile helper handles per-call retry/backoff
-// for rate_limited responses (2s → 4s → 8s, 3 retries).
-const EXTRACTION_CONCURRENCY = 2;
+// Anthropic's per-minute input-token (ITPM) limits get hit fast when multiple
+// large PDFs fire at once. PDFs are strictly sequential (1 at a time) since
+// each carries a heavy base64 payload; lighter email/excel sources can run
+// 2 in parallel. The runExtractFile helper handles per-call retry/backoff
+// (15s → 30s → 60s, honoring Anthropic retry-after headers when present).
+const PDF_CONCURRENCY = 1;
+const LIGHT_CONCURRENCY = 2;
+
+function isPdfFile(f: SandboxFile): boolean {
+  return /\.pdf$/i.test(f.file.name);
+}
 
 // Live DB compare snapshots per fund (and per direct company) for the chosen quarter
 type LiveFundSnap = {
@@ -324,21 +331,32 @@ export default function ExtractionSandboxPage() {
       return;
     }
     let failed = 0;
-    // Concurrency-limited pool: at most EXTRACTION_CONCURRENCY runOne calls in flight.
-    let cursor = 0;
-    const worker = async () => {
-      while (true) {
-        const i = cursor++;
-        if (i >= pending.length) return;
-        const res = await runOne(pending[i]);
-        if (res.error && !res.payload) failed += 1;
-      }
+    // Split into PDF queue (concurrency 1, heavy ITPM) and light queue (email/excel, concurrency 2).
+    const pdfQueue = pending.filter(isPdfFile);
+    const lightQueue = pending.filter((f) => !isPdfFile(f));
+
+    const runQueue = async (queue: SandboxFile[], concurrency: number) => {
+      let cursor = 0;
+      const worker = async () => {
+        while (true) {
+          const i = cursor++;
+          if (i >= queue.length) return;
+          const res = await runOne(queue[i]);
+          if (res.error && !res.payload) failed += 1;
+        }
+      };
+      const workers = Array.from(
+        { length: Math.min(concurrency, queue.length) },
+        () => worker(),
+      );
+      await Promise.all(workers);
     };
-    const workers = Array.from(
-      { length: Math.min(EXTRACTION_CONCURRENCY, pending.length) },
-      () => worker(),
-    );
-    await Promise.all(workers);
+
+    await Promise.all([
+      runQueue(pdfQueue, PDF_CONCURRENCY),
+      runQueue(lightQueue, LIGHT_CONCURRENCY),
+    ]);
+
     if (failed > 0) {
       toast.warning(`Extraction finished: ${pending.length - failed} succeeded, ${failed} failed`);
     } else {

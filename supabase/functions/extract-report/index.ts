@@ -154,7 +154,14 @@ async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: u
   });
   if (!resp.ok) {
     const t = await resp.text();
-    if (resp.status === 429) throw new Error("rate_limited");
+    if (resp.status === 429) {
+      // Surface Anthropic's recommended wait time so the client can honor ITPM throttling exactly.
+      const retryAfter = resp.headers.get("retry-after")
+        ?? resp.headers.get("anthropic-ratelimit-input-tokens-reset")
+        ?? resp.headers.get("anthropic-ratelimit-tokens-reset")
+        ?? "";
+      throw new Error(`rate_limited${retryAfter ? `:${retryAfter}` : ""}`);
+    }
     if (resp.status === 401 || resp.status === 403) throw new Error("auth_failed");
     throw new Error(`anthropic_error:${resp.status}:${t.slice(0, 500)}`);
   }
