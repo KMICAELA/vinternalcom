@@ -72,6 +72,8 @@ type SandboxFile = {
   sourceType?: SourceType;
 };
 
+const EXTRACTION_SPACING_MS = 2500;
+
 // Live DB compare snapshots per fund (and per direct company) for the chosen quarter
 type LiveFundSnap = {
   twh_contributions_usd: number;
@@ -98,6 +100,8 @@ const sourceIcon = (t?: SourceType) =>
 
 const numOrNull = (v: number | null | undefined): number | null =>
   v === null || v === undefined || Number.isNaN(v) ? null : Number(v);
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 // Merge fund-level fields from multiple files for the same fund: last-non-null wins
 function mergeFundFields(payloads: ExtractedPayload[]): {
