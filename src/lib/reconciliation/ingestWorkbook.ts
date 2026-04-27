@@ -319,6 +319,153 @@ async function replaceUnderlyingHoldings(
   }
 }
 
+/**
+ * Enrich the `companies` table with metadata from the Inventory and
+ * Port. Comments sheets. Inventory wins on overlap (region, type, theme,
+ * industry) since it is the structured classification sheet; Comments
+ * fills in narrative-only fields (what_they_do, target_market,
+ * tailwinds, challenges, stage, thesis_bucket).
+ *
+ * Innovation Type is clamped to the 3-value taxonomy via normalize.ts.
+ * Unmapped values surface in the IngestSummary so the operator can
+ * fix the source xlsx.
+ *
+ * Companies that don't already exist in the DB (i.e. not present in
+ * Funds/Directs/Underlying) are SKIPPED with a recorded reason. We
+ * don't want orphan rows that have no holdings yet show up in
+ * portfolio aggregates.
+ */
+async function upsertCompanyMetadata(
+  parsed: ParsedWorkbook,
+  companiesByName: Map<string, string>,
+  summary: IngestSummary,
+) {
+  // Index workbook rows by normalized company name. Inventory first so it wins.
+  const invByName = new Map<string, ParsedInventoryRow>();
+  for (const r of parsed.inventory) {
+    const key = norm(r.companyName);
+    if (key && !invByName.has(key)) invByName.set(key, r);
+  }
+  const commByName = new Map<string, ParsedCommentaryRow>();
+  for (const r of parsed.commentary) {
+    const key = norm(r.companyName);
+    if (key && !commByName.has(key)) commByName.set(key, r);
+  }
+
+  // Union of names from both sheets
+  const allNames = new Set<string>([...invByName.keys(), ...commByName.keys()]);
+
+  type Update = {
+    id: string;
+    commercial_name?: string | null;
+    url?: string | null;
+    status?: string | null;
+    region?: string[] | null;
+    type?: string[] | null;
+    theme?: string[] | null;
+    industry?: string[] | null;
+    stage?: string | null;
+    thesis_bucket?: string | null;
+    what_they_do?: string | null;
+    target_market?: string | null;
+    tailwinds?: string | null;
+    challenges?: string | null;
+    notes?: string | null;
+  };
+  const updates: Update[] = [];
+
+  for (const key of allNames) {
+    const companyId = companiesByName.get(key);
+    const inv = invByName.get(key);
+    const comm = commByName.get(key);
+    const displayName = inv?.companyName ?? comm?.companyName ?? key;
+    if (!companyId) {
+      summary.companiesEnrichmentSkipped.push({
+        reason: "Company not in Funds/Directs/Underlying — skipping enrichment",
+        companyName: displayName,
+      });
+      continue;
+    }
+
+    const u: Update = { id: companyId };
+
+    // Inventory-sourced fields (structured classification)
+    if (inv) {
+      if (inv.commercialName) u.commercial_name = inv.commercialName;
+      if (inv.url) u.url = inv.url;
+      if (inv.status) u.status = inv.status;
+      if (inv.region) u.region = splitMultiValue(inv.region);
+      if (inv.companyIndustry) u.industry = splitMultiValue(inv.companyIndustry);
+      if (inv.theme) u.theme = splitMultiValue(inv.theme);
+      if (inv.notes) u.notes = inv.notes;
+      if (inv.type) {
+        const { mapped, unmapped } = normalizeInnovationType(inv.type);
+        u.type = mapped;
+        if (unmapped.length > 0) {
+          summary.unmappedInnovationTypes.push({ companyName: displayName, raw: unmapped });
+        }
+      }
+    }
+
+    // Comments-sourced fields (Inventory wins where they overlap)
+    if (comm) {
+      if (comm.region && u.region === undefined) u.region = splitMultiValue(comm.region);
+      if (comm.theme && u.theme === undefined) u.theme = splitMultiValue(comm.theme);
+      if (comm.type && u.type === undefined) {
+        const { mapped, unmapped } = normalizeInnovationType(comm.type);
+        u.type = mapped;
+        if (unmapped.length > 0) {
+          summary.unmappedInnovationTypes.push({ companyName: displayName, raw: unmapped });
+        }
+      }
+      if (comm.stage) u.stage = comm.stage;
+      if (comm.thesis) u.thesis_bucket = comm.thesis;
+      if (comm.whatTheyDo) u.what_they_do = comm.whatTheyDo;
+      if (comm.targetMarket) u.target_market = comm.targetMarket;
+      if (comm.tailwinds) u.tailwinds = comm.tailwinds;
+      if (comm.challenges) u.challenges = comm.challenges;
+    }
+
+    // Skip if there's actually nothing to update beyond id
+    if (Object.keys(u).length <= 1) continue;
+    updates.push(u);
+  }
+
+  if (updates.length === 0) {
+    console.info("[ingest] company metadata: nothing to update");
+    return;
+  }
+
+  // Issue per-row updates so we don't clobber unrelated columns.
+  // Batched in parallel chunks for throughput.
+  const chunkSize = 25;
+  for (let i = 0; i < updates.length; i += chunkSize) {
+    const slice = updates.slice(i, i + chunkSize);
+    const results = await Promise.all(
+      slice.map(({ id, ...patch }) =>
+        supabase
+          .from("companies")
+          .update({ ...patch, commentary_updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .select("id")
+          .maybeSingle(),
+      ),
+    );
+    for (const r of results) {
+      if (r.error) {
+        console.error("[ingest] company metadata update error:", r.error.message);
+        continue;
+      }
+      if (r.data) summary.companiesEnriched += 1;
+    }
+  }
+  console.info("[ingest] company metadata enriched", {
+    enriched: summary.companiesEnriched,
+    skipped: summary.companiesEnrichmentSkipped.length,
+    unmappedTypes: summary.unmappedInnovationTypes.length,
+  });
+}
+
 export async function ingestWorkbook(parsed: ParsedWorkbook, quarterId: string): Promise<IngestSummary> {
   const summary: IngestSummary = {
     underlyingBefore: 0,
@@ -331,6 +478,9 @@ export async function ingestWorkbook(parsed: ParsedWorkbook, quarterId: string):
     directsSnapshotsAfter: 0,
     directsSnapshotsUpserted: 0,
     directsSkipped: [],
+    companiesEnriched: 0,
+    companiesEnrichmentSkipped: [],
+    unmappedInnovationTypes: [],
   };
 
   console.info("[ingest] start", {
@@ -338,6 +488,8 @@ export async function ingestWorkbook(parsed: ParsedWorkbook, quarterId: string):
     parsedFunds: parsed.funds.length,
     parsedDirects: parsed.directs.length,
     parsedUnderlying: parsed.underlying.length,
+    parsedInventory: parsed.inventory.length,
+    parsedCommentary: parsed.commentary.length,
   });
 
   summary.underlyingBefore = await getQuarterCount("underlying_holdings", quarterId);
@@ -362,9 +514,14 @@ export async function ingestWorkbook(parsed: ParsedWorkbook, quarterId: string):
   );
   await replaceUnderlyingHoldings(parsed, quarterId, fundsByName, companiesByName, summary);
 
+  // Enrich qualitative metadata from Inventory + Port. Comments AFTER all
+  // entity rows (companies/directs/underlying) exist, so we can match by id.
+  await upsertCompanyMetadata(parsed, companiesByName, summary);
+
   summary.underlyingAfter = await getQuarterCount("underlying_holdings", quarterId);
   summary.directsSnapshotsAfter = await getQuarterCount("direct_quarter_snapshots", quarterId);
 
   console.info("[ingest] final summary", summary);
   return summary;
 }
+
