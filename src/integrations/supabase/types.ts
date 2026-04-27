@@ -114,6 +114,7 @@ export type Database = {
           id: string
           industry: string[] | null
           legal_name: string
+          notes: string | null
           region: string[] | null
           sdg: string[] | null
           stage: string | null
@@ -123,7 +124,7 @@ export type Database = {
           target_market: string | null
           theme: string[] | null
           thesis_bucket: string | null
-          type: string | null
+          type: string[] | null
           updated_at: string
           url: string | null
           what_they_do: string | null
@@ -137,6 +138,7 @@ export type Database = {
           id?: string
           industry?: string[] | null
           legal_name: string
+          notes?: string | null
           region?: string[] | null
           sdg?: string[] | null
           stage?: string | null
@@ -146,7 +148,7 @@ export type Database = {
           target_market?: string | null
           theme?: string[] | null
           thesis_bucket?: string | null
-          type?: string | null
+          type?: string[] | null
           updated_at?: string
           url?: string | null
           what_they_do?: string | null
@@ -160,6 +162,7 @@ export type Database = {
           id?: string
           industry?: string[] | null
           legal_name?: string
+          notes?: string | null
           region?: string[] | null
           sdg?: string[] | null
           stage?: string | null
@@ -169,7 +172,7 @@ export type Database = {
           target_market?: string | null
           theme?: string[] | null
           thesis_bucket?: string | null
-          type?: string | null
+          type?: string[] | null
           updated_at?: string
           url?: string | null
           what_they_do?: string | null

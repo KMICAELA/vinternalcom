@@ -3,7 +3,8 @@ import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { fmtUSD, fmtMultiple, calcTvpi, calcDpi } from "@/lib/format";
-import { Briefcase, Target, TrendingUp, Wallet } from "lucide-react";
+import { Briefcase, TrendingUp, Wallet } from "lucide-react";
+import DashboardPortfolioCharts from "@/components/DashboardPortfolioCharts";
 
 type Totals = {
   twh_contributions: number;
@@ -103,8 +104,16 @@ export default function DashboardPage() {
               The full Funds, Directs, and Underlying Portfolio breakdowns are available from the sidebar.
             </div>
           </Card>
+
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+              Portfolio composition · {selected.label}
+            </h2>
+            <DashboardPortfolioCharts quarterId={selected.id} />
+          </div>
         </>
       )}
     </div>
   );
 }
+

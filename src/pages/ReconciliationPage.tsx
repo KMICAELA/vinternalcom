@@ -189,7 +189,17 @@ const ReconciliationPage = () => {
           Audit a TWH-1 Portfolio Metrics workbook against the live database for the selected
           quarter. Tolerances: $0.01 currency, 0.0001 ratios, 10 bps IRR.
         </p>
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-100/90">
+          <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+          <div>
+            <span className="font-medium text-amber-200">Backfill order matters.</span>{" "}
+            When re-ingesting historical workbooks, run them <span className="font-mono">1Q25 → 2Q25 → 3Q25</span>{" "}
+            in chronological order. Inventory and Port. Comments fields (region, type, theme,
+            commentary) are upserted on each run, so the most recent quarter wins.
+          </div>
+        </div>
       </div>
+
 
       {/* Upload + run */}
       <Card className="p-6 bg-card border-border">
@@ -264,6 +274,12 @@ const ReconciliationPage = () => {
               <span className="text-emerald-500">{ingestSummary.directsSnapshotsAfter}</span>{" "}
               ({ingestSummary.directsSnapshotsUpserted} upserted, {ingestSummary.directsSkipped.length} skipped)
             </div>
+            <div>
+              Companies enriched (Inventory + Comments):{" "}
+              <span className="text-foreground">{ingestSummary.companiesEnriched}</span>{" "}
+              ({ingestSummary.companiesEnrichmentSkipped.length} orphan,{" "}
+              {ingestSummary.unmappedInnovationTypes.length} unmapped Type)
+            </div>
             {ingestSummary.underlyingSkipped.length > 0 && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-amber-500">
@@ -276,6 +292,31 @@ const ReconciliationPage = () => {
                 </ul>
               </details>
             )}
+            {ingestSummary.unmappedInnovationTypes.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-amber-500">
+                  {ingestSummary.unmappedInnovationTypes.length} unmapped Innovation Type values — fix in source xlsx
+                </summary>
+                <ul className="mt-1 ml-4 space-y-0.5 max-h-40 overflow-auto">
+                  {ingestSummary.unmappedInnovationTypes.slice(0, 50).map((s, i) => (
+                    <li key={i}>· {s.companyName} — got: {s.raw.join(", ")}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {ingestSummary.companiesEnrichmentSkipped.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-muted-foreground">
+                  {ingestSummary.companiesEnrichmentSkipped.length} orphan companies (in Inventory/Comments but not held)
+                </summary>
+                <ul className="mt-1 ml-4 space-y-0.5 max-h-40 overflow-auto">
+                  {ingestSummary.companiesEnrichmentSkipped.slice(0, 50).map((s, i) => (
+                    <li key={i}>· {s.companyName} — {s.reason}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
           </div>
         )}
       </Card>
