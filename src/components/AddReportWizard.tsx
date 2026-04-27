@@ -359,11 +359,11 @@ export default function AddReportWizard({
         const { data: existHold } = await supabase
           .from("underlying_holdings")
           .select("id")
-          .eq("fund_id", fundId).eq("quarter_id", quarterId).eq("company_id", companyId)
+          .eq("fund_id", fundId).eq("quarter_id", realQuarterId).eq("company_id", companyId)
           .maybeSingle();
         const row = {
           fund_id: fundId,
-          quarter_id: quarterId,
+          quarter_id: realQuarterId,
           company_id: companyId!,
           investment_date: h.investment_date || null,
           instrument: h.instrument || null,
