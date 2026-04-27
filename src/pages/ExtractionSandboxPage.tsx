@@ -73,10 +73,17 @@ type SandboxFile = {
 };
 
 // Max number of extraction calls in flight at once. Anthropic's per-minute
-// token/request limits get hit fast when 9 PDFs fire simultaneously, so cap
-// concurrency at 2. The runExtractFile helper handles per-call retry/backoff
-// for rate_limited responses (2s → 4s → 8s, 3 retries).
-const EXTRACTION_CONCURRENCY = 2;
+// Anthropic's per-minute input-token (ITPM) limits get hit fast when multiple
+// large PDFs fire at once. PDFs are strictly sequential (1 at a time) since
+// each carries a heavy base64 payload; lighter email/excel sources can run
+// 2 in parallel. The runExtractFile helper handles per-call retry/backoff
+// (15s → 30s → 60s, honoring Anthropic retry-after headers when present).
+const PDF_CONCURRENCY = 1;
+const LIGHT_CONCURRENCY = 2;
+
+function isPdfFile(f: SandboxFile): boolean {
+  return /\.pdf$/i.test(f.file.name);
+}
 
 // Live DB compare snapshots per fund (and per direct company) for the chosen quarter
 type LiveFundSnap = {
