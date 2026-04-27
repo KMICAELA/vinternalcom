@@ -67,7 +67,8 @@ export interface ExtractionResult {
   sourceType: SourceType;
 }
 
-const RATE_LIMIT_RETRY_DELAYS_MS = [5000, 10000];
+// Exponential backoff for rate_limited responses: 2s, 4s, 8s (3 retries total).
+const RATE_LIMIT_RETRY_DELAYS_MS = [2000, 4000, 8000];
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
