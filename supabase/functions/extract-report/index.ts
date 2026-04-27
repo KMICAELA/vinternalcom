@@ -270,6 +270,23 @@ serve(async (req) => {
       extractionError = e instanceof Error ? e.message : String(e);
     }
 
+    // In dry_run mode, return the parsed payload without persisting anything.
+    if (dry_run) {
+      const draft = {
+        id: null,
+        status: extractionError ? "failed" : "pending_review",
+        normalized_payload: normalized,
+        fund_id: fund_id ?? null,
+        quarter_id: quarter_id ?? null,
+        source_type,
+        error_message: extractionError,
+      };
+      return new Response(
+        JSON.stringify({ draft, source_document_id: null, dry_run: true }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: extractionError ? 422 : 200 },
+      );
+    }
+
     // Persist draft.
     const { data: draft, error: draftErr } = await supabase
       .from("extraction_drafts")
