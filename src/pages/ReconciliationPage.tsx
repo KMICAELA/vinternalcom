@@ -274,6 +274,12 @@ const ReconciliationPage = () => {
               <span className="text-emerald-500">{ingestSummary.directsSnapshotsAfter}</span>{" "}
               ({ingestSummary.directsSnapshotsUpserted} upserted, {ingestSummary.directsSkipped.length} skipped)
             </div>
+            <div>
+              Companies enriched (Inventory + Comments):{" "}
+              <span className="text-foreground">{ingestSummary.companiesEnriched}</span>{" "}
+              ({ingestSummary.companiesEnrichmentSkipped.length} orphan,{" "}
+              {ingestSummary.unmappedInnovationTypes.length} unmapped Type)
+            </div>
             {ingestSummary.underlyingSkipped.length > 0 && (
               <details className="mt-2">
                 <summary className="cursor-pointer text-amber-500">
@@ -286,6 +292,31 @@ const ReconciliationPage = () => {
                 </ul>
               </details>
             )}
+            {ingestSummary.unmappedInnovationTypes.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-amber-500">
+                  {ingestSummary.unmappedInnovationTypes.length} unmapped Innovation Type values — fix in source xlsx
+                </summary>
+                <ul className="mt-1 ml-4 space-y-0.5 max-h-40 overflow-auto">
+                  {ingestSummary.unmappedInnovationTypes.slice(0, 50).map((s, i) => (
+                    <li key={i}>· {s.companyName} — got: {s.raw.join(", ")}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {ingestSummary.companiesEnrichmentSkipped.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-muted-foreground">
+                  {ingestSummary.companiesEnrichmentSkipped.length} orphan companies (in Inventory/Comments but not held)
+                </summary>
+                <ul className="mt-1 ml-4 space-y-0.5 max-h-40 overflow-auto">
+                  {ingestSummary.companiesEnrichmentSkipped.slice(0, 50).map((s, i) => (
+                    <li key={i}>· {s.companyName} — {s.reason}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
           </div>
         )}
       </Card>
