@@ -211,6 +211,45 @@ export default function AddReportWizard({
     return false;
   }, [sourceType, pdfFile, xlsxFile, emailText, emlFile, fundId, quarterId]);
 
+  // If quarterId is a synthetic "new:YYYY-MM-DD" placeholder, create the quarter row (or reuse if it
+  // already exists at that end-date), then return the real UUID. Updates local state so subsequent
+  // calls reuse the resolved id.
+  async function ensureRealQuarterId(): Promise<string> {
+    if (!quarterId.startsWith("new:")) return quarterId;
+    const synth = quarters.find((q) => q.id === quarterId);
+    if (!synth || !synth.quarter_end_date || !synth.fiscal_year || !synth.fiscal_quarter) {
+      throw new Error("Invalid synthetic quarter selection");
+    }
+    // Check if a row already exists at this quarter_end_date (race-safe)
+    const { data: existing } = await supabase
+      .from("quarters")
+      .select("id, label")
+      .eq("quarter_end_date", synth.quarter_end_date)
+      .maybeSingle();
+    let realId: string;
+    if (existing) {
+      realId = existing.id;
+    } else {
+      const { data: created, error: qErr } = await supabase
+        .from("quarters")
+        .insert({
+          label: synth.label,
+          fiscal_year: synth.fiscal_year,
+          fiscal_quarter: synth.fiscal_quarter,
+          quarter_end_date: synth.quarter_end_date,
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (qErr) throw qErr;
+      realId = created.id;
+    }
+    // Swap synthetic out of local state, point selection at real id
+    setQuarters((prev) => prev.map((q) => (q.id === quarterId ? { ...q, id: realId, isFuture: false } : q)));
+    setQuarterId(realId);
+    return realId;
+  }
+
   async function runExtraction() {
     if (!canSubmitSource) return;
     setBusy(true);
