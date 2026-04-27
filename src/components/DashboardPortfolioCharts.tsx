@@ -192,6 +192,36 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
     );
   }
 
+  const total = rows.length;
+  const pct = (n: number) => (total > 0 ? `${Math.round((n / total) * 1000) / 10}%` : "0%");
+  // Display label for industry: drop the redundant "Technology - " prefix.
+  const shortIndustry = (name: string) =>
+    name.startsWith("Technology - ") ? name.slice("Technology - ".length) : name;
+  const industryDisplay = industry.map((b) => ({
+    ...b,
+    displayName: shortIndustry(b.name),
+    label: `${b.value} · ${pct(b.value)}`,
+  }));
+
+  const renderDonutLegend = (
+    buckets: Bucket[],
+    colorFor: (b: Bucket, i: number) => string,
+  ) => (
+    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs">
+      {buckets.map((b, i) => (
+        <div key={b.name} className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: colorFor(b, i) }} />
+          <span className="text-muted-foreground">{b.name}</span>
+          <span className="text-foreground tabular-nums">{b.value}</span>
+          <span className="text-muted-foreground tabular-nums">· {pct(b.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  const innovationVisible = innovation.buckets.filter((b) => b.value > 0);
+  const regionVisible = region.filter((b) => b.value > 0);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
       {/* Innovation Type — donut */}
@@ -205,34 +235,21 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
         <ChartContainer config={{}} className="h-[220px]">
           <PieChart>
             <Pie
-              data={innovation.buckets.filter((b) => b.value > 0)}
+              data={innovationVisible}
               dataKey="value"
               nameKey="name"
               innerRadius={50}
               outerRadius={85}
               paddingAngle={2}
             >
-              {innovation.buckets
-                .filter((b) => b.value > 0)
-                .map((b) => (
-                  <Cell key={b.name} fill={TYPE_PALETTE[b.name] ?? PALETTE[0]} />
-                ))}
+              {innovationVisible.map((b) => (
+                <Cell key={b.name} fill={TYPE_PALETTE[b.name] ?? PALETTE[0]} />
+              ))}
             </Pie>
             <Tooltip content={<ChartTooltipContent />} />
           </PieChart>
         </ChartContainer>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs">
-          {innovation.buckets.map((b) => (
-            <div key={b.name} className="flex items-center gap-1.5">
-              <span
-                className="h-2 w-2 rounded-sm"
-                style={{ backgroundColor: TYPE_PALETTE[b.name] ?? PALETTE[0] }}
-              />
-              <span className="text-muted-foreground">{b.name}</span>
-              <span className="text-foreground tabular-nums">{b.value}</span>
-            </div>
-          ))}
-        </div>
+        {renderDonutLegend(innovation.buckets, (b) => TYPE_PALETTE[b.name] ?? PALETTE[0])}
         {innovation.unmapped.length > 0 && (
           <div className="mt-3 flex items-start gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-[11px] text-amber-200">
             <AlertTriangle className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
@@ -252,19 +269,27 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
         <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Industry</div>
         <div className="text-sm text-foreground/80 mb-3">Top 10 + Other</div>
         <ChartContainer config={{}} className="h-[280px]">
-          <BarChart data={industry} layout="vertical" margin={{ left: 8, right: 16 }}>
+          <BarChart
+            data={industryDisplay}
+            layout="vertical"
+            margin={{ left: 8, right: 72, top: 4, bottom: 4 }}
+          >
             <XAxis type="number" hide />
             <YAxis
               type="category"
-              dataKey="name"
-              width={130}
+              dataKey="displayName"
+              width={150}
               tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
               tickLine={false}
               axisLine={false}
+              interval={0}
             />
-            <Tooltip content={<ChartTooltipContent />} cursor={{ fill: "hsl(var(--muted) / 0.2)" }} />
+            <Tooltip
+              content={<ChartTooltipContent nameKey="name" />}
+              cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
+            />
             <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-              {industry.map((b, i) => (
+              {industryDisplay.map((b, i) => (
                 <Cell
                   key={b.name}
                   fill={
@@ -276,39 +301,50 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
                   }
                 />
               ))}
+              <LabelList
+                dataKey="label"
+                position="right"
+                className="fill-foreground tabular-nums"
+                style={{ fontSize: 11 }}
+              />
             </Bar>
           </BarChart>
         </ChartContainer>
       </Card>
 
-      {/* Region — horizontal bar */}
+      {/* Region — donut */}
       <Card className="p-5 bg-card border-border">
-        <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">Region</div>
-        <div className="text-sm text-foreground/80 mb-3">
-          Companies counted in each region they operate
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">Region</div>
+            <div className="text-sm text-foreground/80 mt-0.5">
+              Counted in each region they operate
+            </div>
+          </div>
         </div>
-        <ChartContainer config={{}} className="h-[280px]">
-          <BarChart data={region} layout="vertical" margin={{ left: 8, right: 16 }}>
-            <XAxis type="number" hide />
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={130}
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
-              tickLine={false}
-              axisLine={false}
-            />
-            <Tooltip content={<ChartTooltipContent />} cursor={{ fill: "hsl(var(--muted) / 0.2)" }} />
-            <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-              {region.map((b, i) => (
+        <ChartContainer config={{}} className="h-[220px]">
+          <PieChart>
+            <Pie
+              data={regionVisible}
+              dataKey="value"
+              nameKey="name"
+              innerRadius={50}
+              outerRadius={85}
+              paddingAngle={2}
+            >
+              {regionVisible.map((b, i) => (
                 <Cell
                   key={b.name}
                   fill={b.name === UNCLASSIFIED ? "hsl(220 9% 46%)" : PALETTE[i % PALETTE.length]}
                 />
               ))}
-            </Bar>
-          </BarChart>
+            </Pie>
+            <Tooltip content={<ChartTooltipContent />} />
+          </PieChart>
         </ChartContainer>
+        {renderDonutLegend(region, (b, i) =>
+          b.name === UNCLASSIFIED ? "hsl(220 9% 46%)" : PALETTE[i % PALETTE.length],
+        )}
       </Card>
     </div>
   );
