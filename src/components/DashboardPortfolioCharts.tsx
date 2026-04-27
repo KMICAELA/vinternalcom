@@ -320,7 +320,7 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
               interval={0}
             />
             <Tooltip
-              content={<ChartTooltipContent nameKey="name" />}
+              content={renderBarTooltip}
               cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
             />
             <Bar dataKey="value" radius={[0, 4, 4, 0]}>
