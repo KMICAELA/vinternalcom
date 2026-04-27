@@ -32,6 +32,11 @@ export interface IngestSummary {
   directsSnapshotsAfter: number;
   directsSnapshotsUpserted: number;
   directsSkipped: { reason: string; row: ParsedDirectRow }[];
+  /** Metadata enrichment from Inventory + Port. Comments sheets. */
+  companiesEnriched: number;
+  companiesEnrichmentSkipped: { reason: string; companyName: string }[];
+  /** Innovation-Type values that did NOT clamp to the 3-value taxonomy. */
+  unmappedInnovationTypes: { companyName: string; raw: string[] }[];
 }
 
 async function getQuarterCount(table: "underlying_holdings" | "direct_quarter_snapshots", quarterId: string) {
