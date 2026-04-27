@@ -329,7 +329,7 @@ export default function AddReportWizard({
       const { data: existing } = await supabase
         .from("fund_quarter_snapshots")
         .select("id")
-        .eq("fund_id", fundId).eq("quarter_id", quarterId).maybeSingle();
+        .eq("fund_id", fundId).eq("quarter_id", realQuarterId).maybeSingle();
       const opSnap = existing
         ? supabase.from("fund_quarter_snapshots").update(snap).eq("id", existing.id)
         : supabase.from("fund_quarter_snapshots").insert(snap);
