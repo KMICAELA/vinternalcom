@@ -4,8 +4,15 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import type { ParsedWorkbook, ParsedUnderlyingRow, ParsedDirectRow } from "./parseXlsx";
+import type {
+  ParsedWorkbook,
+  ParsedUnderlyingRow,
+  ParsedDirectRow,
+  ParsedInventoryRow,
+  ParsedCommentaryRow,
+} from "./parseXlsx";
 import { resolveFundName } from "./fundAliases";
+import { normalizeInnovationType, splitMultiValue } from "./normalize";
 
 const cleanName = (s: string | null | undefined) =>
   (s ?? "").toString().trim().replace(/\s+/g, " ");
