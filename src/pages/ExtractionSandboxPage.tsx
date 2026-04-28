@@ -171,6 +171,16 @@ function CompareCell({
 
 export default function ExtractionSandboxPage() {
   const { role, loading: roleLoading } = useAuth();
+  if (roleLoading) {
+    return <div className="p-8 text-muted-foreground">Loading…</div>;
+  }
+  if (role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+  return <ExtractionSandboxInner />;
+}
+
+function ExtractionSandboxInner() {
   const [funds, setFunds] = useState<Fund[]>([]);
   const [quarters, setQuarters] = useState<Quarter[]>([]);
   const [quarterId, setQuarterId] = useState<string>("");
