@@ -210,7 +210,7 @@ serve(async (req) => {
         .insert({
           fund_id: fund_id ?? null,
           quarter_id: quarter_id ?? null,
-          doc_type: source_type === "pdf" ? "pdf_report" : source_type === "excel" ? "excel_report" : "email_report",
+          doc_type: "fund_report",
           original_filename: file_name ?? null,
           storage_path: `inline/${source_type}/${Date.now()}`,
           status: "extracting",
