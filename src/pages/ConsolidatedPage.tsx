@@ -162,9 +162,13 @@ export default function ConsolidatedPage() {
     setRefreshKey((k) => k + 1);
   };
 
-  if (qLoading || !selected) {
-    return <div className="p-8 text-muted-foreground">Loading…</div>;
-  }
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab") === "investors" ? "investors" : "portfolio";
+  const setTab = (v: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (v === "portfolio") next.delete("tab"); else next.set("tab", v);
+    setSearchParams(next, { replace: true });
+  };
 
   const reconDelta = ledgerTotals.contrib - agg.contributions;
   const reconWarn = Math.abs(reconDelta) > 1; // > $1 mismatch
@@ -174,9 +178,21 @@ export default function ConsolidatedPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">TWH Consolidated</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Aggregate position across all funds and direct investments · {selected.label}
+          Aggregate position across all funds and direct investments{selected ? ` · ${selected.label}` : ""}
         </p>
       </div>
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+          <TabsTrigger value="investors">Investors</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="portfolio" className="space-y-6 mt-6">
+          {qLoading || !selected ? (
+            <div className="text-muted-foreground py-12 text-center">Loading…</div>
+          ) : (
+            <>
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
