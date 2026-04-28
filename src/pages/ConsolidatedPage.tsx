@@ -337,6 +337,14 @@ export default function ConsolidatedPage() {
           </Table>
         </div>
       </Card>
+            </>
+          )}
+        </TabsContent>
+
+        <TabsContent value="investors" className="mt-6">
+          <InvestorsTab />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
