@@ -171,6 +171,16 @@ function CompareCell({
 
 export default function ExtractionSandboxPage() {
   const { role, loading: roleLoading } = useAuth();
+  if (roleLoading) {
+    return <div className="p-8 text-muted-foreground">Loading…</div>;
+  }
+  if (role !== "admin") {
+    return <Navigate to="/" replace />;
+  }
+  return <ExtractionSandboxInner />;
+}
+
+function ExtractionSandboxInner() {
   const [funds, setFunds] = useState<Fund[]>([]);
   const [quarters, setQuarters] = useState<Quarter[]>([]);
   const [quarterId, setQuarterId] = useState<string>("");
@@ -259,13 +269,7 @@ export default function ExtractionSandboxPage() {
     return () => window.removeEventListener("beforeunload", h);
   }, [files.length]);
 
-  // Admin gate — render after hooks above so rules-of-hooks holds
-  if (roleLoading) {
-    return <div className="p-8 text-muted-foreground">Loading…</div>;
-  }
-  if (role !== "admin") {
-    return <Navigate to="/" replace />;
-  }
+  // Admin gate handled by wrapper above
 
   // ──────────────── Actions ────────────────
 
