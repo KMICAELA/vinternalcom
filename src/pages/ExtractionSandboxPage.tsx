@@ -269,13 +269,7 @@ function ExtractionSandboxInner() {
     return () => window.removeEventListener("beforeunload", h);
   }, [files.length]);
 
-  // Admin gate — render after hooks above so rules-of-hooks holds
-  if (roleLoading) {
-    return <div className="p-8 text-muted-foreground">Loading…</div>;
-  }
-  if (role !== "admin") {
-    return <Navigate to="/" replace />;
-  }
+  // Admin gate handled by wrapper above
 
   // ──────────────── Actions ────────────────
 
