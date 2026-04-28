@@ -626,6 +626,93 @@ export type Database = {
           },
         ]
       }
+      investor_quarter_snapshots: {
+        Row: {
+          contribution_amount: number
+          contribution_date: string | null
+          created_at: string
+          distribution_amount: number
+          distribution_date: string | null
+          id: string
+          investor_id: string
+          nav_amount: number
+          notes: string | null
+          quarter_id: string
+          updated_at: string
+        }
+        Insert: {
+          contribution_amount?: number
+          contribution_date?: string | null
+          created_at?: string
+          distribution_amount?: number
+          distribution_date?: string | null
+          id?: string
+          investor_id: string
+          nav_amount?: number
+          notes?: string | null
+          quarter_id: string
+          updated_at?: string
+        }
+        Update: {
+          contribution_amount?: number
+          contribution_date?: string | null
+          created_at?: string
+          distribution_amount?: number
+          distribution_date?: string | null
+          id?: string
+          investor_id?: string
+          nav_amount?: number
+          notes?: string | null
+          quarter_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investor_quarter_snapshots_investor_id_fkey"
+            columns: ["investor_id"]
+            isOneToOne: false
+            referencedRelation: "investors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "investor_quarter_snapshots_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: false
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      investors: {
+        Row: {
+          commitment_amount: number | null
+          commitment_date: string | null
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          commitment_amount?: number | null
+          commitment_date?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          commitment_amount?: number | null
+          commitment_date?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
