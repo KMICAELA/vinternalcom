@@ -296,7 +296,19 @@ export default function AddReportWizard({
       const draft = data?.draft;
       if (!draft) throw new Error("No draft returned");
       setDraftId(draft.id);
-      setPayload(draft.normalized_payload ?? emptyPayload());
+      const initialPayload = (draft.normalized_payload as Payload | null) ?? emptyPayload();
+      // Enrich holdings with prior-quarter round/instrument inheritance.
+      const currentQ = quarters.find((q) => q.id === quarterId);
+      try {
+        const enriched = await inheritHoldingMetadata({
+          fundId,
+          holdings: initialPayload.holdings ?? [],
+          currentQuarterEndDate: currentQ?.quarter_end_date ?? null,
+        });
+        setPayload({ ...initialPayload, holdings: enriched as Holding[] });
+      } catch {
+        setPayload(initialPayload);
+      }
       setExtractionError(draft.error_message ?? null);
       setStep(3);
     } catch (e: any) {
