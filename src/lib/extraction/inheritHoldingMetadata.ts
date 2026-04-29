@@ -110,6 +110,7 @@ export async function inheritHoldingMetadata(opts: {
           round: row.round ?? null,
           instrument: row.instrument ?? null,
           fund_cost_usd: Number(row.fund_cost_usd ?? 0),
+          fund_fmv_usd: Number(row.fund_fmv_usd ?? 0),
           quarter_end_date: qend,
         });
       }
