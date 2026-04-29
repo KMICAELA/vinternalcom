@@ -617,7 +617,7 @@ function ReviewStep({
                   <td className="px-2 py-1">
                     <div className="flex items-center gap-1.5">
                       <Input className="h-7 text-xs" value={h.company_name} onChange={(e) => setHolding(i, "company_name", e.target.value)} />
-                      {flag && <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0" titleAccess={flag} />}
+                      {flag && <span title={flag}><AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0" /></span>}
                     </div>
                   </td>
                   <td className="px-2 py-1"><Input className="h-7 text-xs" value={h.round ?? ""} onChange={(e) => setHolding(i, "round", e.target.value)} /></td>
