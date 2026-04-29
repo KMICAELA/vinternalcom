@@ -201,6 +201,22 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Look up the selected fund's name + aliases so we can steer the model to the right
+    // row in multi-vehicle summary tables and the right companies in narrative attribution.
+    let selectedFundName: string | null = null;
+    let selectedFundShort: string | null = null;
+    if (fund_id) {
+      const { data: f } = await supabase
+        .from("funds")
+        .select("name, short_name")
+        .eq("id", fund_id)
+        .maybeSingle();
+      if (f) {
+        selectedFundName = (f as any).name ?? null;
+        selectedFundShort = (f as any).short_name ?? null;
+      }
+    }
+
     // In dry_run mode (sandbox), skip ALL DB writes — no source_documents, no extraction_drafts.
     let source_document_id: string | null = null;
     if (!dry_run) {
