@@ -597,6 +597,7 @@ function ReviewStep({
               <tr>
                 <th className="text-left px-2 py-1">Company</th>
                 <th className="text-left px-2 py-1">Round</th>
+                <th className="text-left px-2 py-1">Instrument</th>
                 <th className="text-right px-2 py-1">Cost</th>
                 <th className="text-right px-2 py-1">FMV</th>
                 <th className="text-right px-2 py-1">Proceeds</th>
@@ -604,22 +605,37 @@ function ReviewStep({
               </tr>
             </thead>
             <tbody>
-              {payload.holdings.map((h, i) => (
+              {payload.holdings.map((h, i) => {
+                const meta = h as any;
+                const flag = meta.needs_review
+                  ? "Material cost change vs prior quarter — possible new tranche"
+                  : meta.needs_round_review
+                  ? "New SAFE/CN — round defaulted to Seed; please confirm"
+                  : null;
+                return (
                 <tr key={i} className="border-t border-border">
-                  <td className="px-2 py-1"><Input className="h-7 text-xs" value={h.company_name} onChange={(e) => setHolding(i, "company_name", e.target.value)} /></td>
+                  <td className="px-2 py-1">
+                    <div className="flex items-center gap-1.5">
+                      <Input className="h-7 text-xs" value={h.company_name} onChange={(e) => setHolding(i, "company_name", e.target.value)} />
+                      {flag && <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0" titleAccess={flag} />}
+                    </div>
+                  </td>
                   <td className="px-2 py-1"><Input className="h-7 text-xs" value={h.round ?? ""} onChange={(e) => setHolding(i, "round", e.target.value)} /></td>
+                  <td className="px-2 py-1"><Input className="h-7 text-xs" value={h.instrument ?? ""} onChange={(e) => setHolding(i, "instrument", e.target.value)} /></td>
                   <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={h.fund_cost_usd ?? 0} onChange={(e) => setHolding(i, "fund_cost_usd", Number(e.target.value))} /></td>
                   <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={h.fund_fmv_usd ?? 0} onChange={(e) => setHolding(i, "fund_fmv_usd", Number(e.target.value))} /></td>
                   <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={h.fund_proceeds_usd ?? 0} onChange={(e) => setHolding(i, "fund_proceeds_usd", Number(e.target.value))} /></td>
                   <td className="px-2 py-1 text-right"><Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => removeHolding(i)}>×</Button></td>
                 </tr>
-              ))}
+                );
+              })}
               {payload.holdings.length === 0 && (
-                <tr><td colSpan={6} className="px-2 py-4 text-center text-muted-foreground">No holdings extracted</td></tr>
+                <tr><td colSpan={7} className="px-2 py-4 text-center text-muted-foreground">No holdings extracted</td></tr>
               )}
               {payload.holdings.length > 0 && (
                 <tr className="border-t-2 border-border font-semibold">
                   <td className="px-2 py-2">Totals</td>
+                  <td></td>
                   <td></td>
                   <td className="px-2 py-2 text-right font-mono">{fmtUSD(payload.holdings.reduce((a, h) => a + (h.fund_cost_usd ?? 0), 0), { compact: true })}</td>
                   <td className="px-2 py-2 text-right font-mono">{fmtUSD(payload.holdings.reduce((a, h) => a + (h.fund_fmv_usd ?? 0), 0), { compact: true })}</td>
