@@ -4,9 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Upload } from "lucide-react";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
+
+type ReportStatus = "confirmed" | "in_review" | "missing";
 
 type FundRow = {
   id: string;
@@ -21,6 +24,7 @@ type FundRow = {
   twh_nav_usd: number;
   fund_total_contributions_usd: number;
   fund_total_nav_usd: number;
+  report_status: ReportStatus;
 };
 
 export default function FundsPage() {
