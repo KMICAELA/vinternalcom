@@ -39,15 +39,37 @@ export default function FundsPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const { data: funds } = await supabase
-        .from("funds")
-        .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd)")
-        .eq("archived", false)
-        .order("name");
+      const [{ data: funds }, { data: docs }] = await Promise.all([
+        supabase
+          .from("funds")
+          .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd, confirmed_at)")
+          .eq("archived", false)
+          .order("name"),
+        supabase
+          .from("source_documents")
+          .select("fund_id, status")
+          .eq("quarter_id", selected.id)
+          .eq("doc_type", "fund_report"),
+      ]);
+
+      const docsByFund = new Map<string, string[]>();
+      (docs ?? []).forEach((d: any) => {
+        if (!d.fund_id) return;
+        const arr = docsByFund.get(d.fund_id) ?? [];
+        arr.push(d.status);
+        docsByFund.set(d.fund_id, arr);
+      });
 
       const out: FundRow[] = (funds ?? []).map((f: any) => {
         const c = f.fund_commitments?.[0] ?? {};
         const snap = (f.fund_quarter_snapshots ?? []).find((s: any) => s.quarter_id === selected.id) ?? {};
+        const hasDocs = (docsByFund.get(f.id) ?? []).length > 0;
+        const confirmed = !!snap.confirmed_at;
+        const report_status: ReportStatus = confirmed
+          ? "confirmed"
+          : hasDocs || snap.quarter_id
+          ? "in_review"
+          : "missing";
         return {
           id: f.id,
           name: f.name,
@@ -61,6 +83,7 @@ export default function FundsPage() {
           twh_nav_usd: Number(snap.twh_nav_usd ?? 0),
           fund_total_contributions_usd: Number(snap.fund_total_contributions_usd ?? 0),
           fund_total_nav_usd: Number(snap.fund_total_nav_usd ?? 0),
+          report_status,
         };
       });
       out.sort((a, b) => b.twh_nav_usd - a.twh_nav_usd);
