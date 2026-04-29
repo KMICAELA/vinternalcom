@@ -124,6 +124,7 @@ export default function FundsPage() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Fund</TableHead>
+                <TableHead>Report</TableHead>
                 <TableHead>Start</TableHead>
                 <TableHead className="text-right">TWH Commit</TableHead>
                 <TableHead className="text-right">TWH %</TableHead>
@@ -137,9 +138,9 @@ export default function FundsPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
               ) : (
                 <>
                   {rows.map((r) => {
@@ -148,6 +149,15 @@ export default function FundsPage() {
                     return (
                       <TableRow key={r.id} className="table-row-hover">
                         <TableCell className="font-medium max-w-[280px] truncate">{r.short_name ?? r.name}</TableCell>
+                        <TableCell>
+                          {r.report_status === "confirmed" ? (
+                            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[10px] font-medium">Confirmed</Badge>
+                          ) : r.report_status === "in_review" ? (
+                            <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px] font-medium">In review</Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium">Missing</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(r.twh_commitment_usd, { compact: true })}</TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{fmtPct(r.twh_ownership_pct, 2)}</TableCell>
