@@ -850,6 +850,8 @@ function ExtractionSandboxInner() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead>Company</TableHead>
                     <TableHead>Fund</TableHead>
+                    <TableHead>Round</TableHead>
+                    <TableHead>Instrument</TableHead>
                     <TableHead className="text-right">Fund Cost</TableHead>
                     <TableHead className="text-right">Fund FMV</TableHead>
                     <TableHead className="text-right">Fund Proceeds</TableHead>
@@ -858,22 +860,44 @@ function ExtractionSandboxInner() {
                 </TableHeader>
                 <TableBody>
                   {underlyingRows.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-muted-foreground py-12 text-center">
+                    <TableRow><TableCell colSpan={8} className="text-muted-foreground py-12 text-center">
                       No underlying holdings extracted yet.
                     </TableCell></TableRow>
                   ) : (
                     <>
                       {underlyingRows.map((r) => {
-                        // Find live row by fundId+company name. fundId is encoded in r.key prefix.
                         const fundId = r.key.split("::")[0];
                         const live = liveHoldingsLookup.get(`${fundId}::${r.company.toLowerCase()}`);
                         const moic = calcMoic(r.cost, r.fmv, r.proceeds);
                         const gain = r.fmv + r.proceeds - r.cost;
                         const liveMoic = live ? calcMoic(live.fund_cost_usd, live.fund_fmv_usd, live.fund_proceeds_usd) : null;
+                        const flagReason = r.needs_review
+                          ? "Material cost change vs prior quarter — possible new tranche / up-round"
+                          : r.needs_round_review
+                          ? "New SAFE/Convertible — round defaulted to Seed; please confirm"
+                          : null;
                         return (
                           <TableRow key={r.key} className="table-row-hover">
-                            <TableCell className="font-medium">{r.company}</TableCell>
+                            <TableCell className="font-medium">
+                              <span className="inline-flex items-center gap-1.5">
+                                {r.company}
+                                {flagReason && (
+                                  <TooltipProvider delayDuration={150}>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="text-xs max-w-[260px]">
+                                        {flagReason}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </span>
+                            </TableCell>
                             <TableCell className="text-muted-foreground max-w-[260px] truncate">{r.fundLabel}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs">{r.round ?? "—"}</TableCell>
+                            <TableCell className="text-muted-foreground text-xs">{r.instrument ?? "—"}</TableCell>
                             <TableCell><CompareCell compare={compare}
                               extracted={fmtUSD(r.cost, { compact: true })}
                               live={live ? fmtUSD(live.fund_cost_usd, { compact: true }) : "—"} /></TableCell>
@@ -892,7 +916,7 @@ function ExtractionSandboxInner() {
                         );
                       })}
                       <TableRow className="border-t-2 border-border font-semibold">
-                        <TableCell colSpan={2}>Total</TableCell>
+                        <TableCell colSpan={4}>Total</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(underlyingTotals.cost, { compact: true })}</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(underlyingTotals.fmv, { compact: true })}</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(underlyingTotals.proceeds, { compact: true })}</TableCell>
