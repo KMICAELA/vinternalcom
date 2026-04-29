@@ -201,6 +201,22 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Look up the selected fund's name + aliases so we can steer the model to the right
+    // row in multi-vehicle summary tables and the right companies in narrative attribution.
+    let selectedFundName: string | null = null;
+    let selectedFundShort: string | null = null;
+    if (fund_id) {
+      const { data: f } = await supabase
+        .from("funds")
+        .select("name, short_name")
+        .eq("id", fund_id)
+        .maybeSingle();
+      if (f) {
+        selectedFundName = (f as any).name ?? null;
+        selectedFundShort = (f as any).short_name ?? null;
+      }
+    }
+
     // In dry_run mode (sandbox), skip ALL DB writes — no source_documents, no extraction_drafts.
     let source_document_id: string | null = null;
     if (!dry_run) {
@@ -224,6 +240,42 @@ serve(async (req) => {
     // Build user content per source type.
     let userBlocks: unknown[] = [];
     let systemPrompt = SYSTEM_BY_TYPE[source_type];
+
+    // When the user picked a specific fund in the wizard, tell the model to:
+    //   (a) match the correct row in any multi-vehicle summary table (fuzzy by name),
+    //   (b) only include holdings whose narrative attribution covers that fund.
+    if (selectedFundName) {
+      const aliases = [selectedFundName, selectedFundShort].filter(Boolean).join(" | ");
+      systemPrompt += `
+
+IMPORTANT — TARGET FUND CONTEXT
+The user has selected a SPECIFIC fund vehicle for this extraction:
+  Target fund: "${selectedFundName}"${selectedFundShort ? ` (a.k.a. "${selectedFundShort}")` : ""}
+  Match aliases: ${aliases}
+
+This document may discuss MULTIPLE fund vehicles from the same manager (e.g. Fund I and Fund II,
+or a parallel/feeder vehicle). Apply these rules strictly:
+
+1) MULTI-VEHICLE SUMMARY TABLES: If the PDF contains a summary table listing several funds
+   (rows like "Fund I", "Fund II", "Co-Invest", with vintage years and committed/FMV columns),
+   pick the row that best matches the target fund name above using fuzzy matching (Roman
+   numerals "II" vs "2", vintage year, "Opportunities II" vs "Opportunities Fund II", etc.).
+   Do NOT default to the first row, the largest row, or an aggregated total. The
+   fund_total_contributions_usd, fund_total_nav_usd and TWH metrics MUST come from the matched row.
+
+2) COMPANY ATTRIBUTION: Each company mention typically carries a fund tag in the narrative
+   (e.g. "Fund I", "Fund II", "Fund I & II Co-Invest", "Co-Investment", "Parallel").
+   INCLUDE a company in holdings[] ONLY if its attribution covers the target fund:
+     - The target fund or a matching variant -> INCLUDE
+     - "Co-Invest" / "Fund I & II" / "Both funds" tags that name the target -> INCLUDE
+     - A different fund only (e.g. target is Fund II and the company is tagged "Fund I" only) -> EXCLUDE
+   Capture EVERY explicitly-named portfolio company in the document that meets this rule —
+   do not stop at the first few. If a company appears in a holdings/portfolio table without
+   an explicit fund tag but the table's heading attributes it to the target fund, INCLUDE it.
+
+3) Set "notes" to a one-line summary that explicitly states which summary-table row you
+   selected and how many companies you included vs excluded by fund attribution.`;
+    }
 
     if (source_type === "pdf") {
       if (!pdf_base64) throw new Error("pdf_base64 required for source_type=pdf");
