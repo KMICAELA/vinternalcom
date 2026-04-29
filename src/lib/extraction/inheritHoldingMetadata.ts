@@ -90,12 +90,13 @@ export async function inheritHoldingMetadata(opts: {
     round: string | null;
     instrument: string | null;
     fund_cost_usd: number;
+    fund_fmv_usd: number;
     quarter_end_date: string;
   }>();
   if (resolvedCompanyIds.size > 0) {
     const { data: prior } = await supabase
       .from("underlying_holdings")
-      .select("company_id, round, instrument, fund_cost_usd, quarters!inner(quarter_end_date)")
+      .select("company_id, round, instrument, fund_cost_usd, fund_fmv_usd, quarters!inner(quarter_end_date)")
       .eq("fund_id", fundId)
       .in("company_id", Array.from(resolvedCompanyIds));
 
