@@ -16,6 +16,7 @@ import { Loader2, FileText, FileSpreadsheet, Mail, AlertCircle, CheckCircle2 } f
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { fmtUSD } from "@/lib/format";
+import { inheritHoldingMetadata } from "@/lib/extraction/inheritHoldingMetadata";
 
 type SourceType = "pdf" | "excel" | "email";
 
