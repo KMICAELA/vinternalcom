@@ -52,6 +52,9 @@ import {
 import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtPct, fmtDate, calcMoic, calcTvpi, calcDpi, signClass } from "@/lib/format";
 import { runExtractFile, type ExtractedPayload, type SourceType } from "@/lib/extraction/runExtractFile";
+import { inheritHoldingMetadata, type EnrichedHolding } from "@/lib/extraction/inheritHoldingMetadata";
+import { AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // ────────────────────────────────────────────────────────────────────────────
 // Types
