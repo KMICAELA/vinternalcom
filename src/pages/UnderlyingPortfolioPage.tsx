@@ -10,6 +10,8 @@ type Row = {
   id: string;
   company: string;
   fund: string;
+  round: string | null;
+  instrument: string | null;
   cost: number;
   fmv: number;
   proceeds: number;
