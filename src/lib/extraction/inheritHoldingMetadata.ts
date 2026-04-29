@@ -27,11 +27,14 @@ export type RawHolding = {
 
 export type EnrichedHolding = RawHolding & {
   inherited_from_prior?: boolean;
+  inherited_cost?: boolean;
+  inherited_fmv?: boolean;
   needs_review?: boolean;
   needs_round_review?: boolean;
   prior_round?: string | null;
   prior_instrument?: string | null;
   prior_cost_usd?: number | null;
+  prior_fmv_usd?: number | null;
 };
 
 const MATERIAL_COST_DELTA = 0.1; // 10%
