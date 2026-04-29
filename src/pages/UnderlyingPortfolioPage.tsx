@@ -93,6 +93,8 @@ export default function UnderlyingPortfolioPage() {
               <TableRow className="hover:bg-transparent">
                 <TableHead>Company</TableHead>
                 <TableHead>Fund</TableHead>
+                <TableHead>Round</TableHead>
+                <TableHead>Instrument</TableHead>
                 <TableHead className="text-right">Fund Cost</TableHead>
                 <TableHead className="text-right">Fund FMV</TableHead>
                 <TableHead className="text-right">TWH Cost</TableHead>
@@ -102,9 +104,9 @@ export default function UnderlyingPortfolioPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={7} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-muted-foreground py-12 text-center">No holdings</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-muted-foreground py-12 text-center">No holdings</TableCell></TableRow>
               ) : (
                 <>
                   {filtered.map((r) => {
@@ -114,6 +116,8 @@ export default function UnderlyingPortfolioPage() {
                       <TableRow key={r.id} className="table-row-hover">
                         <TableCell className="font-medium">{r.company}</TableCell>
                         <TableCell className="text-muted-foreground max-w-[260px] truncate">{r.fund}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{r.round ?? "—"}</TableCell>
+                        <TableCell className="text-muted-foreground text-xs">{r.instrument ?? "—"}</TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{fmtUSD(r.cost, { compact: true })}</TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{fmtUSD(r.fmv, { compact: true })}</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(r.cost * r.twh_pct, { compact: true })}</TableCell>
@@ -123,7 +127,7 @@ export default function UnderlyingPortfolioPage() {
                     );
                   })}
                   <TableRow className="border-t-2 border-border font-semibold">
-                    <TableCell colSpan={4}>TWH Total</TableCell>
+                    <TableCell colSpan={6}>TWH Total</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.twh_cost, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.twh_fmv, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtMultiple(calcMoic(totals.twh_cost, totals.twh_fmv, totals.twh_proceeds))}</TableCell>
