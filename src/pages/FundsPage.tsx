@@ -4,9 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Upload } from "lucide-react";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
+
+type ReportStatus = "confirmed" | "in_review" | "missing";
 
 type FundRow = {
   id: string;
@@ -21,6 +24,7 @@ type FundRow = {
   twh_nav_usd: number;
   fund_total_contributions_usd: number;
   fund_total_nav_usd: number;
+  report_status: ReportStatus;
 };
 
 export default function FundsPage() {
@@ -35,15 +39,37 @@ export default function FundsPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const { data: funds } = await supabase
-        .from("funds")
-        .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd)")
-        .eq("archived", false)
-        .order("name");
+      const [{ data: funds }, { data: docs }] = await Promise.all([
+        supabase
+          .from("funds")
+          .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd, confirmed_at)")
+          .eq("archived", false)
+          .order("name"),
+        supabase
+          .from("source_documents")
+          .select("fund_id, status")
+          .eq("quarter_id", selected.id)
+          .eq("doc_type", "fund_report"),
+      ]);
+
+      const docsByFund = new Map<string, string[]>();
+      (docs ?? []).forEach((d: any) => {
+        if (!d.fund_id) return;
+        const arr = docsByFund.get(d.fund_id) ?? [];
+        arr.push(d.status);
+        docsByFund.set(d.fund_id, arr);
+      });
 
       const out: FundRow[] = (funds ?? []).map((f: any) => {
         const c = f.fund_commitments?.[0] ?? {};
         const snap = (f.fund_quarter_snapshots ?? []).find((s: any) => s.quarter_id === selected.id) ?? {};
+        const hasDocs = (docsByFund.get(f.id) ?? []).length > 0;
+        const confirmed = !!snap.confirmed_at;
+        const report_status: ReportStatus = confirmed
+          ? "confirmed"
+          : hasDocs || snap.quarter_id
+          ? "in_review"
+          : "missing";
         return {
           id: f.id,
           name: f.name,
@@ -57,6 +83,7 @@ export default function FundsPage() {
           twh_nav_usd: Number(snap.twh_nav_usd ?? 0),
           fund_total_contributions_usd: Number(snap.fund_total_contributions_usd ?? 0),
           fund_total_nav_usd: Number(snap.fund_total_nav_usd ?? 0),
+          report_status,
         };
       });
       out.sort((a, b) => b.twh_nav_usd - a.twh_nav_usd);
@@ -97,6 +124,7 @@ export default function FundsPage() {
             <TableHeader>
               <TableRow className="hover:bg-transparent">
                 <TableHead>Fund</TableHead>
+                <TableHead>Report</TableHead>
                 <TableHead>Start</TableHead>
                 <TableHead className="text-right">TWH Commit</TableHead>
                 <TableHead className="text-right">TWH %</TableHead>
@@ -110,9 +138,9 @@ export default function FundsPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
               ) : (
                 <>
                   {rows.map((r) => {
@@ -121,6 +149,15 @@ export default function FundsPage() {
                     return (
                       <TableRow key={r.id} className="table-row-hover">
                         <TableCell className="font-medium max-w-[280px] truncate">{r.short_name ?? r.name}</TableCell>
+                        <TableCell>
+                          {r.report_status === "confirmed" ? (
+                            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[10px] font-medium">Confirmed</Badge>
+                          ) : r.report_status === "in_review" ? (
+                            <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px] font-medium">In review</Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium">Missing</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(r.twh_commitment_usd, { compact: true })}</TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">{fmtPct(r.twh_ownership_pct, 2)}</TableCell>
