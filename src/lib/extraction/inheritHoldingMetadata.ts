@@ -137,17 +137,36 @@ export async function inheritHoldingMetadata(opts: {
         out.instrument = prior.instrument;
         inherited = true;
       }
+      // Inherit Cost when current extraction is null/0 but prior had a value.
+      // Cost is the most stable field across quarters — if Q4 narrative didn't
+      // restate it, the Q3 baseline still holds.
+      const curCost = h.fund_cost_usd;
+      if ((curCost == null || Number(curCost) === 0) && prior.fund_cost_usd > 0) {
+        out.fund_cost_usd = prior.fund_cost_usd;
+        out.inherited_cost = true;
+        inherited = true;
+      }
+      // Inherit FMV when current extraction is null/0. Less stable than cost
+      // (FMV moves quarter-to-quarter) so we only fall back when extraction
+      // truly returned nothing — never overwrite a real new value.
+      const curFmv = h.fund_fmv_usd;
+      if ((curFmv == null || Number(curFmv) === 0) && prior.fund_fmv_usd > 0) {
+        out.fund_fmv_usd = prior.fund_fmv_usd;
+        out.inherited_fmv = true;
+        inherited = true;
+      }
       out.prior_round = prior.round;
       out.prior_instrument = prior.instrument;
       out.prior_cost_usd = prior.fund_cost_usd;
+      out.prior_fmv_usd = prior.fund_fmv_usd;
       if (inherited) out.inherited_from_prior = true;
 
-      // Material cost change → flag.
-      const newCost = Number(h.fund_cost_usd ?? 0);
-      if (prior.fund_cost_usd > 0) {
+      // Material cost change → flag (only when both sides are real, not inherited).
+      const newCost = Number(out.fund_cost_usd ?? 0);
+      if (!out.inherited_cost && prior.fund_cost_usd > 0) {
         const delta = Math.abs(newCost - prior.fund_cost_usd) / prior.fund_cost_usd;
         if (delta > MATERIAL_COST_DELTA) out.needs_review = true;
-      } else if (newCost > 0) {
+      } else if (!out.inherited_cost && newCost > 0) {
         // Prior had no cost recorded but we now have one — likely new tranche.
         out.needs_review = true;
       }
