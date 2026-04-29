@@ -69,7 +69,20 @@ Rules:
 - holdings[] is the fund-level portfolio schedule (one row per company). Skip subtotals/totals.
 - Convert non-USD figures using the report's stated FX rate if present; otherwise leave currency and report numbers in source units (we'll convert later).
 - Do NOT invent companies. If the source has no holdings table, return holdings: [].
-- Do NOT wrap your answer in markdown. Return ONLY the JSON object.`;
+- Do NOT wrap your answer in markdown. Return ONLY the JSON object.
+
+CRITICAL — UNIT / MAGNITUDE HANDLING:
+ALL numeric fields must be returned in BASE USD UNITS (e.g. $2,000,000 not 2 or 2000 or "2M").
+You MUST detect and apply the column/table unit scale BEFORE writing the number:
+  • Table headers like "Cost (K)", "FMV ($K)", "USD thousands", "in 000s" → multiply the cell by 1,000
+  • Headers like "Cost (M)", "FMV ($M)", "USD millions", "in millions", "MM" → multiply by 1,000,000
+  • Inline shorthand in narrative: "2m" / "2M" / "2mm" / "$2M" / "2 million" → 2000000
+  • Inline shorthand: "500k" / "500K" / "$500k" → 500000
+  • A bare number "2,000" inside a "(K)" table → 2000000 (NOT 2000)
+  • A bare number "2.5" inside a "($M)" table → 2500000
+NEVER return a value in thousands or millions without scaling up to base USD.
+NEVER leave a literal like "2m" or "$2M" in the output — convert to integer 2000000.
+For venture investments, sub-$500K cost basis is unusual; if a parsed value looks suspiciously small (e.g. "(2m)" coming out as 200000 instead of 2000000) you have likely missed the magnitude — re-read the source and fix it.`;
 
 const SYSTEM_BY_TYPE: Record<string, string> = {
   pdf: `${SYSTEM_BASE}\n\nThe source is a PDF financial statement. It may be a formal PCAP, audited financials, or a capital-account letter.`,
