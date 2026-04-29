@@ -411,45 +411,74 @@ function ExtractionSandboxInner() {
     return out.sort((a, b) => a.fundLabel.localeCompare(b.fundLabel));
   }, [fileGroups, funds]);
 
-  // Underlying tab rows — flatten holdings across all fund-tagged files
-  const underlyingRows = useMemo(() => {
-    type Row = {
-      key: string;
-      fundLabel: string;
-      company: string;
-      cost: number;
-      fmv: number;
-      proceeds: number;
-    };
-    const out: Row[] = [];
-    for (const [fundId, fs] of fileGroups.byFund) {
-      const fund = funds.find((f) => f.id === fundId);
-      const fundLabel = fund?.short_name ?? fund?.name ?? "(unknown)";
-      // Merge holdings within the fund by company name (last-non-null wins)
-      const byCompany = new Map<string, Row>();
-      for (const f of fs) {
-        for (const h of f.payload!.holdings ?? []) {
-          const name = (h.company_name ?? "").trim();
-          if (!name) continue;
-          const k = `${fundId}::${name.toLowerCase()}`;
-          const existing = byCompany.get(k) ?? {
-            key: k,
+  // Underlying tab rows — flatten holdings across all fund-tagged files.
+  // Enriched in an effect because inheritance requires a DB read.
+  type UnderlyingRow = {
+    key: string;
+    fundLabel: string;
+    company: string;
+    instrument: string | null;
+    round: string | null;
+    cost: number;
+    fmv: number;
+    proceeds: number;
+    inherited_from_prior?: boolean;
+    needs_review?: boolean;
+    needs_round_review?: boolean;
+  };
+  const [underlyingRows, setUnderlyingRows] = useState<UnderlyingRow[]>([]);
+
+  useEffect(() => {
+    const currentQ = quarters.find((q) => q.id === quarterId);
+    const currentEnd = currentQ?.quarter_end_date ?? null;
+    let cancelled = false;
+    (async () => {
+      const out: UnderlyingRow[] = [];
+      for (const [fundId, fs] of fileGroups.byFund) {
+        const fund = funds.find((f) => f.id === fundId);
+        const fundLabel = fund?.short_name ?? fund?.name ?? "(unknown)";
+        // Flatten + dedupe by company within this fund (last-non-null wins)
+        const byCompany = new Map<string, EnrichedHolding>();
+        for (const f of fs) {
+          for (const h of f.payload!.holdings ?? []) {
+            const name = (h.company_name ?? "").trim();
+            if (!name) continue;
+            const k = name.toLowerCase();
+            const existing = byCompany.get(k) ?? { ...h, company_name: name };
+            if (h.fund_cost_usd != null) existing.fund_cost_usd = h.fund_cost_usd;
+            if (h.fund_fmv_usd != null) existing.fund_fmv_usd = h.fund_fmv_usd;
+            if (h.fund_proceeds_usd != null) existing.fund_proceeds_usd = h.fund_proceeds_usd;
+            if (h.round) existing.round = h.round;
+            if (h.instrument) existing.instrument = h.instrument;
+            byCompany.set(k, existing);
+          }
+        }
+        const enriched = await inheritHoldingMetadata({
+          fundId,
+          holdings: Array.from(byCompany.values()),
+          currentQuarterEndDate: currentEnd,
+        });
+        for (const h of enriched) {
+          out.push({
+            key: `${fundId}::${h.company_name.toLowerCase()}`,
             fundLabel,
-            company: name,
-            cost: 0,
-            fmv: 0,
-            proceeds: 0,
-          };
-          if (h.fund_cost_usd !== null && h.fund_cost_usd !== undefined) existing.cost = Number(h.fund_cost_usd);
-          if (h.fund_fmv_usd !== null && h.fund_fmv_usd !== undefined) existing.fmv = Number(h.fund_fmv_usd);
-          if (h.fund_proceeds_usd !== null && h.fund_proceeds_usd !== undefined) existing.proceeds = Number(h.fund_proceeds_usd);
-          byCompany.set(k, existing);
+            company: h.company_name,
+            instrument: h.instrument ?? null,
+            round: h.round ?? null,
+            cost: Number(h.fund_cost_usd ?? 0),
+            fmv: Number(h.fund_fmv_usd ?? 0),
+            proceeds: Number(h.fund_proceeds_usd ?? 0),
+            inherited_from_prior: h.inherited_from_prior,
+            needs_review: h.needs_review,
+            needs_round_review: h.needs_round_review,
+          });
         }
       }
-      out.push(...byCompany.values());
-    }
-    return out.sort((a, b) => b.fmv - a.fmv);
-  }, [fileGroups, funds]);
+      out.sort((a, b) => b.fmv - a.fmv);
+      if (!cancelled) setUnderlyingRows(out);
+    })();
+    return () => { cancelled = true; };
+  }, [fileGroups, funds, quarters, quarterId]);
 
   // Directs tab rows — from DIRECT_TAG files. Use holdings as the direct positions.
   const directRows = useMemo(() => {
