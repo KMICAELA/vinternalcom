@@ -7,6 +7,7 @@ import {
   Layers,
   Building2,
   Wallet,
+  Inbox,
   Settings,
   ShieldCheck,
   FlaskConical,
@@ -32,6 +33,7 @@ const items = [
   { title: "Underlying Portfolio", url: "/underlying", icon: Layers },
   { title: "Portfolio", url: "/portfolio", icon: Building2 },
   { title: "TWH Consolidated", url: "/consolidated", icon: Wallet },
+  { title: "Reports", url: "/reports", icon: Inbox },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

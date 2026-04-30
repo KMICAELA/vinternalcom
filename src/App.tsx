@@ -18,6 +18,8 @@ import ConsolidatedPage from "./pages/ConsolidatedPage";
 import SettingsPage from "./pages/SettingsPage";
 import ReconciliationPage from "./pages/ReconciliationPage";
 import ExtractionSandboxPage from "./pages/ExtractionSandboxPage";
+import ReportsPage from "./pages/ReportsPage";
+import ReportDetailPage from "./pages/ReportDetailPage";
 import SharePage from "./pages/SharePage";
 import NotFound from "./pages/NotFound";
 
@@ -49,6 +51,8 @@ const App = () => (
               <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />
               <Route path="/consolidated" element={<ConsolidatedPage />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/reports/:id" element={<ReportDetailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin/reconciliation" element={<ReconciliationPage />} />
               <Route path="/admin/extraction-sandbox" element={<ExtractionSandboxPage />} />
