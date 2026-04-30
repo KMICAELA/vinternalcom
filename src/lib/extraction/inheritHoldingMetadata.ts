@@ -3,17 +3,22 @@
 // For each extracted holding from a new quarterly report, we try to:
 //   1. Resolve the company by fuzzy name match against `companies` table.
 //   2. If the company exists AND was previously held by the same fund,
-//      inherit the prior quarter's `round` and `instrument` values when
-//      the new extraction left them blank or ambiguous.
-//   3. Flag rows that look like they need human review:
-//        - needs_review: cost differs >10% from prior quarter (possible new tranche / up-round)
-//        - needs_round_review: new company + blank round on a SAFE/Convertible Note
-//          (we default round to "Seed" but the user should confirm)
+//      inherit the prior quarter's `round`, `instrument`, `cost`, and
+//      `fmv` values when the new extraction left them blank/null.
+//   3. Apply the project-wide round normalizer (Pre-Seed / Seed / Series A–G,
+//      sub-tranches collapsed to parent series, instrument keywords moved
+//      out of the round column).
+//   4. Emit a `data_confidence` indicator for the UI:
+//        - confirmed: explicit value in this quarter's source
+//        - inherited: value carried from prior quarter unchanged
+//        - needs_review: TBD (null) field, narrative-driven update, or
+//          material cost change
 //
 // This helper is read-only — it never writes to the DB. Both the sandbox
 // and the production AddReportWizard call it before showing the review UI.
 
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeRound } from "./normalizeRound";
 
 export type RawHolding = {
   company_name: string;
@@ -25,7 +30,10 @@ export type RawHolding = {
   fund_proceeds_usd: number | null;
 };
 
+export type DataConfidence = "confirmed" | "inherited" | "needs_review";
+
 export type EnrichedHolding = RawHolding & {
+  round_detail?: string | null;
   inherited_from_prior?: boolean;
   inherited_cost?: boolean;
   inherited_fmv?: boolean;
@@ -35,15 +43,11 @@ export type EnrichedHolding = RawHolding & {
   prior_instrument?: string | null;
   prior_cost_usd?: number | null;
   prior_fmv_usd?: number | null;
+  data_confidence?: DataConfidence;
+  review_reason?: string | null;
 };
 
 const MATERIAL_COST_DELTA = 0.1; // 10%
-
-const isConvertibleInstrument = (s: string | null | undefined): boolean => {
-  if (!s) return false;
-  const k = s.toLowerCase();
-  return k.includes("safe") || k.includes("convertible") || k.includes("note");
-};
 
 const normalizeName = (s: string): string =>
   s.trim().toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ");
@@ -63,7 +67,7 @@ export async function inheritHoldingMetadata(opts: {
   const { fundId, holdings } = opts;
   if (!fundId || holdings.length === 0) return holdings.map((h) => ({ ...h }));
 
-  // 1. Resolve all candidate companies in one query (case-insensitive on legal_name OR commercial_name).
+  // 1. Resolve all candidate companies in one query.
   const names = holdings.map((h) => h.company_name?.trim()).filter(Boolean) as string[];
   if (names.length === 0) return holdings.map((h) => ({ ...h }));
 
@@ -85,12 +89,12 @@ export async function inheritHoldingMetadata(opts: {
     if (id) resolvedCompanyIds.add(id);
   }
 
-  // 2. For resolved companies, fetch all prior holdings + quarter end dates in this fund.
-  let priorByCompany = new Map<string, {
+  // 2. For resolved companies, fetch all prior holdings.
+  const priorByCompany = new Map<string, {
     round: string | null;
     instrument: string | null;
-    fund_cost_usd: number;
-    fund_fmv_usd: number;
+    fund_cost_usd: number | null;
+    fund_fmv_usd: number | null;
     quarter_end_date: string;
   }>();
   if (resolvedCompanyIds.size > 0) {
@@ -109,15 +113,15 @@ export async function inheritHoldingMetadata(opts: {
         priorByCompany.set(row.company_id, {
           round: row.round ?? null,
           instrument: row.instrument ?? null,
-          fund_cost_usd: Number(row.fund_cost_usd ?? 0),
-          fund_fmv_usd: Number(row.fund_fmv_usd ?? 0),
+          fund_cost_usd: row.fund_cost_usd == null ? null : Number(row.fund_cost_usd),
+          fund_fmv_usd: row.fund_fmv_usd == null ? null : Number(row.fund_fmv_usd),
           quarter_end_date: qend,
         });
       }
     }
   }
 
-  // 3. Walk holdings and apply inheritance / flags.
+  // 3. Walk holdings and apply inheritance + normalization + flags.
   return holdings.map((h): EnrichedHolding => {
     const out: EnrichedHolding = { ...h };
     const name = h.company_name?.trim();
@@ -128,54 +132,78 @@ export async function inheritHoldingMetadata(opts: {
 
     if (prior) {
       // Existing company with prior holding — inherit blank fields.
-      let inherited = false;
+      let inheritedSomething = false;
+
       if (!out.round && prior.round) {
         out.round = prior.round;
-        inherited = true;
+        inheritedSomething = true;
       }
       if (!out.instrument && prior.instrument) {
         out.instrument = prior.instrument;
-        inherited = true;
+        inheritedSomething = true;
       }
-      // Inherit Cost when current extraction is null/0 but prior had a value.
-      // Cost is the most stable field across quarters — if Q4 narrative didn't
-      // restate it, the Q3 baseline still holds.
+      // Cost: inherit when current is null/0 and prior had a real value.
       const curCost = h.fund_cost_usd;
-      if ((curCost == null || Number(curCost) === 0) && prior.fund_cost_usd > 0) {
+      if ((curCost == null || Number(curCost) === 0) && prior.fund_cost_usd != null && prior.fund_cost_usd > 0) {
         out.fund_cost_usd = prior.fund_cost_usd;
         out.inherited_cost = true;
-        inherited = true;
+        inheritedSomething = true;
       }
-      // Inherit FMV when current extraction is null/0. Less stable than cost
-      // (FMV moves quarter-to-quarter) so we only fall back when extraction
-      // truly returned nothing — never overwrite a real new value.
+      // FMV: ONLY inherit when current is null (no extraction). $0 is a meaningful
+      // markdown and must NOT be overwritten with prior FMV.
       const curFmv = h.fund_fmv_usd;
-      if ((curFmv == null || Number(curFmv) === 0) && prior.fund_fmv_usd > 0) {
+      if (curFmv == null && prior.fund_fmv_usd != null && prior.fund_fmv_usd > 0) {
         out.fund_fmv_usd = prior.fund_fmv_usd;
         out.inherited_fmv = true;
-        inherited = true;
+        inheritedSomething = true;
       }
       out.prior_round = prior.round;
       out.prior_instrument = prior.instrument;
       out.prior_cost_usd = prior.fund_cost_usd;
       out.prior_fmv_usd = prior.fund_fmv_usd;
-      if (inherited) out.inherited_from_prior = true;
+      if (inheritedSomething) out.inherited_from_prior = true;
 
-      // Material cost change → flag (only when both sides are real, not inherited).
-      const newCost = Number(out.fund_cost_usd ?? 0);
-      if (!out.inherited_cost && prior.fund_cost_usd > 0) {
-        const delta = Math.abs(newCost - prior.fund_cost_usd) / prior.fund_cost_usd;
-        if (delta > MATERIAL_COST_DELTA) out.needs_review = true;
-      } else if (!out.inherited_cost && newCost > 0) {
-        // Prior had no cost recorded but we now have one — likely new tranche.
-        out.needs_review = true;
+      // Material cost change → flag (only when both sides are real values).
+      if (!out.inherited_cost && prior.fund_cost_usd != null && prior.fund_cost_usd > 0) {
+        const newCost = Number(out.fund_cost_usd ?? 0);
+        if (newCost > 0) {
+          const delta = Math.abs(newCost - prior.fund_cost_usd) / prior.fund_cost_usd;
+          if (delta > MATERIAL_COST_DELTA) {
+            out.needs_review = true;
+            out.review_reason = "Material cost change vs prior quarter — possible new tranche / up-round";
+          }
+        }
       }
+    }
+    // NOTE: removed the auto-default-to-Seed-on-SAFE behaviour. Per the universal
+    // extraction rules, we NEVER invent a round value. If the report doesn't
+    // state a round and there's no prior to inherit from, leave round null and
+    // flag as needs_review.
+    if (!out.round && !prior) {
+      out.needs_review = true;
+      out.review_reason = out.review_reason ?? "Missing round — not stated in report and no prior quarter to inherit from";
+    }
+
+    // 4. Apply round normalization (catches "Series A-1" → "Series A",
+    //    "SAFE" in round col → moved to instrument col, etc.).
+    const norm = normalizeRound(out.round);
+    if (norm.round !== out.round) out.round = norm.round;
+    if (norm.round_detail) out.round_detail = norm.round_detail;
+    if (norm.instrument_extracted && !out.instrument) {
+      out.instrument = norm.instrument_extracted;
+    }
+
+    // 5. Compute data_confidence.
+    const hasTbd = out.fund_cost_usd == null || out.fund_fmv_usd == null;
+    if (out.needs_review || hasTbd) {
+      out.data_confidence = "needs_review";
+      if (hasTbd && !out.review_reason) {
+        out.review_reason = "Cost or FMV not stated in report — needs manual confirmation";
+      }
+    } else if (out.inherited_from_prior) {
+      out.data_confidence = "inherited";
     } else {
-      // New company (or no prior holding for this fund). Default SAFE/CN round to Seed.
-      if (!out.round && isConvertibleInstrument(out.instrument)) {
-        out.round = "Seed";
-        out.needs_round_review = true;
-      }
+      out.data_confidence = "confirmed";
     }
 
     return out;
