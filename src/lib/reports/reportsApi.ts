@@ -1,0 +1,222 @@
+// Helpers for the persistent Reports system.
+// - saveReportDraft: upload file to fund-reports/ + insert reports row (committed_to_db=false)
+// - promoteReportToLive: write extracted_payload to live tables, stamp source_report_id
+// - signedReportUrl: signed URL for downloading the original file
+//
+// All extracted data lives in reports.extracted_payload (jsonb) so /reports/:id can re-render
+// the exact extraction result indefinitely without re-running the AI.
+
+import { supabase } from "@/integrations/supabase/client";
+import type { ExtractedPayload } from "@/lib/extraction/runExtractFile";
+
+const BUCKET = "fund-reports";
+
+export type ReportDraftInput = {
+  file: File;
+  fundId: string | null;
+  quarterId: string | null;
+  payload: ExtractedPayload | null;
+  errorMessage?: string | null;
+  // Optional: arbitrary structured summary the caller wants to persist (counts etc.)
+  summary?: Record<string, unknown>;
+};
+
+export type SavedReport = {
+  id: string;
+  storage_path: string;
+};
+
+function classifyStatus(payload: ExtractedPayload | null, err?: string | null) {
+  if (err && !payload) return "error" as const;
+  if (!payload) return "pending" as const;
+  // Heuristic: any null cost/fmv on a holding → needs_review
+  const needsReview = (payload.holdings ?? []).some(
+    (h) => h.fund_cost_usd == null || h.fund_fmv_usd == null,
+  );
+  return needsReview ? ("needs_review" as const) : ("success" as const);
+}
+
+function buildSummary(payload: ExtractedPayload | null) {
+  if (!payload) return { holdings: 0 };
+  return {
+    holdings: payload.holdings?.length ?? 0,
+    has_fund_metrics: payload.twh_nav_usd != null || payload.twh_contributions_usd != null,
+    currency: payload.currency,
+    report_date: payload.report_date,
+  };
+}
+
+export async function saveReportDraft(input: ReportDraftInput): Promise<SavedReport> {
+  const { file, fundId, quarterId, payload, errorMessage, summary } = input;
+
+  // 1. Allocate id up-front so we can use it in the storage path
+  const id = crypto.randomUUID();
+  const safeName = file.name.replace(/[^\w.\-() ]+/g, "_");
+  const storagePath = `reports/${id}/${safeName}`;
+
+  // 2. Upload file
+  const up = await supabase.storage.from(BUCKET).upload(storagePath, file, {
+    contentType: file.type || undefined,
+    upsert: false,
+  });
+  if (up.error) throw up.error;
+
+  // 3. Resolve current user → uploaded_by
+  const { data: userData } = await supabase.auth.getUser();
+  const uploadedBy = userData?.user?.id ?? null;
+
+  // 4. Insert reports row
+  const status = classifyStatus(payload, errorMessage);
+  const { error: insErr } = await supabase.from("reports").insert({
+    id,
+    file_name: file.name,
+    storage_path: storagePath,
+    file_size_bytes: file.size,
+    mime_type: file.type || null,
+    fund_id: fundId,
+    quarter_id: quarterId,
+    uploaded_by: uploadedBy,
+    extraction_status: status,
+    extraction_summary: { ...buildSummary(payload), ...(summary ?? {}), error: errorMessage ?? null },
+    extracted_payload: payload as any,
+    committed_to_db: false,
+  });
+  if (insErr) {
+    // best-effort cleanup
+    await supabase.storage.from(BUCKET).remove([storagePath]);
+    throw insErr;
+  }
+
+  return { id, storage_path: storagePath };
+}
+
+export async function signedReportUrl(storagePath: string, ttlSeconds = 3600): Promise<string | null> {
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, ttlSeconds);
+  if (error) return null;
+  return data?.signedUrl ?? null;
+}
+
+export async function archiveReport(reportId: string, archived: boolean) {
+  const { error } = await supabase
+    .from("reports")
+    .update({ archived, archived_at: archived ? new Date().toISOString() : null })
+    .eq("id", reportId);
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Promotion: write extracted_payload to live tables, stamp source_report_id
+// ─────────────────────────────────────────────────────────────────────────
+
+type PromoteResult = {
+  fund_snapshots_written: number;
+  underlying_holdings_written: number;
+  direct_snapshots_written: number;
+  errors: string[];
+};
+
+export async function promoteReportToLive(reportId: string): Promise<PromoteResult> {
+  const result: PromoteResult = {
+    fund_snapshots_written: 0,
+    underlying_holdings_written: 0,
+    direct_snapshots_written: 0,
+    errors: [],
+  };
+
+  const { data: report, error: rErr } = await supabase
+    .from("reports")
+    .select("id, fund_id, quarter_id, extracted_payload, committed_to_db")
+    .eq("id", reportId)
+    .maybeSingle();
+  if (rErr || !report) {
+    throw new Error(rErr?.message ?? "Report not found");
+  }
+  if (report.committed_to_db) {
+    throw new Error("Report already promoted to live data");
+  }
+  if (!report.quarter_id) {
+    throw new Error("Cannot promote without a quarter assignment");
+  }
+
+  const payload = (report.extracted_payload ?? null) as ExtractedPayload | null;
+  if (!payload) throw new Error("No extracted payload to promote");
+
+  // 1. Fund-level metrics → fund_quarter_snapshots (if a fund_id is set)
+  if (report.fund_id) {
+    const fundSnap = {
+      fund_id: report.fund_id,
+      quarter_id: report.quarter_id,
+      twh_contributions_usd: payload.twh_contributions_usd ?? 0,
+      twh_distributions_usd: payload.twh_distributions_usd ?? 0,
+      twh_nav_usd: payload.twh_nav_usd ?? 0,
+      fund_total_contributions_usd: payload.fund_total_contributions_usd ?? 0,
+      fund_total_nav_usd: payload.fund_total_nav_usd ?? 0,
+      source_report_id: report.id,
+      extracted_at: new Date().toISOString(),
+    };
+    const { error: fsErr } = await supabase
+      .from("fund_quarter_snapshots")
+      .upsert(fundSnap, { onConflict: "fund_id,quarter_id" });
+    if (fsErr) result.errors.push(`fund_snapshot: ${fsErr.message}`);
+    else result.fund_snapshots_written = 1;
+  }
+
+  // 2. Holdings → underlying_holdings (need company_id resolution)
+  if (report.fund_id && (payload.holdings?.length ?? 0) > 0) {
+    for (const h of payload.holdings) {
+      const name = (h.company_name ?? "").trim();
+      if (!name) continue;
+
+      // Lookup or create company by commercial_name OR legal_name
+      const { data: existing } = await supabase
+        .from("companies")
+        .select("id")
+        .or(`commercial_name.ilike.${name},legal_name.ilike.${name}`)
+        .limit(1)
+        .maybeSingle();
+
+      let companyId = existing?.id;
+      if (!companyId) {
+        const { data: created, error: cErr } = await supabase
+          .from("companies")
+          .insert({ legal_name: name, commercial_name: name })
+          .select("id")
+          .single();
+        if (cErr || !created) {
+          result.errors.push(`company "${name}": ${cErr?.message ?? "insert failed"}`);
+          continue;
+        }
+        companyId = created.id;
+      }
+
+      const { error: uhErr } = await supabase.from("underlying_holdings").insert({
+        fund_id: report.fund_id,
+        quarter_id: report.quarter_id,
+        company_id: companyId,
+        round: h.round ?? null,
+        instrument: h.instrument ?? null,
+        investment_date: h.investment_date ?? null,
+        fund_cost_usd: h.fund_cost_usd,
+        fund_fmv_usd: h.fund_fmv_usd,
+        fund_proceeds_usd: h.fund_proceeds_usd,
+        source_report_id: report.id,
+      });
+      if (uhErr) result.errors.push(`holding "${name}": ${uhErr.message}`);
+      else result.underlying_holdings_written += 1;
+    }
+  }
+
+  // 3. Mark committed
+  const { data: userData } = await supabase.auth.getUser();
+  const { error: mErr } = await supabase
+    .from("reports")
+    .update({
+      committed_to_db: true,
+      committed_at: new Date().toISOString(),
+      committed_by: userData?.user?.id ?? null,
+    })
+    .eq("id", reportId);
+  if (mErr) result.errors.push(`mark committed: ${mErr.message}`);
+
+  return result;
+}
