@@ -18,15 +18,20 @@ type ExtractedHolding = {
   investment_date: string | null;
   instrument: string | null;
   round: string | null;
+  round_detail?: string | null;
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
+  fmv_change_reason?: string | null;       // narrative phrase that triggered FMV update (Mode B)
+  needs_review?: boolean;                  // model-flagged (e.g. unquantified company event)
+  review_reason?: string | null;
 };
 
 type ExtractedPayload = {
   fund_name: string | null;
   report_date: string | null;
   currency: string | null;
+  extraction_mode?: "A" | "B" | null;      // A = structured schedule, B = narrative-only
   fund_total_contributions_usd: number | null;
   fund_total_nav_usd: number | null;
   twh_contributions_usd: number | null;
@@ -35,6 +40,61 @@ type ExtractedPayload = {
   holdings: ExtractedHolding[];
   notes: string | null;
 };
+
+// ──────────────────────────────────────────────────────────────────────
+// Round / Instrument normalizer (mirror of public.normalize_round_name SQL)
+// ──────────────────────────────────────────────────────────────────────
+const INSTRUMENT_PATTERNS: Array<[RegExp, string]> = [
+  [/\bsafe\b/, "SAFE"],
+  [/(convertible|conv)\s*(note|debt)?|^note$/, "Convertible Note"],
+  [/common(\s+stock|\s+equity)?/, "Common Stock"],
+  [/(token\s*warrant|token\s*drop|^token$)/, "Token"],
+  [/warrant/, "Warrant"],
+  [/(partnership|lp)\s+interest/, "Partnership Interest"],
+];
+function titleCase(s: string): string {
+  return s.toLowerCase().split(/\s+/).map((w) => w ? w[0].toUpperCase() + w.slice(1) : w).join(" ");
+}
+function normalizeRound(raw: string | null | undefined): { round: string | null; round_detail: string | null; instrument_extracted: string | null } {
+  if (!raw || !raw.trim()) return { round: null, round_detail: null, instrument_extracted: null };
+  const v = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  let instrument: string | null = null;
+  for (const [re, name] of INSTRUMENT_PATTERNS) { if (re.test(v)) { instrument = name; break; } }
+  const hasSeriesSignal = /(series\s+[a-g])|(\b[a-g]-?\d?\b)|seed|growth|bridge/.test(v);
+  if (instrument && !hasSeriesSignal) return { round: null, round_detail: null, instrument_extracted: instrument };
+  if (/(pre[\s-]?seed)/.test(v)) return { round: "Pre-Seed", round_detail: null, instrument_extracted: instrument };
+  if (/(^|\s)seed/.test(v) || /series\s+seed/.test(v)) {
+    const detail = /(seed\s*[\d+]|seed\s*plus|seed\s*extension|seed-?\d)/.test(v) ? titleCase(raw.trim()) : null;
+    return { round: "Seed", round_detail: detail, instrument_extracted: instrument };
+  }
+  if (/growth/.test(v)) return { round: "Growth", round_detail: null, instrument_extracted: instrument };
+  if (/bridge/.test(v)) return { round: "Bridge", round_detail: null, instrument_extracted: instrument };
+  const m = v.match(/(?:^|series\s+|\s)([a-g])(?:-?\d)?(?:\s|$|\s*pref)/);
+  if (m) {
+    const subRe = new RegExp(`(series\\s+${m[1]}-?\\d)|(\\b${m[1]}-\\d\\b)`);
+    const detail = subRe.test(v) ? titleCase(raw.trim()) : null;
+    return { round: `Series ${m[1].toUpperCase()}`, round_detail: detail, instrument_extracted: instrument };
+  }
+  return { round: titleCase(raw), round_detail: null, instrument_extracted: instrument };
+}
+
+// Apply normalization + clean up zeros that should be null (TBD).
+function postProcessPayload(p: ExtractedPayload): ExtractedPayload {
+  if (!p || !Array.isArray(p.holdings)) return p;
+  p.holdings = p.holdings.map((h) => {
+    const norm = normalizeRound(h.round);
+    if (norm.round !== h.round) h.round = norm.round;
+    if (norm.round_detail && !h.round_detail) h.round_detail = norm.round_detail;
+    if (norm.instrument_extracted && !h.instrument) h.instrument = norm.instrument_extracted;
+    // Coerce undefined to null for downstream consumers — DO NOT coerce 0 to null
+    // (a $0 FMV is a meaningful write-off marker).
+    if (h.fund_cost_usd === undefined) h.fund_cost_usd = null;
+    if (h.fund_fmv_usd === undefined) h.fund_fmv_usd = null;
+    if (h.fund_proceeds_usd === undefined) h.fund_proceeds_usd = null;
+    return h;
+  });
+  return p;
+}
 
 const SYSTEM_BASE = `You are a financial-statement extraction agent for a venture fund-of-funds called TWH (Americas Fund I, managed by 1200VC).
 Your task is to extract structured data from a fund quarterly report and return ONLY a JSON object matching the schema below.
