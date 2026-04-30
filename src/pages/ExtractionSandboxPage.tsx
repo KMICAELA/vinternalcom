@@ -576,6 +576,15 @@ function ExtractionSandboxInner() {
             <Switch id="compare" checked={compare} onCheckedChange={setCompare} />
             <Label htmlFor="compare" className="text-xs cursor-pointer">Compare to live DB</Label>
           </div>
+          <Button
+            variant="default"
+            size="sm"
+            onClick={saveAllAsDrafts}
+            disabled={files.filter((f) => f.status === "done" && f.fundId).length === 0}
+            className="gap-2"
+          >
+            <Save className="h-4 w-4" /> Save as drafts
+          </Button>
           <Button variant="outline" size="sm" onClick={clearAll} disabled={files.length === 0} className="gap-2">
             <Trash2 className="h-4 w-4" /> Clear sandbox
           </Button>
