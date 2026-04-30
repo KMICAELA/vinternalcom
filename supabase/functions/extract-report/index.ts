@@ -504,7 +504,7 @@ or a parallel/feeder vehicle). Apply these rules strictly:
     try {
       rawText = await callAnthropic(ANTHROPIC_API_KEY, systemPrompt, userBlocks);
       const parsed = safeJson(rawText) as ExtractedPayload | null;
-      if (parsed && typeof parsed === "object") normalized = parsed;
+      if (parsed && typeof parsed === "object") normalized = postProcessPayload(parsed as ExtractedPayload);
       else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
       extractionError = e instanceof Error ? e.message : String(e);
