@@ -310,6 +310,7 @@ export type Database = {
           investment_date: string | null
           note: string | null
           round: string | null
+          round_detail: string | null
           twh_cost_usd: number
           updated_at: string
         }
@@ -322,6 +323,7 @@ export type Database = {
           investment_date?: string | null
           note?: string | null
           round?: string | null
+          round_detail?: string | null
           twh_cost_usd?: number
           updated_at?: string
         }
@@ -334,6 +336,7 @@ export type Database = {
           investment_date?: string | null
           note?: string | null
           round?: string | null
+          round_detail?: string | null
           twh_cost_usd?: number
           updated_at?: string
         }
@@ -945,64 +948,67 @@ export type Database = {
         Row: {
           company_id: string
           created_at: string
-          fund_cost_usd: number
-          fund_fmv_usd: number
+          fund_cost_usd: number | null
+          fund_fmv_usd: number | null
           fund_id: string
-          fund_proceeds_usd: number
+          fund_proceeds_usd: number | null
           id: string
           instrument: string | null
           investment_date: string | null
           moic: number | null
           quarter_id: string
           round: string | null
+          round_detail: string | null
           source_report_id: string | null
           tranche_seq: number
-          twh_cost_usd: number
-          twh_fmv_usd: number
+          twh_cost_usd: number | null
+          twh_fmv_usd: number | null
           twh_ownership_pct: number | null
-          twh_proceeds_usd: number
+          twh_proceeds_usd: number | null
           updated_at: string
         }
         Insert: {
           company_id: string
           created_at?: string
-          fund_cost_usd?: number
-          fund_fmv_usd?: number
+          fund_cost_usd?: number | null
+          fund_fmv_usd?: number | null
           fund_id: string
-          fund_proceeds_usd?: number
+          fund_proceeds_usd?: number | null
           id?: string
           instrument?: string | null
           investment_date?: string | null
           moic?: number | null
           quarter_id: string
           round?: string | null
+          round_detail?: string | null
           source_report_id?: string | null
           tranche_seq?: number
-          twh_cost_usd?: number
-          twh_fmv_usd?: number
+          twh_cost_usd?: number | null
+          twh_fmv_usd?: number | null
           twh_ownership_pct?: number | null
-          twh_proceeds_usd?: number
+          twh_proceeds_usd?: number | null
           updated_at?: string
         }
         Update: {
           company_id?: string
           created_at?: string
-          fund_cost_usd?: number
-          fund_fmv_usd?: number
+          fund_cost_usd?: number | null
+          fund_fmv_usd?: number | null
           fund_id?: string
-          fund_proceeds_usd?: number
+          fund_proceeds_usd?: number | null
           id?: string
           instrument?: string | null
           investment_date?: string | null
           moic?: number | null
           quarter_id?: string
           round?: string | null
+          round_detail?: string | null
           source_report_id?: string | null
           tranche_seq?: number
-          twh_cost_usd?: number
-          twh_fmv_usd?: number
+          twh_cost_usd?: number | null
+          twh_fmv_usd?: number | null
           twh_ownership_pct?: number | null
-          twh_proceeds_usd?: number
+          twh_proceeds_usd?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -1067,6 +1073,14 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      normalize_round_name: {
+        Args: { _raw: string }
+        Returns: {
+          instrument_extracted: string
+          round: string
+          round_detail: string
+        }[]
+      }
       xirr: { Args: { _amounts: number[]; _dates: string[] }; Returns: number }
     }
     Enums: {
