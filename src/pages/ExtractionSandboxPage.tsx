@@ -871,10 +871,11 @@ function ExtractionSandboxInner() {
                         const moic = calcMoic(r.cost, r.fmv, r.proceeds);
                         const gain = r.fmv + r.proceeds - r.cost;
                         const liveMoic = live ? calcMoic(live.fund_cost_usd, live.fund_fmv_usd, live.fund_proceeds_usd) : null;
+                        const hasTbd = r.cost === 0 || r.fmv === 0; // sandbox still uses 0 as placeholder; treat as TBD-ish
                         const flagReason = r.needs_review
-                          ? "Material cost change vs prior quarter — possible new tranche / up-round"
+                          ? "Material change vs prior quarter or unquantified narrative event — confirm before saving"
                           : r.needs_round_review
-                          ? "New SAFE/Convertible — round defaulted to Seed; please confirm"
+                          ? "Round not stated — please confirm"
                           : null;
                         return (
                           <TableRow key={r.key} className="table-row-hover">
@@ -892,6 +893,9 @@ function ExtractionSandboxInner() {
                                       </TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
+                                )}
+                                {!flagReason && r.inherited_from_prior && (
+                                  <span className="text-[10px] text-muted-foreground/70" title="Inherited from prior quarter">↳</span>
                                 )}
                               </span>
                             </TableCell>
