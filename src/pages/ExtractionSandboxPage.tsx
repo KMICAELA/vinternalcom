@@ -301,6 +301,47 @@ function ExtractionSandboxInner() {
     setFiles([]);
   }
 
+  const navigate = useNavigate();
+
+  async function saveAllAsDrafts() {
+    const ready = files.filter((f) => f.status === "done" && f.fundId);
+    if (ready.length === 0) {
+      toast.error("Nothing to save — extract at least one file first");
+      return;
+    }
+    const t = toast.loading(`Saving ${ready.length} draft${ready.length === 1 ? "" : "s"}…`);
+    let savedId: string | null = null;
+    let failed = 0;
+    for (const f of ready) {
+      try {
+        const fundIdForReport = f.fundId === DIRECT_TAG ? null : (f.fundId as string);
+        const r = await saveReportDraft({
+          file: f.file,
+          fundId: fundIdForReport,
+          quarterId: quarterId || null,
+          payload: f.payload ?? null,
+          errorMessage: f.error ?? null,
+          summary: { source_type: f.sourceType, sandbox: true },
+        });
+        savedId = r.id;
+      } catch (e) {
+        failed += 1;
+        console.error("saveReportDraft failed", e);
+      }
+    }
+    toast.dismiss(t);
+    if (failed > 0) {
+      toast.warning(`Saved ${ready.length - failed} of ${ready.length} drafts (${failed} failed)`);
+    } else {
+      toast.success(`Saved ${ready.length} draft${ready.length === 1 ? "" : "s"} to /reports`, {
+        action: savedId && ready.length === 1 ? {
+          label: "Open",
+          onClick: () => navigate(`/reports/${savedId}`),
+        } : { label: "View all", onClick: () => navigate("/reports") },
+      });
+    }
+  }
+
   async function runOne(f: SandboxFile) {
     setFiles((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: "extracting", error: undefined } : x)));
     const fundIdForApi = f.fundId === DIRECT_TAG ? null : f.fundId;
