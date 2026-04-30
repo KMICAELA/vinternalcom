@@ -298,6 +298,13 @@ export type Database = {
             referencedRelation: "quarters"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "direct_quarter_snapshots_source_report_fk"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
         ]
       }
       directs: {
@@ -518,6 +525,13 @@ export type Database = {
             columns: ["quarter_id"]
             isOneToOne: false
             referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_quarter_snapshots_source_report_fk"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
             referencedColumns: ["id"]
           },
         ]
@@ -817,6 +831,104 @@ export type Database = {
         }
         Relationships: []
       }
+      reports: {
+        Row: {
+          archived: boolean
+          archived_at: string | null
+          committed_at: string | null
+          committed_by: string | null
+          committed_to_db: boolean
+          created_at: string
+          extracted_payload: Json | null
+          extraction_status: Database["public"]["Enums"]["report_extraction_status"]
+          extraction_summary: Json | null
+          file_name: string
+          file_size_bytes: number | null
+          fund_id: string | null
+          id: string
+          mime_type: string | null
+          notes: string | null
+          quarter_id: string | null
+          storage_path: string
+          updated_at: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          archived?: boolean
+          archived_at?: string | null
+          committed_at?: string | null
+          committed_by?: string | null
+          committed_to_db?: boolean
+          created_at?: string
+          extracted_payload?: Json | null
+          extraction_status?: Database["public"]["Enums"]["report_extraction_status"]
+          extraction_summary?: Json | null
+          file_name: string
+          file_size_bytes?: number | null
+          fund_id?: string | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          quarter_id?: string | null
+          storage_path: string
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          archived?: boolean
+          archived_at?: string | null
+          committed_at?: string | null
+          committed_by?: string | null
+          committed_to_db?: boolean
+          created_at?: string
+          extracted_payload?: Json | null
+          extraction_status?: Database["public"]["Enums"]["report_extraction_status"]
+          extraction_summary?: Json | null
+          file_name?: string
+          file_size_bytes?: number | null
+          fund_id?: string | null
+          id?: string
+          mime_type?: string | null
+          notes?: string | null
+          quarter_id?: string | null
+          storage_path?: string
+          updated_at?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_committed_by_fkey"
+            columns: ["committed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: false
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       source_documents: {
         Row: {
           direct_id: string | null
@@ -1033,6 +1145,13 @@ export type Database = {
             referencedRelation: "quarters"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "underlying_holdings_source_report_fk"
+            columns: ["source_report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_roles: {
@@ -1085,6 +1204,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "viewer"
+      report_extraction_status: "pending" | "success" | "error" | "needs_review"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1213,6 +1333,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "viewer"],
+      report_extraction_status: ["pending", "success", "error", "needs_review"],
     },
   },
 } as const
