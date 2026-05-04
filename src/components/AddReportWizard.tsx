@@ -315,24 +315,32 @@ export default function AddReportWizard({
     return realId;
   }
 
-  async function runExtraction() {
-    if (!canSubmitSource) return;
+  async function runExtraction(opts?: { fileOverride?: File; sourceTypeOverride?: SourceType }) {
+    const effectiveSource = opts?.sourceTypeOverride ?? sourceType;
+    const effectivePdf = opts?.fileOverride ?? pdfFile;
+    const effectiveXlsx = effectiveSource === "excel" ? (opts?.fileOverride ?? xlsxFile) : xlsxFile;
+    const effectiveEml = effectiveSource === "email" ? (opts?.fileOverride ?? emlFile) : emlFile;
+    if (!opts && !canSubmitSource) return;
     setBusy(true);
     setExtractionError(null);
     try {
       const realQuarterId = await ensureRealQuarterId();
-      const body: any = { source_type: sourceType, fund_id: fundId, quarter_id: realQuarterId };
-      if (sourceType === "pdf" && pdfFile) {
-        body.file_name = pdfFile.name;
-        body.pdf_base64 = await fileToBase64(pdfFile);
-      } else if (sourceType === "excel" && xlsxFile) {
-        body.file_name = xlsxFile.name;
-        body.excel_payload = await parseExcel(xlsxFile);
-      } else if (sourceType === "email") {
+      const body: any = { source_type: effectiveSource, fund_id: fundId, quarter_id: realQuarterId };
+      if (effectiveSource === "pdf" && effectivePdf) {
+        body.file_name = effectivePdf.name;
+        body.pdf_base64 = await fileToBase64(effectivePdf);
+        // Keep file in state so confirmDraft can re-upload it
+        setPdfFile(effectivePdf);
+      } else if (effectiveSource === "excel" && effectiveXlsx) {
+        body.file_name = effectiveXlsx.name;
+        body.excel_payload = await parseExcel(effectiveXlsx);
+        setXlsxFile(effectiveXlsx);
+      } else if (effectiveSource === "email") {
         body.email_text = emailText.trim() || null;
-        if (emlFile) {
-          body.file_name = emlFile.name;
-          body.eml_base64 = await fileToBase64(emlFile);
+        if (effectiveEml) {
+          body.file_name = effectiveEml.name;
+          body.eml_base64 = await fileToBase64(effectiveEml);
+          setEmlFile(effectiveEml);
         }
       }
       setStep(2);
