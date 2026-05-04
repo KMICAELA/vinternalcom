@@ -498,7 +498,7 @@ export default function AddReportWizard({
             <Button variant="outline" onClick={saveDraftAndClose}>Save draft</Button>
             <Button onClick={confirmDraft} disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              <CheckCircle2 className="h-4 w-4 mr-2" />Confirm
+              <CheckCircle2 className="h-4 w-4 mr-2" />Save as draft
             </Button>
           </DialogFooter>
         )}
