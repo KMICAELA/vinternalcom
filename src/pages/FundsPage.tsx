@@ -206,26 +206,8 @@ export default function FundsPage() {
                             ) : (
                               <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium w-fit">Missing</Badge>
                             )}
-                            {r.report_files.length > 0 && (
-                              <div className="flex flex-col gap-0.5">
-                                {r.report_files.slice(0, 3).map((f) => (
-                                  <Link
-                                    key={f.id}
-                                    to={`/reports/${f.id}`}
-                                    title={f.file_name}
-                                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors max-w-[220px]"
-                                  >
-                                    <FileText className="h-2.5 w-2.5 shrink-0" />
-                                    <span className="truncate">{f.file_name}</span>
-                                  </Link>
-                                ))}
-                                {r.report_files.length > 3 && (
-                                  <span className="text-[10px] text-muted-foreground">+{r.report_files.length - 3} more</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </TableCell>
+          </div>
+        </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
                         <TableCell className="text-right font-mono">
                           <MetricTooltip
