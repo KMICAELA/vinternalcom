@@ -453,7 +453,35 @@ export default function AddReportWizard({
               </div>
             </div>
 
-            <Tabs value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>
+            {existingReports.length > 0 && (
+              <Card className="p-3 bg-muted/30 border-border">
+                <div className="text-xs font-semibold mb-2 text-muted-foreground">
+                  Documents already uploaded for this fund / quarter ({existingReports.length})
+                </div>
+                <div className="space-y-1">
+                  {existingReports.map((r) => (
+                    <Link
+                      key={r.id}
+                      to={`/reports/${r.id}`}
+                      onClick={() => onOpenChange(false)}
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-accent text-xs group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{r.file_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
+                          {r.committed_to_db ? "Live" : "Draft"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(r.uploaded_at).toLocaleDateString()}</span>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </Card>
+            )}
               <TabsList className="grid grid-cols-3 w-full">
                 <TabsTrigger value="pdf"><FileText className="h-4 w-4 mr-2" />PDF</TabsTrigger>
                 <TabsTrigger value="excel"><FileSpreadsheet className="h-4 w-4 mr-2" />Excel</TabsTrigger>
