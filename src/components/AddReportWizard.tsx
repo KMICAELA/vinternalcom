@@ -496,44 +496,67 @@ export default function AddReportWizard({
                   Documents already uploaded for this fund / quarter ({existingReports.length})
                 </div>
                 <div className="space-y-1">
-                  {existingReports.map((r) => {
-                    const inner = (
-                      <>
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span className="truncate">{r.file_name}</span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          {r.source === "report" ? (
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
-                              {r.committed_to_db ? "Live" : "Draft"}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground">Legacy</span>
-                          )}
-                          <span className="text-[10px] text-muted-foreground">{new Date(r.uploaded_at).toLocaleDateString()}</span>
-                          {r.source === "report" && <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />}
-                        </div>
-                      </>
-                    );
-                    return r.source === "report" ? (
-                      <Link
-                        key={r.id}
-                        to={`/reports/${r.id}`}
-                        onClick={() => onOpenChange(false)}
-                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-accent text-xs group"
-                      >
-                        {inner}
-                      </Link>
-                    ) : (
-                      <div
-                        key={r.id}
-                        className="flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs"
-                      >
-                        {inner}
+                  {existingReports.map((r) => (
+                    <div
+                      key={r.id}
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-accent text-xs group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{r.file_name}</span>
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {r.source === "report" ? (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
+                            {r.committed_to_db ? "Live" : "Draft"}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground">Legacy</span>
+                        )}
+                        <span className="text-[10px] text-muted-foreground">{new Date(r.uploaded_at).toLocaleDateString()}</span>
+                        {r.source === "report" && (
+                          <Link
+                            to={`/reports/${r.id}`}
+                            onClick={() => onOpenChange(false)}
+                            className="p-1 rounded hover:bg-background text-muted-foreground hover:text-foreground"
+                            title="Open / edit report"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </Link>
+                        )}
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const ok = window.confirm(`Remove "${r.file_name}" from this fund / quarter? This cannot be undone.`);
+                            if (!ok) return;
+                            try {
+                              if (r.source === "report") {
+                                const { error } = await supabase
+                                  .from("reports")
+                                  .update({ archived: true, archived_at: new Date().toISOString() })
+                                  .eq("id", r.id);
+                                if (error) throw error;
+                              } else {
+                                const { error } = await supabase
+                                  .from("source_documents")
+                                  .delete()
+                                  .eq("id", r.id);
+                                if (error) throw error;
+                              }
+                              setExistingReports((prev) => prev.filter((x) => x.id !== r.id));
+                              toast({ title: "Document removed" });
+                            } catch (e: any) {
+                              toast({ title: "Remove failed", description: e?.message ?? "Unknown error", variant: "destructive" });
+                            }
+                          }}
+                          className="p-1 rounded hover:bg-destructive/20 text-muted-foreground hover:text-destructive"
+                          title="Remove document"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </Card>
             )}
