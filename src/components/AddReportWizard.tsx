@@ -482,6 +482,8 @@ export default function AddReportWizard({
                 </div>
               </Card>
             )}
+
+            <Tabs value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>
               <TabsList className="grid grid-cols-3 w-full">
                 <TabsTrigger value="pdf"><FileText className="h-4 w-4 mr-2" />PDF</TabsTrigger>
                 <TabsTrigger value="excel"><FileSpreadsheet className="h-4 w-4 mr-2" />Excel</TabsTrigger>
