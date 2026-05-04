@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
+import { computeXirr } from "@/lib/irr";
 
 type ReportStatus = "confirmed" | "in_review" | "missing";
 type ReportFile = { id: string; file_name: string; committed_to_db: boolean };
