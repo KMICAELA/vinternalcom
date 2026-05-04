@@ -42,7 +42,7 @@ export default function FundsPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [{ data: funds }, { data: docs }] = await Promise.all([
+      const [{ data: funds }, { data: docs }, { data: reports }] = await Promise.all([
         supabase
           .from("funds")
           .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd, confirmed_at)")
@@ -53,6 +53,12 @@ export default function FundsPage() {
           .select("fund_id, status")
           .eq("quarter_id", selected.id)
           .eq("doc_type", "fund_report"),
+        supabase
+          .from("reports")
+          .select("id, file_name, fund_id, committed_to_db, uploaded_at")
+          .eq("quarter_id", selected.id)
+          .eq("archived", false)
+          .order("uploaded_at", { ascending: false }),
       ]);
 
       const docsByFund = new Map<string, string[]>();
@@ -61,6 +67,14 @@ export default function FundsPage() {
         const arr = docsByFund.get(d.fund_id) ?? [];
         arr.push(d.status);
         docsByFund.set(d.fund_id, arr);
+      });
+
+      const reportsByFund = new Map<string, ReportFile[]>();
+      (reports ?? []).forEach((r: any) => {
+        if (!r.fund_id) return;
+        const arr = reportsByFund.get(r.fund_id) ?? [];
+        arr.push({ id: r.id, file_name: r.file_name, committed_to_db: r.committed_to_db });
+        reportsByFund.set(r.fund_id, arr);
       });
 
       const out: FundRow[] = (funds ?? []).map((f: any) => {
