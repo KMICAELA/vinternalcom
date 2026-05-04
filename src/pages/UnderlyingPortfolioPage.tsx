@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { CheckCircle2, CornerDownRight, AlertTriangle } from "lucide-react";
 import { fmtUSD, fmtMultiple, calcMoic, signClass } from "@/lib/format";
+import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 
 type Row = {
   id: string;
