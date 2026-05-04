@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import DashboardPage from "./pages/DashboardPage";
 import HighlightsPage from "./pages/HighlightsPage";
 import FundsPage from "./pages/FundsPage";
+import FundDetailPage from "./pages/FundDetailPage";
 import DirectsPage from "./pages/DirectsPage";
 import UnderlyingPortfolioPage from "./pages/UnderlyingPortfolioPage";
 import PortfolioPage from "./pages/PortfolioPage";
@@ -47,6 +48,7 @@ const App = () => (
               <Route path="/" element={<DashboardPage />} />
               <Route path="/highlights" element={<HighlightsPage />} />
               <Route path="/funds" element={<FundsPage />} />
+              <Route path="/funds/:id" element={<FundDetailPage />} />
               <Route path="/directs" element={<DirectsPage />} />
               <Route path="/underlying" element={<UnderlyingPortfolioPage />} />
               <Route path="/portfolio" element={<PortfolioPage />} />

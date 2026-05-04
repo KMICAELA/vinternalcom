@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
+import { computeXirr } from "@/lib/irr";
 
 type ReportStatus = "confirmed" | "in_review" | "missing";
 type ReportFile = { id: string; file_name: string; committed_to_db: boolean };
@@ -27,6 +28,8 @@ type FundRow = {
   twh_nav_usd: number;
   fund_total_contributions_usd: number;
   fund_total_nav_usd: number;
+  irr: number | null;
+  cf_count: number;
   report_status: ReportStatus;
   report_files: ReportFile[];
 };
@@ -43,7 +46,7 @@ export default function FundsPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [{ data: funds }, { data: docs }, { data: reports }] = await Promise.all([
+      const [{ data: funds }, { data: docs }, { data: reports }, { data: flows }] = await Promise.all([
         supabase
           .from("funds")
           .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd, confirmed_at)")
@@ -60,6 +63,11 @@ export default function FundsPage() {
           .eq("quarter_id", selected.id)
           .eq("archived", false)
           .order("uploaded_at", { ascending: false }),
+        supabase
+          .from("cash_flows")
+          .select("fund_id, date, amount_usd")
+          .eq("scope", "twh_net")
+          .lte("date", selected.quarter_end_date),
       ]);
 
       const docsByFund = new Map<string, string[]>();
@@ -78,6 +86,14 @@ export default function FundsPage() {
         reportsByFund.set(r.fund_id, arr);
       });
 
+      const flowsByFund = new Map<string, { date: string; amount_usd: number }[]>();
+      (flows ?? []).forEach((cf: any) => {
+        if (!cf.fund_id) return;
+        const arr = flowsByFund.get(cf.fund_id) ?? [];
+        arr.push({ date: cf.date, amount_usd: Number(cf.amount_usd) });
+        flowsByFund.set(cf.fund_id, arr);
+      });
+
       const out: FundRow[] = (funds ?? []).map((f: any) => {
         const c = f.fund_commitments?.[0] ?? {};
         const snap = (f.fund_quarter_snapshots ?? []).find((s: any) => s.quarter_id === selected.id) ?? {};
@@ -88,6 +104,9 @@ export default function FundsPage() {
           : hasDocs || snap.quarter_id
           ? "in_review"
           : "missing";
+        const fundFlows = flowsByFund.get(f.id) ?? [];
+        const nav = Number(snap.twh_nav_usd ?? 0);
+        const irr = computeXirr(fundFlows, nav, selected.quarter_end_date);
         return {
           id: f.id,
           name: f.name,
@@ -98,9 +117,11 @@ export default function FundsPage() {
           twh_ownership_pct: Number(c.twh_ownership_pct ?? 0),
           twh_contributions_usd: Number(snap.twh_contributions_usd ?? 0),
           twh_distributions_usd: Number(snap.twh_distributions_usd ?? 0),
-          twh_nav_usd: Number(snap.twh_nav_usd ?? 0),
+          twh_nav_usd: nav,
           fund_total_contributions_usd: Number(snap.fund_total_contributions_usd ?? 0),
           fund_total_nav_usd: Number(snap.fund_total_nav_usd ?? 0),
+          irr,
+          cf_count: fundFlows.length,
           report_status,
           report_files: reportsByFund.get(f.id) ?? [],
         };
@@ -152,14 +173,15 @@ export default function FundsPage() {
                 <TableHead className="text-right">NAV</TableHead>
                 <TableHead className="text-right">DPI</TableHead>
                 <TableHead className="text-right">TVPI</TableHead>
+                <TableHead className="text-right">Net IRR</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
               ) : (
                 <>
                   {rows.map((r) => {
@@ -170,7 +192,11 @@ export default function FundsPage() {
                     const hasContrib = r.twh_contributions_usd > 0;
                     return (
                       <TableRow key={r.id} className="table-row-hover">
-                        <TableCell className="font-medium max-w-[280px] truncate">{fundLabel}</TableCell>
+                        <TableCell className="font-medium max-w-[280px] truncate">
+                          <Link to={`/funds/${r.id}`} className="hover:text-primary hover:underline transition-colors">
+                            {fundLabel}
+                          </Link>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             {r.report_status === "confirmed" ? (
@@ -289,6 +315,24 @@ export default function FundsPage() {
                             {fmtMultiple(tvpi)}
                           </MetricTooltip>
                         </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind={r.irr != null ? "derived" : "missing"}
+                            title="Net IRR (XIRR)"
+                            formula={{
+                              expression: "XIRR over TWH cash flows + terminal NAV",
+                              parts: [
+                                { label: "Cash flow entries", value: `${r.cf_count}` },
+                                { label: "Terminal NAV", value: fmtUsdFull(r.twh_nav_usd) },
+                                { label: "As of", value: selected.quarter_end_date },
+                              ],
+                              result: r.irr != null ? fmtPctFull(r.irr, 1) : "—",
+                            }}
+                            missingInputs={["TWH cash flows for this fund"]}
+                          >
+                            {r.irr != null ? fmtPct(r.irr, 1) : "—"}
+                          </MetricTooltip>
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => { setWizardFundId(r.id); setWizardOpen(true); }}>
                             <Upload className="h-3 w-3" /> Add
@@ -298,16 +342,18 @@ export default function FundsPage() {
                     );
                   })}
                   <TableRow className="border-t-2 border-border font-semibold">
-                    <TableCell>Total</TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.commit, { compact: true })}</TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.contrib, { compact: true })}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.distrib, { compact: true })}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.nav, { compact: true })}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtMultiple(calcDpi(totals.contrib, totals.distrib))}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtMultiple(calcTvpi(totals.contrib, totals.distrib, totals.nav))}</TableCell>
-                    <TableCell></TableCell>
+                    {/* Fund */}      <TableCell>Total</TableCell>
+                    {/* Report */}    <TableCell></TableCell>
+                    {/* Start */}     <TableCell></TableCell>
+                    {/* TWH Commit */}<TableCell className="text-right font-mono">{fmtUSD(totals.commit, { compact: true })}</TableCell>
+                    {/* TWH % */}     <TableCell></TableCell>
+                    {/* Contrib */}   <TableCell className="text-right font-mono">{fmtUSD(totals.contrib, { compact: true })}</TableCell>
+                    {/* Distrib */}   <TableCell className="text-right font-mono">{fmtUSD(totals.distrib, { compact: true })}</TableCell>
+                    {/* NAV */}       <TableCell className="text-right font-mono">{fmtUSD(totals.nav, { compact: true })}</TableCell>
+                    {/* DPI */}       <TableCell className="text-right font-mono">{fmtMultiple(calcDpi(totals.contrib, totals.distrib))}</TableCell>
+                    {/* TVPI */}      <TableCell className="text-right font-mono">{fmtMultiple(calcTvpi(totals.contrib, totals.distrib, totals.nav))}</TableCell>
+                    {/* IRR */}       <TableCell></TableCell>
+                    {/* action */}    <TableCell></TableCell>
                   </TableRow>
                 </>
               )}
