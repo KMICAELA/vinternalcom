@@ -9,6 +9,7 @@ import { Upload, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
+import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 
 type ReportStatus = "confirmed" | "in_review" | "missing";
 type ReportFile = { id: string; file_name: string; committed_to_db: boolean };
