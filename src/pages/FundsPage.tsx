@@ -5,11 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload } from "lucide-react";
+import { Upload, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 
 type ReportStatus = "confirmed" | "in_review" | "missing";
+type ReportFile = { id: string; file_name: string; committed_to_db: boolean };
 
 type FundRow = {
   id: string;
@@ -25,6 +27,7 @@ type FundRow = {
   fund_total_contributions_usd: number;
   fund_total_nav_usd: number;
   report_status: ReportStatus;
+  report_files: ReportFile[];
 };
 
 export default function FundsPage() {
@@ -39,7 +42,7 @@ export default function FundsPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [{ data: funds }, { data: docs }] = await Promise.all([
+      const [{ data: funds }, { data: docs }, { data: reports }] = await Promise.all([
         supabase
           .from("funds")
           .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd, confirmed_at)")
@@ -50,6 +53,12 @@ export default function FundsPage() {
           .select("fund_id, status")
           .eq("quarter_id", selected.id)
           .eq("doc_type", "fund_report"),
+        supabase
+          .from("reports")
+          .select("id, file_name, fund_id, committed_to_db, uploaded_at")
+          .eq("quarter_id", selected.id)
+          .eq("archived", false)
+          .order("uploaded_at", { ascending: false }),
       ]);
 
       const docsByFund = new Map<string, string[]>();
@@ -58,6 +67,14 @@ export default function FundsPage() {
         const arr = docsByFund.get(d.fund_id) ?? [];
         arr.push(d.status);
         docsByFund.set(d.fund_id, arr);
+      });
+
+      const reportsByFund = new Map<string, ReportFile[]>();
+      (reports ?? []).forEach((r: any) => {
+        if (!r.fund_id) return;
+        const arr = reportsByFund.get(r.fund_id) ?? [];
+        arr.push({ id: r.id, file_name: r.file_name, committed_to_db: r.committed_to_db });
+        reportsByFund.set(r.fund_id, arr);
       });
 
       const out: FundRow[] = (funds ?? []).map((f: any) => {
@@ -84,6 +101,7 @@ export default function FundsPage() {
           fund_total_contributions_usd: Number(snap.fund_total_contributions_usd ?? 0),
           fund_total_nav_usd: Number(snap.fund_total_nav_usd ?? 0),
           report_status,
+          report_files: reportsByFund.get(f.id) ?? [],
         };
       });
       out.sort((a, b) => b.twh_nav_usd - a.twh_nav_usd);
@@ -150,13 +168,33 @@ export default function FundsPage() {
                       <TableRow key={r.id} className="table-row-hover">
                         <TableCell className="font-medium max-w-[280px] truncate">{r.short_name ?? r.name}</TableCell>
                         <TableCell>
-                          {r.report_status === "confirmed" ? (
-                            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[10px] font-medium">Confirmed</Badge>
-                          ) : r.report_status === "in_review" ? (
-                            <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px] font-medium">In review</Badge>
-                          ) : (
-                            <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium">Missing</Badge>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            {r.report_status === "confirmed" ? (
+                              <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[10px] font-medium w-fit">Confirmed</Badge>
+                            ) : r.report_status === "in_review" ? (
+                              <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px] font-medium w-fit">In review</Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium w-fit">Missing</Badge>
+                            )}
+                            {r.report_files.length > 0 && (
+                              <div className="flex flex-col gap-0.5">
+                                {r.report_files.slice(0, 3).map((f) => (
+                                  <Link
+                                    key={f.id}
+                                    to={`/reports/${f.id}`}
+                                    title={f.file_name}
+                                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors max-w-[220px]"
+                                  >
+                                    <FileText className="h-2.5 w-2.5 shrink-0" />
+                                    <span className="truncate">{f.file_name}</span>
+                                  </Link>
+                                ))}
+                                {r.report_files.length > 3 && (
+                                  <span className="text-[10px] text-muted-foreground">+{r.report_files.length - 3} more</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(r.twh_commitment_usd, { compact: true })}</TableCell>
