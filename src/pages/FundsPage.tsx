@@ -28,6 +28,8 @@ type FundRow = {
   twh_nav_usd: number;
   fund_total_contributions_usd: number;
   fund_total_nav_usd: number;
+  irr: number | null;
+  cf_count: number;
   report_status: ReportStatus;
   report_files: ReportFile[];
 };
@@ -44,7 +46,7 @@ export default function FundsPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [{ data: funds }, { data: docs }, { data: reports }] = await Promise.all([
+      const [{ data: funds }, { data: docs }, { data: reports }, { data: flows }] = await Promise.all([
         supabase
           .from("funds")
           .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd, confirmed_at)")
@@ -61,6 +63,11 @@ export default function FundsPage() {
           .eq("quarter_id", selected.id)
           .eq("archived", false)
           .order("uploaded_at", { ascending: false }),
+        supabase
+          .from("cash_flows")
+          .select("fund_id, date, amount_usd")
+          .eq("scope", "twh_net")
+          .lte("date", selected.quarter_end_date),
       ]);
 
       const docsByFund = new Map<string, string[]>();
