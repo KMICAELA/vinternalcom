@@ -1,0 +1,1 @@
+ALTER TABLE public.highlights DROP CONSTRAINT highlights_category_check;
