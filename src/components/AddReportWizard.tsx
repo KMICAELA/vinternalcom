@@ -17,6 +17,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { fmtUSD } from "@/lib/format";
 import { inheritHoldingMetadata } from "@/lib/extraction/inheritHoldingMetadata";
+import { scrubMagnitudes } from "@/lib/extraction/scrubMagnitudes";
 
 type SourceType = "pdf" | "excel" | "email";
 
@@ -300,11 +301,12 @@ export default function AddReportWizard({
       // Enrich holdings with prior-quarter round/instrument inheritance.
       const currentQ = quarters.find((q) => q.id === quarterId);
       try {
-        const enriched = await inheritHoldingMetadata({
+        const enrichedRaw = await inheritHoldingMetadata({
           fundId,
           holdings: initialPayload.holdings ?? [],
           currentQuarterEndDate: currentQ?.quarter_end_date ?? null,
         });
+        const enriched = scrubMagnitudes(initialPayload.notes, enrichedRaw);
         setPayload({ ...initialPayload, holdings: enriched as Holding[] });
       } catch {
         setPayload(initialPayload);
