@@ -86,6 +86,14 @@ export default function FundsPage() {
         reportsByFund.set(r.fund_id, arr);
       });
 
+      const flowsByFund = new Map<string, { date: string; amount_usd: number }[]>();
+      (flows ?? []).forEach((cf: any) => {
+        if (!cf.fund_id) return;
+        const arr = flowsByFund.get(cf.fund_id) ?? [];
+        arr.push({ date: cf.date, amount_usd: Number(cf.amount_usd) });
+        flowsByFund.set(cf.fund_id, arr);
+      });
+
       const out: FundRow[] = (funds ?? []).map((f: any) => {
         const c = f.fund_commitments?.[0] ?? {};
         const snap = (f.fund_quarter_snapshots ?? []).find((s: any) => s.quarter_id === selected.id) ?? {};
@@ -96,6 +104,9 @@ export default function FundsPage() {
           : hasDocs || snap.quarter_id
           ? "in_review"
           : "missing";
+        const fundFlows = flowsByFund.get(f.id) ?? [];
+        const nav = Number(snap.twh_nav_usd ?? 0);
+        const irr = computeXirr(fundFlows, nav, selected.quarter_end_date);
         return {
           id: f.id,
           name: f.name,
@@ -106,9 +117,11 @@ export default function FundsPage() {
           twh_ownership_pct: Number(c.twh_ownership_pct ?? 0),
           twh_contributions_usd: Number(snap.twh_contributions_usd ?? 0),
           twh_distributions_usd: Number(snap.twh_distributions_usd ?? 0),
-          twh_nav_usd: Number(snap.twh_nav_usd ?? 0),
+          twh_nav_usd: nav,
           fund_total_contributions_usd: Number(snap.fund_total_contributions_usd ?? 0),
           fund_total_nav_usd: Number(snap.fund_total_nav_usd ?? 0),
+          irr,
+          cf_count: fundFlows.length,
           report_status,
           report_files: reportsByFund.get(f.id) ?? [],
         };
