@@ -27,6 +27,7 @@ type FundRow = {
   fund_total_contributions_usd: number;
   fund_total_nav_usd: number;
   report_status: ReportStatus;
+  report_files: ReportFile[];
 };
 
 export default function FundsPage() {
