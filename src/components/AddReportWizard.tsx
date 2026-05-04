@@ -501,10 +501,25 @@ export default function AddReportWizard({
                       key={r.id}
                       className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-accent text-xs group"
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="truncate">{r.file_name}</span>
-                      </div>
+                      {r.source === "report" ? (
+                        <Link
+                          to={`/reports/${r.id}`}
+                          onClick={() => onOpenChange(false)}
+                          className="flex items-center gap-2 min-w-0 flex-1 hover:text-foreground"
+                          title="Use this report — open to review / edit"
+                        >
+                          <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate underline-offset-2 hover:underline">{r.file_name}</span>
+                        </Link>
+                      ) : (
+                        <div
+                          className="flex items-center gap-2 min-w-0 flex-1 text-muted-foreground"
+                          title="Legacy upload — no editable draft. Re-upload via this wizard to create an editable report."
+                        >
+                          <FileText className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{r.file_name}</span>
+                        </div>
+                      )}
                       <div className="flex items-center gap-2 shrink-0">
                         {r.source === "report" ? (
                           <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
