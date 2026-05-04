@@ -101,6 +101,7 @@ export default function FundsPage() {
           fund_total_contributions_usd: Number(snap.fund_total_contributions_usd ?? 0),
           fund_total_nav_usd: Number(snap.fund_total_nav_usd ?? 0),
           report_status,
+          report_files: reportsByFund.get(f.id) ?? [],
         };
       });
       out.sort((a, b) => b.twh_nav_usd - a.twh_nav_usd);
