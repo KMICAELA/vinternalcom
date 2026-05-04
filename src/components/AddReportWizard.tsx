@@ -532,14 +532,36 @@ export default function AddReportWizard({
                         </div>
                       )}
                       <div className="flex items-center gap-2 shrink-0">
-                        {r.source === "report" ? (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
-                            {r.committed_to_db ? "Live" : "Draft"}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground">Legacy</span>
-                        )}
+                        {(() => {
+                          const hasFile = !!r.storage_path && !r.storage_path.startsWith("inline/");
+                          if (r.source === "report") {
+                            return (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
+                                {r.committed_to_db ? "Live" : "Draft"}
+                              </span>
+                            );
+                          }
+                          return (
+                            <span
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground"
+                              title={hasFile ? "Legacy upload — has stored file" : "Metadata only — no file stored. Re-upload to extract."}
+                            >
+                              {hasFile ? "Legacy" : "No file stored"}
+                            </span>
+                          );
+                        })()}
                         <span className="text-[10px] text-muted-foreground">{new Date(r.uploaded_at).toLocaleDateString()}</span>
+                        {r.source === "report" && r.storage_path && !r.storage_path.startsWith("inline/") && (
+                          <button
+                            type="button"
+                            disabled={busy || reextractingId === r.id}
+                            onClick={() => reextractReport(r.id, r.storage_path!)}
+                            className="p-1 rounded hover:bg-background text-muted-foreground hover:text-foreground disabled:opacity-50"
+                            title="Re-run AI extraction on this stored file"
+                          >
+                            {reextractingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                          </button>
+                        )}
                         {r.source === "report" && (
                           <Link
                             to={`/reports/${r.id}`}
