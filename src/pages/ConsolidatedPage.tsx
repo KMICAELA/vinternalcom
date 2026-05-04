@@ -433,16 +433,21 @@ function Kpi({
   value,
   sub,
   valueClass,
+  tip,
 }: {
   label: string;
   value: string;
   sub?: string;
   valueClass?: string;
+  tip?: Omit<MetricTooltipProps, "children">;
 }) {
+  const valueEl = (
+    <div className={`text-xl font-semibold font-mono mt-1 ${valueClass ?? ""}`}>{value}</div>
+  );
   return (
     <Card className="bg-card border-border p-4">
       <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className={`text-xl font-semibold font-mono mt-1 ${valueClass ?? ""}`}>{value}</div>
+      {tip ? <MetricTooltip {...tip} align="start">{valueEl}</MetricTooltip> : valueEl}
       {sub && <div className="text-[11px] text-muted-foreground mt-0.5 font-mono">{sub}</div>}
     </Card>
   );
