@@ -248,13 +248,24 @@ For venture investments, sub-$500K cost basis is unusual — if parsed values
 look suspiciously small you have likely missed a magnitude.
 
 CONCRETE EXAMPLES (these have been wrong before — get them right):
+  • Narrative "received $500K distribution this quarter" (PAST TENSE / SETTLED)
+      → fund_proceeds_usd = 500000
   • Narrative "Tamarack will receive our initial investment back in cash (2m)"
-      → fund_proceeds_usd = 2000000  (NOT 200000, NOT 2)
-  • Narrative "$2m" anywhere in prose → 2000000
-  • Narrative "received 500k in distributions" → 500000
-  • Narrative "raised a $15M Series B" → 15000000
-The lowercase "m" suffix ALWAYS means millions in venture/PE context, never
-thousands. There is no scenario where "2m" means $200,000.
+      (FUTURE TENSE — deal hasn't closed, no cash received yet)
+      → fund_proceeds_usd = 0  (NOT 2000000)
+      → fund_fmv_usd = 2000000  (component of acquisition value)
+      → needs_review = true, review_reason = "Acquisition pending close — update on settlement"
+  • Narrative "$2m" anywhere in prose → 2000000 (when proceeds, must be settled)
+  • Narrative "raised a $15M Series B" → 15000000 (this is a company-level event,
+    not a fund position — leave fund_* fields null unless fund's $ stake is stated)
+The lowercase "m" suffix ALWAYS means millions in venture/PE context, never thousands.
+
+PROCEEDS vs FMV — STRICT RULE:
+fund_proceeds_usd reflects ONLY cash already received by the fund. Future-tense
+language ("will receive", "at close", "upon close", "expected", "agreed to
+receive", "pending") means the cash is NOT yet realized — keep
+fund_proceeds_usd = 0 (or null) and book the value as fund_fmv_usd instead.
+
 
 The "notes" field should state the detected mode and a one-line summary
 (e.g. "Mode A — extracted from p.9 holdings schedule, 23 rows" or
