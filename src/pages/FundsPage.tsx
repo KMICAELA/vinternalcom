@@ -315,6 +315,24 @@ export default function FundsPage() {
                             {fmtMultiple(tvpi)}
                           </MetricTooltip>
                         </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind={r.irr != null ? "derived" : "missing"}
+                            title="Net IRR (XIRR)"
+                            formula={{
+                              expression: "XIRR over TWH cash flows + terminal NAV",
+                              parts: [
+                                { label: "Cash flow entries", value: `${r.cf_count}` },
+                                { label: "Terminal NAV", value: fmtUsdFull(r.twh_nav_usd) },
+                                { label: "As of", value: selected.quarter_end_date },
+                              ],
+                              result: r.irr != null ? fmtPctFull(r.irr, 1) : "—",
+                            }}
+                            missingInputs={["TWH cash flows for this fund"]}
+                          >
+                            {r.irr != null ? fmtPct(r.irr, 1) : "—"}
+                          </MetricTooltip>
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => { setWizardFundId(r.id); setWizardOpen(true); }}>
                             <Upload className="h-3 w-3" /> Add
@@ -324,16 +342,18 @@ export default function FundsPage() {
                     );
                   })}
                   <TableRow className="border-t-2 border-border font-semibold">
-                    <TableCell>Total</TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.commit, { compact: true })}</TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.contrib, { compact: true })}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.distrib, { compact: true })}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtUSD(totals.nav, { compact: true })}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtMultiple(calcDpi(totals.contrib, totals.distrib))}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtMultiple(calcTvpi(totals.contrib, totals.distrib, totals.nav))}</TableCell>
-                    <TableCell></TableCell>
+                    {/* Fund */}      <TableCell>Total</TableCell>
+                    {/* Report */}    <TableCell></TableCell>
+                    {/* Start */}     <TableCell></TableCell>
+                    {/* TWH Commit */}<TableCell className="text-right font-mono">{fmtUSD(totals.commit, { compact: true })}</TableCell>
+                    {/* TWH % */}     <TableCell></TableCell>
+                    {/* Contrib */}   <TableCell className="text-right font-mono">{fmtUSD(totals.contrib, { compact: true })}</TableCell>
+                    {/* Distrib */}   <TableCell className="text-right font-mono">{fmtUSD(totals.distrib, { compact: true })}</TableCell>
+                    {/* NAV */}       <TableCell className="text-right font-mono">{fmtUSD(totals.nav, { compact: true })}</TableCell>
+                    {/* DPI */}       <TableCell className="text-right font-mono">{fmtMultiple(calcDpi(totals.contrib, totals.distrib))}</TableCell>
+                    {/* TVPI */}      <TableCell className="text-right font-mono">{fmtMultiple(calcTvpi(totals.contrib, totals.distrib, totals.nav))}</TableCell>
+                    {/* IRR */}       <TableCell></TableCell>
+                    {/* action */}    <TableCell></TableCell>
                   </TableRow>
                 </>
               )}
