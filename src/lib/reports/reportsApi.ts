@@ -153,6 +153,8 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
       fund_total_nav_usd: payload.fund_total_nav_usd ?? 0,
       source_report_id: report.id,
       extracted_at: new Date().toISOString(),
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
     };
     const { error: fsErr } = await supabase
       .from("fund_quarter_snapshots")
