@@ -164,11 +164,76 @@ export default function UnderlyingPortfolioPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">{r.instrument ?? "—"}</TableCell>
-                        <TableCell className="text-right font-mono text-muted-foreground">{fmtUsdOrTbd(r.cost, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono text-muted-foreground">{fmtUsdOrTbd(r.fmv, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUsdOrTbd(mulOrNull(r.cost, r.twh_pct), { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUsdOrTbd(mulOrNull(r.fmv, r.twh_pct), { compact: true })}</TableCell>
-                        <TableCell className={`text-right font-mono ${signClass(gain)}`}>{fmtMultiple(moic)}</TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">
+                          <MetricTooltip
+                            kind="input"
+                            title="Fund Cost"
+                            source={`GP financial statement for ${r.fund}`}
+                          >
+                            {fmtUsdOrTbd(r.cost, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">
+                          <MetricTooltip
+                            kind="input"
+                            title="Fund FMV"
+                            source={`GP financial statement for ${r.fund}`}
+                          >
+                            {fmtUsdOrTbd(r.fmv, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind={r.cost === null ? "missing" : "derived"}
+                            title="TWH Cost"
+                            formula={{
+                              expression: "Fund Cost × TWH %",
+                              parts: [
+                                { label: "Fund Cost", value: fmtUsdFull(r.cost) },
+                                { label: "TWH %", value: fmtPctFull(r.twh_pct, 2) },
+                              ],
+                              result: fmtUsdFull(mulOrNull(r.cost, r.twh_pct)),
+                            }}
+                            missingInputs={["Fund Cost"]}
+                          >
+                            {fmtUsdOrTbd(mulOrNull(r.cost, r.twh_pct), { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind={r.fmv === null ? "missing" : "derived"}
+                            title="TWH FMV"
+                            formula={{
+                              expression: "Fund FMV × TWH %",
+                              parts: [
+                                { label: "Fund FMV", value: fmtUsdFull(r.fmv) },
+                                { label: "TWH %", value: fmtPctFull(r.twh_pct, 2) },
+                              ],
+                              result: fmtUsdFull(mulOrNull(r.fmv, r.twh_pct)),
+                            }}
+                            missingInputs={["Fund FMV"]}
+                          >
+                            {fmtUsdOrTbd(mulOrNull(r.fmv, r.twh_pct), { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${signClass(gain)}`}>
+                          <MetricTooltip
+                            kind={moic === null ? "missing" : "derived"}
+                            title="MOIC"
+                            formula={{
+                              expression: "(Fund FMV + Fund Proceeds) ÷ Fund Cost",
+                              parts: [
+                                { label: "Fund FMV", value: fmtUsdFull(r.fmv) },
+                                { label: "Fund Proceeds", value: fmtUsdFull(r.proceeds) },
+                                { label: "Fund Cost", value: fmtUsdFull(r.cost) },
+                              ],
+                              result: fmtMultFull(moic),
+                            }}
+                            missingInputs={["Fund Cost"]}
+                          >
+                            {fmtMultiple(moic)}
+                          </MetricTooltip>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
