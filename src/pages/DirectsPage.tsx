@@ -247,13 +247,13 @@ export default function DirectsPage() {
                 <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">No directs in this quarter</TableCell></TableRow>
               ) : (
                 <>
-                  {groups.map((g) => (
-                    <>
-                      {renderGroupRow(g)}
-                      {g.tranches.length > 1 && expanded.has(g.company_id) &&
-                        g.tranches.map((t) => renderTrancheRow(t, true))}
-                    </>
-                  ))}
+                  {groups.flatMap((g) => {
+                    const out = [renderGroupRow(g)];
+                    if (g.tranches.length > 1 && expanded.has(g.company_id)) {
+                      for (const t of g.tranches) out.push(renderTrancheRow(t, true));
+                    }
+                    return out;
+                  })}
                   <TableRow className="border-t-2 border-border font-semibold">
                     <TableCell colSpan={5}>Total</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.cost, { compact: true })}</TableCell>
