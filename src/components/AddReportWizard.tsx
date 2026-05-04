@@ -595,6 +595,12 @@ export default function AddReportWizard({
             quarters={quarters}
             fundId={fundId}
             quarterId={quarterId}
+            sourceType={sourceType}
+            hasFile={!!(pdfFile || xlsxFile || emlFile || (sourceType === "email" && emailText.trim()))}
+            onPdfFile={setPdfFile}
+            onXlsxFile={setXlsxFile}
+            onEmlFile={setEmlFile}
+            currentFileName={pdfFile?.name ?? xlsxFile?.name ?? emlFile?.name ?? null}
           />
         )}
         {step === 3 && (
