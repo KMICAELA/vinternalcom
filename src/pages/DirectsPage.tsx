@@ -98,10 +98,39 @@ export default function DirectsPage() {
                         <TableCell className="text-muted-foreground">{fmtDate(r.investment_date)}</TableCell>
                         <TableCell>{r.round ? <Badge variant="secondary" className="font-normal">{r.round}</Badge> : "—"}</TableCell>
                         <TableCell className="text-muted-foreground">{r.instrument ?? "—"}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUSD(r.cost, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUSD(r.fmv, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUSD(r.proceeds, { compact: true })}</TableCell>
-                        <TableCell className={`text-right font-mono ${signClass(gain)}`}>{fmtMultiple(moic)}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip kind="input" title="TWH Cost" source={`TWH-1 internal records for ${r.company}${r.investment_date ? ` (${fmtDate(r.investment_date)})` : ""}`}>
+                            {fmtUSD(r.cost, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip kind="input" title="TWH FMV" source={`TWH-1 internal records for ${r.company}${r.investment_date ? ` (${fmtDate(r.investment_date)})` : ""}`}>
+                            {fmtUSD(r.fmv, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip kind="input" title="TWH Proceeds" source={`TWH-1 internal records for ${r.company}${r.investment_date ? ` (${fmtDate(r.investment_date)})` : ""}`}>
+                            {fmtUSD(r.proceeds, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono ${signClass(gain)}`}>
+                          <MetricTooltip
+                            kind={moic === null ? "missing" : "derived"}
+                            title="MOIC"
+                            formula={{
+                              expression: "(TWH FMV + TWH Proceeds) ÷ TWH Cost",
+                              parts: [
+                                { label: "TWH FMV", value: fmtUsdFull(r.fmv) },
+                                { label: "TWH Proceeds", value: fmtUsdFull(r.proceeds) },
+                                { label: "TWH Cost", value: fmtUsdFull(r.cost) },
+                              ],
+                              result: fmtMultFull(moic),
+                            }}
+                            missingInputs={["TWH Cost"]}
+                          >
+                            {fmtMultiple(moic)}
+                          </MetricTooltip>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
