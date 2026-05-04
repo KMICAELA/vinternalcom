@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, signClass } from "@/lib/format";
+import MetricTooltip, { fmtUsdFull, fmtMultFull } from "@/components/MetricTooltip";
 
 type Row = {
   id: string;
