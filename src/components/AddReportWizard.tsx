@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Loader2, FileText, FileSpreadsheet, Mail, AlertCircle, CheckCircle2, ExternalLink, Trash2, Pencil } from "lucide-react";
+import { Loader2, FileText, FileSpreadsheet, Mail, AlertCircle, CheckCircle2, ExternalLink, Trash2, Pencil, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -137,7 +137,8 @@ export default function AddReportWizard({
   const [draftId, setDraftId] = useState<string | null>(null);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [extractionError, setExtractionError] = useState<string | null>(null);
-  const [existingReports, setExistingReports] = useState<Array<{ id: string; file_name: string; uploaded_at: string; committed_to_db: boolean | null; source: "report" | "source_document"; status?: string }>>([]);
+  const [existingReports, setExistingReports] = useState<Array<{ id: string; file_name: string; uploaded_at: string; committed_to_db: boolean | null; source: "report" | "source_document"; status?: string; storage_path?: string | null }>>([]);
+  const [reextractingId, setReextractingId] = useState<string | null>(null);
 
   // Load existing reports + legacy source_documents for selected fund+quarter
   useEffect(() => {
@@ -149,14 +150,14 @@ export default function AddReportWizard({
       const [{ data: reports }, { data: docs }] = await Promise.all([
         supabase
           .from("reports")
-          .select("id, file_name, uploaded_at, committed_to_db, extraction_status")
+          .select("id, file_name, uploaded_at, committed_to_db, extraction_status, storage_path")
           .eq("fund_id", fundId)
           .eq("quarter_id", quarterId)
           .eq("archived", false)
           .order("uploaded_at", { ascending: false }),
         supabase
           .from("source_documents")
-          .select("id, original_filename, uploaded_at, status")
+          .select("id, original_filename, uploaded_at, status, storage_path")
           .eq("fund_id", fundId)
           .eq("quarter_id", quarterId)
           .order("uploaded_at", { ascending: false }),
@@ -169,6 +170,7 @@ export default function AddReportWizard({
           committed_to_db: r.committed_to_db,
           source: "report" as const,
           status: r.extraction_status,
+          storage_path: r.storage_path,
         })),
         ...((docs as any[]) ?? [])
           .filter((d) => d.original_filename)
@@ -179,6 +181,7 @@ export default function AddReportWizard({
             committed_to_db: null,
             source: "source_document" as const,
             status: d.status,
+            storage_path: d.storage_path,
           })),
       ];
       // Dedupe by file_name + date
@@ -193,6 +196,23 @@ export default function AddReportWizard({
       setExistingReports(dedup);
     })();
   }, [open, fundId, quarterId]);
+
+  // Re-run AI extraction against an already-stored report file (Live or Draft).
+  async function reextractReport(reportId: string, storagePath: string) {
+    setReextractingId(reportId);
+    try {
+      const { data: blob, error: dlErr } = await supabase.storage.from("fund-reports").download(storagePath);
+      if (dlErr || !blob) throw dlErr ?? new Error("Could not download stored file");
+      const fileName = existingReports.find((r) => r.id === reportId)?.file_name ?? "report.pdf";
+      const file = new File([blob], fileName, { type: blob.type || "application/pdf" });
+      setSourceType("pdf");
+      await runExtraction({ fileOverride: file, sourceTypeOverride: "pdf" });
+    } catch (e: any) {
+      toast({ title: "Re-extract failed", description: e?.message ?? "Could not load the stored file", variant: "destructive" });
+    } finally {
+      setReextractingId(null);
+    }
+  }
 
   // Reset on close
   useEffect(() => {
@@ -312,24 +332,32 @@ export default function AddReportWizard({
     return realId;
   }
 
-  async function runExtraction() {
-    if (!canSubmitSource) return;
+  async function runExtraction(opts?: { fileOverride?: File; sourceTypeOverride?: SourceType }) {
+    const effectiveSource = opts?.sourceTypeOverride ?? sourceType;
+    const effectivePdf = opts?.fileOverride ?? pdfFile;
+    const effectiveXlsx = effectiveSource === "excel" ? (opts?.fileOverride ?? xlsxFile) : xlsxFile;
+    const effectiveEml = effectiveSource === "email" ? (opts?.fileOverride ?? emlFile) : emlFile;
+    if (!opts && !canSubmitSource) return;
     setBusy(true);
     setExtractionError(null);
     try {
       const realQuarterId = await ensureRealQuarterId();
-      const body: any = { source_type: sourceType, fund_id: fundId, quarter_id: realQuarterId };
-      if (sourceType === "pdf" && pdfFile) {
-        body.file_name = pdfFile.name;
-        body.pdf_base64 = await fileToBase64(pdfFile);
-      } else if (sourceType === "excel" && xlsxFile) {
-        body.file_name = xlsxFile.name;
-        body.excel_payload = await parseExcel(xlsxFile);
-      } else if (sourceType === "email") {
+      const body: any = { source_type: effectiveSource, fund_id: fundId, quarter_id: realQuarterId };
+      if (effectiveSource === "pdf" && effectivePdf) {
+        body.file_name = effectivePdf.name;
+        body.pdf_base64 = await fileToBase64(effectivePdf);
+        // Keep file in state so confirmDraft can re-upload it
+        setPdfFile(effectivePdf);
+      } else if (effectiveSource === "excel" && effectiveXlsx) {
+        body.file_name = effectiveXlsx.name;
+        body.excel_payload = await parseExcel(effectiveXlsx);
+        setXlsxFile(effectiveXlsx);
+      } else if (effectiveSource === "email") {
         body.email_text = emailText.trim() || null;
-        if (emlFile) {
-          body.file_name = emlFile.name;
-          body.eml_base64 = await fileToBase64(emlFile);
+        if (effectiveEml) {
+          body.file_name = effectiveEml.name;
+          body.eml_base64 = await fileToBase64(effectiveEml);
+          setEmlFile(effectiveEml);
         }
       }
       setStep(2);
@@ -521,14 +549,36 @@ export default function AddReportWizard({
                         </div>
                       )}
                       <div className="flex items-center gap-2 shrink-0">
-                        {r.source === "report" ? (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
-                            {r.committed_to_db ? "Live" : "Draft"}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground">Legacy</span>
-                        )}
+                        {(() => {
+                          const hasFile = !!r.storage_path && !r.storage_path.startsWith("inline/");
+                          if (r.source === "report") {
+                            return (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
+                                {r.committed_to_db ? "Live" : "Draft"}
+                              </span>
+                            );
+                          }
+                          return (
+                            <span
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground"
+                              title={hasFile ? "Legacy upload — has stored file" : "Metadata only — no file stored. Re-upload to extract."}
+                            >
+                              {hasFile ? "Legacy" : "No file stored"}
+                            </span>
+                          );
+                        })()}
                         <span className="text-[10px] text-muted-foreground">{new Date(r.uploaded_at).toLocaleDateString()}</span>
+                        {r.source === "report" && r.storage_path && !r.storage_path.startsWith("inline/") && (
+                          <button
+                            type="button"
+                            disabled={busy || reextractingId === r.id}
+                            onClick={() => reextractReport(r.id, r.storage_path!)}
+                            className="p-1 rounded hover:bg-background text-muted-foreground hover:text-foreground disabled:opacity-50"
+                            title="Re-run AI extraction on this stored file"
+                          >
+                            {reextractingId === r.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                          </button>
+                        )}
                         {r.source === "report" && (
                           <Link
                             to={`/reports/${r.id}`}
@@ -610,7 +660,7 @@ export default function AddReportWizard({
 
             <DialogFooter>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button onClick={runExtraction} disabled={!canSubmitSource || busy}>
+              <Button onClick={() => runExtraction()} disabled={!canSubmitSource || busy}>
                 {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Extract with AI
               </Button>
             </DialogFooter>
