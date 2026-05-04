@@ -5,11 +5,13 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload } from "lucide-react";
+import { Upload, FileText } from "lucide-react";
+import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 
 type ReportStatus = "confirmed" | "in_review" | "missing";
+type ReportFile = { id: string; file_name: string; committed_to_db: boolean };
 
 type FundRow = {
   id: string;
