@@ -197,13 +197,91 @@ export default function ConsolidatedPage() {
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        <Kpi label="Commitment" value={fmtUSD(agg.commitment, { compact: true })} />
-        <Kpi label="Called" value={fmtUSD(agg.contributions, { compact: true })} sub={calledPct != null ? fmtPct(calledPct, 1) : undefined} />
-        <Kpi label="Distributed" value={fmtUSD(agg.distributions, { compact: true })} />
-        <Kpi label="NAV" value={fmtUSD(agg.nav, { compact: true })} />
-        <Kpi label="Net Cash Flow" value={fmtUSD(netCashFlow, { compact: true })} valueClass={signClass(netCashFlow)} />
-        <Kpi label="DPI" value={fmtMultiple(dpi)} />
-        <Kpi label="TVPI" value={fmtMultiple(tvpi)} sub={rvpi != null ? `RVPI ${fmtMultiple(rvpi)}` : undefined} />
+        <Kpi
+          label="Commitment"
+          value={fmtUSD(agg.commitment, { compact: true })}
+          tip={{ kind: "input", title: "Total Commitment", source: "Sum of TWH commitments across all funds (subscription documents)" }}
+        />
+        <Kpi
+          label="Called"
+          value={fmtUSD(agg.contributions, { compact: true })}
+          sub={calledPct != null ? fmtPct(calledPct, 1) : undefined}
+          tip={{
+            kind: "derived",
+            title: "% Called",
+            formula: {
+              expression: "TWH Contributions ÷ TWH Commitment",
+              parts: [
+                { label: "TWH Contributions", value: fmtUsdFull(agg.contributions) },
+                { label: "TWH Commitment", value: fmtUsdFull(agg.commitment) },
+              ],
+              result: fmtPctFull(calledPct, 1),
+            },
+          }}
+        />
+        <Kpi
+          label="Distributed"
+          value={fmtUSD(agg.distributions, { compact: true })}
+          tip={{ kind: "input", title: "TWH Distributions", source: "Sum of TWH distributions received across all funds (distribution records)" }}
+        />
+        <Kpi
+          label="NAV"
+          value={fmtUSD(agg.nav, { compact: true })}
+          tip={{ kind: "input", title: "TWH NAV", source: "Sum of TWH NAV across all funds (Capital Account Statements)" }}
+        />
+        <Kpi
+          label="Net Cash Flow"
+          value={fmtUSD(netCashFlow, { compact: true })}
+          valueClass={signClass(netCashFlow)}
+          tip={{
+            kind: "derived",
+            title: "Net Cash Flow",
+            formula: {
+              expression: "TWH Distributions − TWH Contributions",
+              parts: [
+                { label: "TWH Distributions", value: fmtUsdFull(agg.distributions) },
+                { label: "TWH Contributions", value: fmtUsdFull(agg.contributions) },
+              ],
+              result: fmtUsdFull(netCashFlow),
+            },
+          }}
+        />
+        <Kpi
+          label="DPI"
+          value={fmtMultiple(dpi)}
+          tip={{
+            kind: dpi == null ? "missing" : "derived",
+            title: "DPI (Distributions to Paid-In)",
+            formula: {
+              expression: "TWH Distributions ÷ TWH Contributions",
+              parts: [
+                { label: "TWH Distributions", value: fmtUsdFull(agg.distributions) },
+                { label: "TWH Contributions", value: fmtUsdFull(agg.contributions) },
+              ],
+              result: fmtMultFull(dpi),
+            },
+            missingInputs: ["TWH Contributions"],
+          }}
+        />
+        <Kpi
+          label="TVPI"
+          value={fmtMultiple(tvpi)}
+          sub={rvpi != null ? `RVPI ${fmtMultiple(rvpi)}` : undefined}
+          tip={{
+            kind: tvpi == null ? "missing" : "derived",
+            title: "TVPI (Total Value to Paid-In)",
+            formula: {
+              expression: "(TWH NAV + TWH Distributions) ÷ TWH Contributions",
+              parts: [
+                { label: "TWH NAV", value: fmtUsdFull(agg.nav) },
+                { label: "TWH Distributions", value: fmtUsdFull(agg.distributions) },
+                { label: "TWH Contributions", value: fmtUsdFull(agg.contributions) },
+              ],
+              result: fmtMultFull(tvpi),
+            },
+            missingInputs: ["TWH Contributions"],
+          }}
+        />
       </div>
 
       {/* Reconciliation banner */}
