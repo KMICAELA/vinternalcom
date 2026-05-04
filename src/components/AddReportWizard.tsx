@@ -197,6 +197,23 @@ export default function AddReportWizard({
     })();
   }, [open, fundId, quarterId]);
 
+  // Re-run AI extraction against an already-stored report file (Live or Draft).
+  async function reextractReport(reportId: string, storagePath: string) {
+    setReextractingId(reportId);
+    try {
+      const { data: blob, error: dlErr } = await supabase.storage.from("fund-reports").download(storagePath);
+      if (dlErr || !blob) throw dlErr ?? new Error("Could not download stored file");
+      const fileName = existingReports.find((r) => r.id === reportId)?.file_name ?? "report.pdf";
+      const file = new File([blob], fileName, { type: blob.type || "application/pdf" });
+      setSourceType("pdf");
+      await runExtraction({ fileOverride: file, sourceTypeOverride: "pdf" });
+    } catch (e: any) {
+      toast({ title: "Re-extract failed", description: e?.message ?? "Could not load the stored file", variant: "destructive" });
+    } finally {
+      setReextractingId(null);
+    }
+  }
+
   // Reset on close
   useEffect(() => {
     if (!open) {
