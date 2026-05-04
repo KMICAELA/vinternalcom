@@ -37,6 +37,12 @@ function isMagnitudeMismatch(extracted: number, shorthand: number): boolean {
   return bands.some((b) => Math.abs(ratio / b - 1) < 0.2);
 }
 
+// Future-tense / unsettled language that should NEVER produce realized proceeds.
+// "will receive", "expected to receive", "at close", "upon close", "pending",
+// "agreed to receive", "to be paid", "anticipated", "subject to closing".
+const FUTURE_TENSE_RE =
+  /\b(will\s+receive|expects?\s+to\s+receive|expected\s+to\s+receive|to\s+receive|anticipat\w+|at\s+close|upon\s+close|pending\s+close|subject\s+to\s+clos\w+|agreed\s+to\s+receive|to\s+be\s+paid|once\s+the\s+deal\s+closes?|hasn'?t\s+closed|not\s+yet\s+closed)\b/;
+
 export function scrubMagnitudes(
   notes: string | null | undefined,
   holdings: EnrichedHolding[],
@@ -54,6 +60,27 @@ export function scrubMagnitudes(
       Math.max(0, idx - 240),
       Math.min(text.length, idx + name.length + 240),
     );
+
+    // Guard A: if the model assigned proceeds AND the surrounding narrative is
+    // future-tense ("will receive $X at close"), zero out the proceeds and flag.
+    // Cash hasn't actually been received — proceeds belong only to settled events.
+    let working = h;
+    if (
+      working.fund_proceeds_usd != null &&
+      Number(working.fund_proceeds_usd) > 0 &&
+      FUTURE_TENSE_RE.test(window)
+    ) {
+      working = {
+        ...working,
+        fund_proceeds_usd: 0,
+        needs_review: true,
+        data_confidence: "needs_review",
+        review_reason:
+          (working.review_reason ? working.review_reason + "; " : "") +
+          `Future-tense language ("will receive / at close / pending") near "${working.company_name}" — proceeds reset to $0. Update once cash is actually distributed.`,
+      };
+    }
+    h = working;
 
     const shorthandValues: number[] = [];
     let m: RegExpExecArray | null;
