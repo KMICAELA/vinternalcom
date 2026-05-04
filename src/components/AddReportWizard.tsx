@@ -137,6 +137,25 @@ export default function AddReportWizard({
   const [draftId, setDraftId] = useState<string | null>(null);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [existingReports, setExistingReports] = useState<Array<{ id: string; file_name: string; uploaded_at: string; committed_to_db: boolean; extraction_status: string }>>([]);
+
+  // Load existing reports for selected fund+quarter
+  useEffect(() => {
+    if (!open || !fundId || !quarterId || quarterId.startsWith("new:")) {
+      setExistingReports([]);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("reports")
+        .select("id, file_name, uploaded_at, committed_to_db, extraction_status")
+        .eq("fund_id", fundId)
+        .eq("quarter_id", quarterId)
+        .eq("archived", false)
+        .order("uploaded_at", { ascending: false });
+      setExistingReports((data as any) ?? []);
+    })();
+  }, [open, fundId, quarterId]);
 
   // Reset on close
   useEffect(() => {
