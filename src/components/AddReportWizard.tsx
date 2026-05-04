@@ -14,7 +14,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
-import { Loader2, FileText, FileSpreadsheet, Mail, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Loader2, FileText, FileSpreadsheet, Mail, AlertCircle, CheckCircle2, ExternalLink } from "lucide-react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { fmtUSD } from "@/lib/format";
@@ -136,6 +137,25 @@ export default function AddReportWizard({
   const [draftId, setDraftId] = useState<string | null>(null);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [existingReports, setExistingReports] = useState<Array<{ id: string; file_name: string; uploaded_at: string; committed_to_db: boolean; extraction_status: string }>>([]);
+
+  // Load existing reports for selected fund+quarter
+  useEffect(() => {
+    if (!open || !fundId || !quarterId || quarterId.startsWith("new:")) {
+      setExistingReports([]);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("reports")
+        .select("id, file_name, uploaded_at, committed_to_db, extraction_status")
+        .eq("fund_id", fundId)
+        .eq("quarter_id", quarterId)
+        .eq("archived", false)
+        .order("uploaded_at", { ascending: false });
+      setExistingReports((data as any) ?? []);
+    })();
+  }, [open, fundId, quarterId]);
 
   // Reset on close
   useEffect(() => {
@@ -432,6 +452,36 @@ export default function AddReportWizard({
                 </Select>
               </div>
             </div>
+
+            {existingReports.length > 0 && (
+              <Card className="p-3 bg-muted/30 border-border">
+                <div className="text-xs font-semibold mb-2 text-muted-foreground">
+                  Documents already uploaded for this fund / quarter ({existingReports.length})
+                </div>
+                <div className="space-y-1">
+                  {existingReports.map((r) => (
+                    <Link
+                      key={r.id}
+                      to={`/reports/${r.id}`}
+                      onClick={() => onOpenChange(false)}
+                      className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-accent text-xs group"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <FileText className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="truncate">{r.file_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${r.committed_to_db ? "border-emerald-500/40 text-emerald-400" : "border-border text-muted-foreground"}`}>
+                          {r.committed_to_db ? "Live" : "Draft"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">{new Date(r.uploaded_at).toLocaleDateString()}</span>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100" />
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             <Tabs value={sourceType} onValueChange={(v) => setSourceType(v as SourceType)}>
               <TabsList className="grid grid-cols-3 w-full">
