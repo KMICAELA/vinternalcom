@@ -53,6 +53,7 @@ import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtPct, fmtDate, calcMoic, calcTvpi, calcDpi, signClass } from "@/lib/format";
 import { runExtractFile, type ExtractedPayload, type SourceType } from "@/lib/extraction/runExtractFile";
 import { inheritHoldingMetadata, type EnrichedHolding } from "@/lib/extraction/inheritHoldingMetadata";
+import { scrubMagnitudes } from "@/lib/extraction/scrubMagnitudes";
 import { saveReportDraft } from "@/lib/reports/reportsApi";
 import { Save, AlertTriangle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -496,11 +497,18 @@ function ExtractionSandboxInner() {
             byCompany.set(k, existing);
           }
         }
-        const enriched = await inheritHoldingMetadata({
+        const enrichedRaw = await inheritHoldingMetadata({
           fundId,
           holdings: Array.from(byCompany.values()),
           currentQuarterEndDate: currentEnd,
         });
+        // Combine notes from all files for this fund and run the magnitude scrubber
+        // (catches "$2m" → 200,000 class of bugs the model occasionally introduces).
+        const combinedNotes = fs
+          .map((f) => f.payload?.notes ?? "")
+          .filter(Boolean)
+          .join("\n\n");
+        const enriched = scrubMagnitudes(combinedNotes, enrichedRaw);
         for (const h of enriched) {
           out.push({
             key: `${fundId}::${h.company_name.toLowerCase()}`,

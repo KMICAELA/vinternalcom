@@ -3,6 +3,8 @@
 // Drafts persist in extraction_drafts.status='pending_review' and can be resumed.
 
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { saveReportDraft } from "@/lib/reports/reportsApi";
 import * as XLSX from "xlsx";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -17,6 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { fmtUSD } from "@/lib/format";
 import { inheritHoldingMetadata } from "@/lib/extraction/inheritHoldingMetadata";
+import { scrubMagnitudes } from "@/lib/extraction/scrubMagnitudes";
 
 type SourceType = "pdf" | "excel" | "email";
 
@@ -118,6 +121,7 @@ export default function AddReportWizard({
   onConfirmed,
 }: AddReportWizardProps) {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [funds, setFunds] = useState<Fund[]>([]);
   const [quarters, setQuarters] = useState<Quarter[]>([]);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -300,11 +304,12 @@ export default function AddReportWizard({
       // Enrich holdings with prior-quarter round/instrument inheritance.
       const currentQ = quarters.find((q) => q.id === quarterId);
       try {
-        const enriched = await inheritHoldingMetadata({
+        const enrichedRaw = await inheritHoldingMetadata({
           fundId,
           holdings: initialPayload.holdings ?? [],
           currentQuarterEndDate: currentQ?.quarter_end_date ?? null,
         });
+        const enriched = scrubMagnitudes(initialPayload.notes, enrichedRaw);
         setPayload({ ...initialPayload, holdings: enriched as Holding[] });
       } catch {
         setPayload(initialPayload);
@@ -321,88 +326,52 @@ export default function AddReportWizard({
     }
   }
 
+  // ALWAYS-DRAFT-FIRST: every wizard upload is persisted as a Reports draft
+  // (committed_to_db=false). Promotion to live tables happens explicitly from
+  // /reports/:id. We never write to underlying_holdings / fund_quarter_snapshots
+  // from inside the wizard.
   async function confirmDraft() {
-    if (!draftId || !payload || !fundId || !quarterId) return;
+    if (!payload || !fundId || !quarterId) return;
     setBusy(true);
     try {
-      // Defensive: if user somehow lands here with a synthetic id (e.g. resumed draft), bootstrap it.
       const realQuarterId = await ensureRealQuarterId();
-      // Upsert fund_quarter_snapshots
-      const snap = {
-        fund_id: fundId,
-        quarter_id: realQuarterId,
-        twh_contributions_usd: numOrZero(payload.twh_contributions_usd),
-        twh_distributions_usd: numOrZero(payload.twh_distributions_usd),
-        twh_nav_usd: numOrZero(payload.twh_nav_usd),
-        fund_total_contributions_usd: numOrZero(payload.fund_total_contributions_usd),
-        fund_total_nav_usd: numOrZero(payload.fund_total_nav_usd),
-        confirmed_at: new Date().toISOString(),
-        extracted_at: new Date().toISOString(),
-      };
-      const { data: existing } = await supabase
-        .from("fund_quarter_snapshots")
-        .select("id")
-        .eq("fund_id", fundId).eq("quarter_id", realQuarterId).maybeSingle();
-      const opSnap = existing
-        ? supabase.from("fund_quarter_snapshots").update(snap).eq("id", existing.id)
-        : supabase.from("fund_quarter_snapshots").insert(snap);
-      const { error: snapErr } = await opSnap;
-      if (snapErr) throw snapErr;
-
-      // Upsert holdings (match by company name within (fund_id, quarter_id))
-      for (const h of payload.holdings ?? []) {
-        if (!h.company_name?.trim()) continue;
-        // Resolve / create company
-        const legal = h.company_name.trim();
-        let companyId: string | null = null;
-        const { data: hits } = await supabase
-          .from("companies")
-          .select("id, legal_name")
-          .ilike("legal_name", legal)
-          .limit(1);
-        if (hits && hits.length > 0) {
-          companyId = hits[0].id;
-        } else {
-          const { data: newCo, error: coErr } = await supabase
-            .from("companies").insert({ legal_name: legal }).select("id").single();
-          if (coErr) throw coErr;
-          companyId = newCo.id;
-        }
-        // Existing row?
-        const { data: existHold } = await supabase
-          .from("underlying_holdings")
-          .select("id")
-          .eq("fund_id", fundId).eq("quarter_id", realQuarterId).eq("company_id", companyId)
-          .maybeSingle();
-        const row = {
-          fund_id: fundId,
-          quarter_id: realQuarterId,
-          company_id: companyId!,
-          investment_date: h.investment_date || null,
-          instrument: h.instrument || null,
-          round: h.round || null,
-          fund_cost_usd: numOrZero(h.fund_cost_usd),
-          fund_fmv_usd: numOrZero(h.fund_fmv_usd),
-          fund_proceeds_usd: numOrZero(h.fund_proceeds_usd),
-        };
-        const op = existHold
-          ? supabase.from("underlying_holdings").update(row).eq("id", existHold.id)
-          : supabase.from("underlying_holdings").insert(row);
-        const { error: hErr } = await op;
-        if (hErr) throw hErr;
+      // Re-derive the original file we extracted from (PDF/Excel/EML or pasted text).
+      let file: File | null = pdfFile ?? xlsxFile ?? emlFile ?? null;
+      if (!file && sourceType === "email" && emailText.trim()) {
+        file = new File([emailText], "pasted-email.txt", { type: "text/plain" });
       }
-
-      // Mark draft confirmed
-      await supabase
-        .from("extraction_drafts")
-        .update({ status: "confirmed", normalized_payload: payload as any })
-        .eq("id", draftId);
-
-      toast({ title: "Report confirmed", description: "Snapshot and holdings updated." });
+      if (!file) {
+        // Resumed draft with no in-memory file — block; user must re-upload.
+        toast({
+          title: "Original file missing",
+          description: "Re-upload the source file to save this as a Report draft.",
+          variant: "destructive",
+        });
+        return;
+      }
+      const saved = await saveReportDraft({
+        file,
+        fundId,
+        quarterId: realQuarterId,
+        payload,
+      });
+      // Mark the in-flight extraction draft as superseded so it stops appearing
+      // in the resume picker.
+      if (draftId) {
+        await supabase
+          .from("extraction_drafts")
+          .update({ status: "saved_to_reports", normalized_payload: payload as any })
+          .eq("id", draftId);
+      }
+      toast({
+        title: "Saved as draft",
+        description: "Review and promote to live data from the report detail page.",
+      });
       onConfirmed?.();
       onOpenChange(false);
+      navigate(`/reports/${saved.id}`);
     } catch (e: any) {
-      toast({ title: "Confirm failed", description: e?.message ?? "Unknown error", variant: "destructive" });
+      toast({ title: "Save draft failed", description: e?.message ?? "Unknown error", variant: "destructive" });
     } finally {
       setBusy(false);
     }
@@ -529,7 +498,7 @@ export default function AddReportWizard({
             <Button variant="outline" onClick={saveDraftAndClose}>Save draft</Button>
             <Button onClick={confirmDraft} disabled={busy}>
               {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              <CheckCircle2 className="h-4 w-4 mr-2" />Confirm
+              <CheckCircle2 className="h-4 w-4 mr-2" />Save as draft
             </Button>
           </DialogFooter>
         )}

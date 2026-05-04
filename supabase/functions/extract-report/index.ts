@@ -247,6 +247,15 @@ NEVER return a value in thousands without scaling up.
 For venture investments, sub-$500K cost basis is unusual — if parsed values
 look suspiciously small you have likely missed a magnitude.
 
+CONCRETE EXAMPLES (these have been wrong before — get them right):
+  • Narrative "Tamarack will receive our initial investment back in cash (2m)"
+      → fund_proceeds_usd = 2000000  (NOT 200000, NOT 2)
+  • Narrative "$2m" anywhere in prose → 2000000
+  • Narrative "received 500k in distributions" → 500000
+  • Narrative "raised a $15M Series B" → 15000000
+The lowercase "m" suffix ALWAYS means millions in venture/PE context, never
+thousands. There is no scenario where "2m" means $200,000.
+
 The "notes" field should state the detected mode and a one-line summary
 (e.g. "Mode A — extracted from p.9 holdings schedule, 23 rows" or
 "Mode B — LP letter, 3 FMV updates from explicit $ amounts, 5 rows flagged
