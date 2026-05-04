@@ -595,6 +595,12 @@ export default function AddReportWizard({
             quarters={quarters}
             fundId={fundId}
             quarterId={quarterId}
+            sourceType={sourceType}
+            hasFile={!!(pdfFile || xlsxFile || emlFile || (sourceType === "email" && emailText.trim()))}
+            onPdfFile={setPdfFile}
+            onXlsxFile={setXlsxFile}
+            onEmlFile={setEmlFile}
+            currentFileName={pdfFile?.name ?? xlsxFile?.name ?? emlFile?.name ?? null}
           />
         )}
         {step === 3 && (
@@ -614,11 +620,18 @@ export default function AddReportWizard({
 
 function ReviewStep({
   payload, setPayload, extractionError,
+  sourceType, hasFile, onPdfFile, onXlsxFile, onEmlFile, currentFileName,
 }: {
   payload: Payload;
   setPayload: (p: Payload) => void;
   extractionError: string | null;
   funds: Fund[]; quarters: Quarter[]; fundId: string; quarterId: string;
+  sourceType: SourceType;
+  hasFile: boolean;
+  onPdfFile: (f: File | null) => void;
+  onXlsxFile: (f: File | null) => void;
+  onEmlFile: (f: File | null) => void;
+  currentFileName: string | null;
 }) {
   const setField = (k: keyof Payload, v: any) => setPayload({ ...payload, [k]: v });
   const setHolding = (idx: number, k: keyof Holding, v: any) => {
@@ -636,6 +649,13 @@ function ReviewStep({
     });
   };
 
+  const accept = sourceType === "pdf" ? "application/pdf" : sourceType === "excel" ? ".xlsx,.xls" : ".eml,message/rfc822";
+  const onPick = (f: File | null) => {
+    if (sourceType === "pdf") onPdfFile(f);
+    else if (sourceType === "excel") onXlsxFile(f);
+    else onEmlFile(f);
+  };
+
   return (
     <div className="space-y-4">
       {extractionError && (
@@ -643,6 +663,24 @@ function ReviewStep({
           <AlertCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
           <div className="text-xs text-destructive">{extractionError}. You can still edit the values manually below.</div>
         </Card>
+      )}
+
+      {!hasFile && (
+        <Card className="bg-amber-500/10 border-amber-500/30 p-3 space-y-2">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
+            <div className="text-xs text-amber-200">
+              <strong>Re-attach the original file</strong> to save this draft. The extracted data is preserved, but the source file isn't stored with the draft and must be re-uploaded before saving to Reports.
+            </div>
+          </div>
+          <Input type="file" accept={accept} className="h-8 text-xs" onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+        </Card>
+      )}
+      {hasFile && currentFileName && (
+        <div className="text-xs text-muted-foreground flex items-center gap-2">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+          Source file attached: <span className="font-mono">{currentFileName}</span>
+        </div>
       )}
 
       <Card className="p-4 space-y-3">
