@@ -168,13 +168,33 @@ export default function FundsPage() {
                       <TableRow key={r.id} className="table-row-hover">
                         <TableCell className="font-medium max-w-[280px] truncate">{r.short_name ?? r.name}</TableCell>
                         <TableCell>
-                          {r.report_status === "confirmed" ? (
-                            <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[10px] font-medium">Confirmed</Badge>
-                          ) : r.report_status === "in_review" ? (
-                            <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px] font-medium">In review</Badge>
-                          ) : (
-                            <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium">Missing</Badge>
-                          )}
+                          <div className="flex flex-col gap-1">
+                            {r.report_status === "confirmed" ? (
+                              <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-400 text-[10px] font-medium w-fit">Confirmed</Badge>
+                            ) : r.report_status === "in_review" ? (
+                              <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-400 text-[10px] font-medium w-fit">In review</Badge>
+                            ) : (
+                              <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium w-fit">Missing</Badge>
+                            )}
+                            {r.report_files.length > 0 && (
+                              <div className="flex flex-col gap-0.5">
+                                {r.report_files.slice(0, 3).map((f) => (
+                                  <Link
+                                    key={f.id}
+                                    to={`/reports/${f.id}`}
+                                    title={f.file_name}
+                                    className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors max-w-[220px]"
+                                  >
+                                    <FileText className="h-2.5 w-2.5 shrink-0" />
+                                    <span className="truncate">{f.file_name}</span>
+                                  </Link>
+                                ))}
+                                {r.report_files.length > 3 && (
+                                  <span className="text-[10px] text-muted-foreground">+{r.report_files.length - 3} more</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
                         <TableCell className="text-right font-mono">{fmtUSD(r.twh_commitment_usd, { compact: true })}</TableCell>
