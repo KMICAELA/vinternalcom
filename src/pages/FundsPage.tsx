@@ -165,9 +165,12 @@ export default function FundsPage() {
                   {rows.map((r) => {
                     const tvpi = calcTvpi(r.twh_contributions_usd, r.twh_distributions_usd, r.twh_nav_usd);
                     const dpi = calcDpi(r.twh_contributions_usd, r.twh_distributions_usd);
+                    const fundLabel = r.short_name ?? r.name;
+                    const qLabel = selected.label;
+                    const hasContrib = r.twh_contributions_usd > 0;
                     return (
                       <TableRow key={r.id} className="table-row-hover">
-                        <TableCell className="font-medium max-w-[280px] truncate">{r.short_name ?? r.name}</TableCell>
+                        <TableCell className="font-medium max-w-[280px] truncate">{fundLabel}</TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             {r.report_status === "confirmed" ? (
@@ -198,13 +201,94 @@ export default function FundsPage() {
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUSD(r.twh_commitment_usd, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono text-muted-foreground">{fmtPct(r.twh_ownership_pct, 2)}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUSD(r.twh_contributions_usd, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUSD(r.twh_distributions_usd, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtUSD(r.twh_nav_usd, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtMultiple(dpi)}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtMultiple(tvpi)}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind="input"
+                            title="TWH Commitment"
+                            source={`Subscription document for ${fundLabel}`}
+                          >
+                            {fmtUSD(r.twh_commitment_usd, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">
+                          <MetricTooltip
+                            kind={r.total_fund_commitment_usd > 0 ? "derived" : "missing"}
+                            title="TWH Ownership %"
+                            formula={{
+                              expression: "TWH Commitment ÷ Total Fund Commitment",
+                              parts: [
+                                { label: "TWH Commitment", value: fmtUsdFull(r.twh_commitment_usd) },
+                                { label: "Total Commitment", value: fmtUsdFull(r.total_fund_commitment_usd) },
+                              ],
+                              result: fmtPctFull(r.twh_ownership_pct, 2),
+                            }}
+                            missingInputs={["Total Fund Commitment"]}
+                          >
+                            {fmtPct(r.twh_ownership_pct, 2)}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind="input"
+                            title="TWH Contributions"
+                            source={`Capital call records — sum of TWH contributions to ${fundLabel} through ${qLabel}`}
+                          >
+                            {fmtUSD(r.twh_contributions_usd, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind="input"
+                            title="TWH Distributions"
+                            source={`Distribution records — sum of TWH distributions received from ${fundLabel} through ${qLabel}`}
+                          >
+                            {fmtUSD(r.twh_distributions_usd, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind="input"
+                            title="TWH NAV"
+                            source={`Capital Account Statement (PCAP)\nfrom ${fundLabel} admin\nfor ${qLabel}`}
+                          >
+                            {fmtUSD(r.twh_nav_usd, { compact: true })}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind={hasContrib ? "derived" : "missing"}
+                            title="DPI (Distributions to Paid-In)"
+                            formula={{
+                              expression: "TWH Distributions ÷ TWH Contributions",
+                              parts: [
+                                { label: "TWH Distributions", value: fmtUsdFull(r.twh_distributions_usd) },
+                                { label: "TWH Contributions", value: fmtUsdFull(r.twh_contributions_usd) },
+                              ],
+                              result: fmtMultFull(dpi),
+                            }}
+                            missingInputs={["TWH Contributions"]}
+                          >
+                            {fmtMultiple(dpi)}
+                          </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          <MetricTooltip
+                            kind={hasContrib ? "derived" : "missing"}
+                            title="TVPI (Total Value to Paid-In)"
+                            formula={{
+                              expression: "(TWH NAV + TWH Distributions) ÷ TWH Contributions",
+                              parts: [
+                                { label: "TWH NAV", value: fmtUsdFull(r.twh_nav_usd) },
+                                { label: "TWH Distributions", value: fmtUsdFull(r.twh_distributions_usd) },
+                                { label: "TWH Contributions", value: fmtUsdFull(r.twh_contributions_usd) },
+                              ],
+                              result: fmtMultFull(tvpi),
+                            }}
+                            missingInputs={["TWH Contributions"]}
+                          >
+                            {fmtMultiple(tvpi)}
+                          </MetricTooltip>
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button size="sm" variant="ghost" className="h-7 px-2 text-xs gap-1" onClick={() => { setWizardFundId(r.id); setWizardOpen(true); }}>
                             <Upload className="h-3 w-3" /> Add
