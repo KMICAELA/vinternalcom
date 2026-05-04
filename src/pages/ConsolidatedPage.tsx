@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogT
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2 } from "lucide-react";
 import { fmtUSD, fmtPct, fmtMultiple, fmtDate, calcDpi, calcTvpi, signClass } from "@/lib/format";
+import MetricTooltip, { fmtUsdFull, fmtMultFull, fmtPctFull, type MetricTooltipProps } from "@/components/MetricTooltip";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import InvestorsTab from "@/components/investors/InvestorsTab";
