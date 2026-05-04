@@ -173,14 +173,15 @@ export default function FundsPage() {
                 <TableHead className="text-right">NAV</TableHead>
                 <TableHead className="text-right">DPI</TableHead>
                 <TableHead className="text-right">TVPI</TableHead>
+                <TableHead className="text-right">Net IRR</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : rows.length === 0 ? (
-                <TableRow><TableCell colSpan={11} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">No funds yet</TableCell></TableRow>
               ) : (
                 <>
                   {rows.map((r) => {
@@ -191,7 +192,11 @@ export default function FundsPage() {
                     const hasContrib = r.twh_contributions_usd > 0;
                     return (
                       <TableRow key={r.id} className="table-row-hover">
-                        <TableCell className="font-medium max-w-[280px] truncate">{fundLabel}</TableCell>
+                        <TableCell className="font-medium max-w-[280px] truncate">
+                          <Link to={`/funds/${r.id}`} className="hover:text-primary hover:underline transition-colors">
+                            {fundLabel}
+                          </Link>
+                        </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             {r.report_status === "confirmed" ? (
