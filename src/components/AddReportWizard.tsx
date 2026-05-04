@@ -137,7 +137,8 @@ export default function AddReportWizard({
   const [draftId, setDraftId] = useState<string | null>(null);
   const [payload, setPayload] = useState<Payload | null>(null);
   const [extractionError, setExtractionError] = useState<string | null>(null);
-  const [existingReports, setExistingReports] = useState<Array<{ id: string; file_name: string; uploaded_at: string; committed_to_db: boolean | null; source: "report" | "source_document"; status?: string }>>([]);
+  const [existingReports, setExistingReports] = useState<Array<{ id: string; file_name: string; uploaded_at: string; committed_to_db: boolean | null; source: "report" | "source_document"; status?: string; storage_path?: string | null }>>([]);
+  const [reextractingId, setReextractingId] = useState<string | null>(null);
 
   // Load existing reports + legacy source_documents for selected fund+quarter
   useEffect(() => {
@@ -149,14 +150,14 @@ export default function AddReportWizard({
       const [{ data: reports }, { data: docs }] = await Promise.all([
         supabase
           .from("reports")
-          .select("id, file_name, uploaded_at, committed_to_db, extraction_status")
+          .select("id, file_name, uploaded_at, committed_to_db, extraction_status, storage_path")
           .eq("fund_id", fundId)
           .eq("quarter_id", quarterId)
           .eq("archived", false)
           .order("uploaded_at", { ascending: false }),
         supabase
           .from("source_documents")
-          .select("id, original_filename, uploaded_at, status")
+          .select("id, original_filename, uploaded_at, status, storage_path")
           .eq("fund_id", fundId)
           .eq("quarter_id", quarterId)
           .order("uploaded_at", { ascending: false }),
@@ -169,6 +170,7 @@ export default function AddReportWizard({
           committed_to_db: r.committed_to_db,
           source: "report" as const,
           status: r.extraction_status,
+          storage_path: r.storage_path,
         })),
         ...((docs as any[]) ?? [])
           .filter((d) => d.original_filename)
@@ -179,6 +181,7 @@ export default function AddReportWizard({
             committed_to_db: null,
             source: "source_document" as const,
             status: d.status,
+            storage_path: d.storage_path,
           })),
       ];
       // Dedupe by file_name + date
