@@ -621,7 +621,7 @@ export default function AddReportWizard({
 
             <DialogFooter>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button onClick={runExtraction} disabled={!canSubmitSource || busy}>
+              <Button onClick={() => runExtraction()} disabled={!canSubmitSource || busy}>
                 {busy && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}Extract with AI
               </Button>
             </DialogFooter>
