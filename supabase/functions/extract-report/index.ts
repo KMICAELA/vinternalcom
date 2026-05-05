@@ -653,7 +653,34 @@ or a parallel/feeder vehicle). Apply these rules strictly:
    an explicit fund tag but the table's heading attributes it to the target fund, INCLUDE it.
 
 3) Set "notes" to a one-line summary that explicitly states which summary-table row you
-   selected and how many companies you included vs excluded by fund attribution.`;
+   selected and how many companies you included vs excluded by fund attribution.
+
+4) PORTFOLIO-TABLE COLUMN-HEADER RULE (multi-vehicle annual reports):
+   When a holdings table has a column header that NAMES a specific vehicle
+   (e.g. "Investment Date Quantonation 1", "Investment Date Quantonation 2",
+   "Cost Fund I", "FMV Fund II"), treat that header as the fund tag for EVERY
+   row of the table. Match against the target fund using fuzzy rules
+   ("Quantonation 2" ≈ "Quantonation II" ≈ "Quantonation 2 Feeder",
+    "Fund II" ≈ "Fund 2"). Include the table only if the header matches the
+   target fund. If the same PDF contains separate tables for different
+   vehicles (e.g. p.63 "Quantonation 1" + p.64-65 "Quantonation 2"), DROP
+   every row from non-matching tables.
+
+5) NATIVE SOURCE CURRENCY:
+   When the report's holdings/financial values are stated in a currency OTHER
+   than USD (e.g. EUR, GBP), DO NOT convert to USD yourself. Leave numbers in
+   their native source units and set "currency" to the source code ("EUR",
+   "GBP", etc.). A downstream step applies a single uniform FX rate. Mixing
+   per-row FX rates produces inconsistent values — never do this.`;
+    }
+
+    // Inject FX-conversion hint when caller passed an override.
+    if (fxRate) {
+      systemPrompt += `
+
+FX OVERRIDE ACTIVE — caller will convert values from the source currency to USD
+at a single uniform rate. Return ALL numeric values in the source currency
+(do NOT pre-convert). Set "currency" to the source code (e.g. "EUR").`;
     }
 
     if (source_type === "pdf") {
