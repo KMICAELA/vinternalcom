@@ -78,21 +78,113 @@ function normalizeRound(raw: string | null | undefined): { round: string | null;
   return { round: titleCase(raw), round_detail: null, instrument_extracted: instrument };
 }
 
+// Company alias map — fuzzy duplicate consolidation. Keys are lowercased
+// raw names (or trimmed variants) seen in extractions; values are the
+// canonical commercial name. Sub-tranches of a venture-studio parent get
+// rolled into the parent (Quantonation Canada).
+const COMPANY_ALIAS: Record<string, string> = {
+  "project eleven": "Project 11",
+  "project 11": "Project 11",
+  "zoo": "Zoo",
+  "zoo.dev": "Zoo",
+  "quminex": "Quantonation Canada",
+  "silq": "Quantonation Canada",
+  "quantonation canada": "Quantonation Canada",
+};
+
+function canonicalCompanyName(raw: string | null | undefined): string {
+  const t = (raw ?? "").trim();
+  if (!t) return "";
+  const key = t.toLowerCase().replace(/\s+/g, " ");
+  if (COMPANY_ALIAS[key]) return COMPANY_ALIAS[key];
+  // strip common suffixes
+  const stripped = key.replace(/\s+(inc\.?|llc|ltd\.?|corp\.?|co\.?|sa|sas|sarl|gmbh)$/i, "").trim();
+  if (COMPANY_ALIAS[stripped]) return COMPANY_ALIAS[stripped];
+  return t;
+}
+
+// Sum two numbers treating null as 0; returns null only if BOTH are null.
+function sumNullable(a: number | null | undefined, b: number | null | undefined): number | null {
+  if ((a === null || a === undefined) && (b === null || b === undefined)) return null;
+  return Number(a ?? 0) + Number(b ?? 0);
+}
+
+function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
+  const merged = new Map<string, ExtractedHolding>();
+  for (const h of holdings) {
+    const canonical = canonicalCompanyName(h.company_name);
+    if (!canonical) continue;
+    const existing = merged.get(canonical);
+    if (!existing) {
+      merged.set(canonical, { ...h, company_name: canonical });
+      continue;
+    }
+    // Merge: sum financials, keep earliest investment_date, append round detail.
+    existing.fund_cost_usd = sumNullable(existing.fund_cost_usd, h.fund_cost_usd);
+    existing.fund_fmv_usd = sumNullable(existing.fund_fmv_usd, h.fund_fmv_usd);
+    existing.fund_proceeds_usd = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
+    if (h.investment_date && (!existing.investment_date || h.investment_date < existing.investment_date)) {
+      existing.investment_date = h.investment_date;
+    }
+    // Concatenate distinct round labels into round_detail for traceability.
+    const detailParts = new Set(
+      [existing.round_detail, h.round, h.round_detail].filter(Boolean).map(String),
+    );
+    if (detailParts.size > 0) existing.round_detail = Array.from(detailParts).join(" + ");
+    if (h.needs_review) existing.needs_review = true;
+  }
+  return Array.from(merged.values());
+}
+
+// Apply a single FX rate uniformly to every USD-typed numeric field in the
+// payload. Used when the model returned values in the source currency
+// (e.g. EUR) and the caller passed an fx_rate_override (USD per 1 unit of
+// source currency). After conversion `currency` is rewritten to "USD" and
+// the original currency / rate are appended to `notes` for auditability.
+function applyFxConversion(p: ExtractedPayload, fxRate: number, sourceCcy: string): ExtractedPayload {
+  if (!fxRate || fxRate <= 0) return p;
+  const conv = (v: number | null | undefined): number | null =>
+    v === null || v === undefined ? (v ?? null) : Math.round(Number(v) * fxRate);
+  p.fund_total_contributions_usd = conv(p.fund_total_contributions_usd);
+  p.fund_total_nav_usd = conv(p.fund_total_nav_usd);
+  p.twh_contributions_usd = conv(p.twh_contributions_usd);
+  p.twh_distributions_usd = conv(p.twh_distributions_usd);
+  p.twh_nav_usd = conv(p.twh_nav_usd);
+  for (const h of p.holdings ?? []) {
+    h.fund_cost_usd = conv(h.fund_cost_usd);
+    h.fund_fmv_usd = conv(h.fund_fmv_usd);
+    h.fund_proceeds_usd = conv(h.fund_proceeds_usd);
+  }
+  const fxNote = `FX applied: 1 ${sourceCcy} = ${fxRate} USD (uniform).`;
+  p.notes = p.notes ? `${p.notes}\n${fxNote}` : fxNote;
+  p.currency = "USD";
+  return p;
+}
+
 // Apply normalization + clean up zeros that should be null (TBD).
-function postProcessPayload(p: ExtractedPayload): ExtractedPayload {
+function postProcessPayload(
+  p: ExtractedPayload,
+  opts?: { fxRate?: number | null; dedupe?: boolean },
+): ExtractedPayload {
   if (!p || !Array.isArray(p.holdings)) return p;
   p.holdings = p.holdings.map((h) => {
     const norm = normalizeRound(h.round);
     if (norm.round !== h.round) h.round = norm.round;
     if (norm.round_detail && !h.round_detail) h.round_detail = norm.round_detail;
     if (norm.instrument_extracted && !h.instrument) h.instrument = norm.instrument_extracted;
-    // Coerce undefined to null for downstream consumers — DO NOT coerce 0 to null
-    // (a $0 FMV is a meaningful write-off marker).
     if (h.fund_cost_usd === undefined) h.fund_cost_usd = null;
     if (h.fund_fmv_usd === undefined) h.fund_fmv_usd = null;
     if (h.fund_proceeds_usd === undefined) h.fund_proceeds_usd = null;
     return h;
   });
+  if (opts?.dedupe !== false) {
+    p.holdings = dedupeHoldings(p.holdings);
+  }
+  // FX conversion runs LAST so dedup sums are also converted at the same rate.
+  const sourceCcy = (p.currency ?? "").toUpperCase();
+  if (opts?.fxRate && sourceCcy && sourceCcy !== "USD") {
+    applyFxConversion(p, opts.fxRate, sourceCcy);
+  }
   return p;
 }
 
