@@ -408,6 +408,8 @@ async function uploadPdfBlobToAnthropicFiles(apiKey: string, blob: Blob, filenam
   }
   const j = await resp.json();
   if (!j?.id) throw new Error(`anthropic_files_error:no_id`);
+  return j.id as string;
+}
 
 async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: unknown[]): Promise<string> {
   // userBlocks may include {type:"document", source:{type:"file", file_id}} (Files API)
