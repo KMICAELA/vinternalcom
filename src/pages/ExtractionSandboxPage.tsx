@@ -351,7 +351,13 @@ function ExtractionSandboxInner() {
     setFiles((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: "extracting", error: undefined } : x)));
     const fundIdForApi = f.fundId === DIRECT_TAG ? null : f.fundId;
     try {
-      const res = await runExtractFile({ file: f.file, fundId: fundIdForApi, quarterId });
+      const fxNum = Number(fxRate);
+      const res = await runExtractFile({
+        file: f.file,
+        fundId: fundIdForApi,
+        quarterId,
+        fxRateOverride: Number.isFinite(fxNum) && fxNum > 0 ? fxNum : null,
+      });
       setFiles((prev) =>
         prev.map((x) =>
           x.id === f.id
