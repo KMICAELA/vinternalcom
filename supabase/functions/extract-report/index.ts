@@ -338,29 +338,68 @@ function parseEml(emlText: string): { body: string; attachments: { filename: str
   return { body: body.trim(), attachments };
 }
 
-async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: unknown[]): Promise<string> {
-  // Build the request body as a Blob of pieces to avoid a full JSON.stringify
-  // copy of any large embedded base64 PDF (which can OOM the worker on big files).
-  const enc = new TextEncoder();
-  const parts: BlobPart[] = [];
-  parts.push(enc.encode(`{"model":${JSON.stringify(ANTHROPIC_MODEL)},"max_tokens":8000,"system":${JSON.stringify(systemPrompt)},"messages":[{"role":"user","content":[`));
-  for (let i = 0; i < userBlocks.length; i++) {
-    const b = userBlocks[i] as any;
-    if (i > 0) parts.push(enc.encode(","));
-    if (b && b.type === "document" && b.source?.type === "base64") {
-      // Emit base64 string as its own Blob part — never copied through JSON.stringify.
-      parts.push(enc.encode(`{"type":"document","source":{"type":"base64","media_type":${JSON.stringify(b.source.media_type)},"data":"`));
-      parts.push(b.source.data);
-      parts.push(enc.encode(`"}}`));
-      // Drop our reference so GC can reclaim the big string.
-      b.source.data = null;
-    } else {
-      parts.push(enc.encode(JSON.stringify(b)));
+// Decode base64 to Uint8Array in chunks to avoid building one giant binary string
+// from atob() on very large PDFs (which can OOM the worker).
+function base64ToBytes(b64: string): Uint8Array {
+  const clean = b64.replace(/\s+/g, "");
+  const CHUNK = 1024 * 256; // 256KB of base64 chars → 192KB binary
+  const out: Uint8Array[] = [];
+  let total = 0;
+  for (let i = 0; i < clean.length; i += CHUNK) {
+    let slice = clean.slice(i, i + CHUNK);
+    // Ensure each chunk except the last is a multiple of 4
+    if (i + CHUNK < clean.length) {
+      const rem = slice.length % 4;
+      if (rem) slice = slice.slice(0, slice.length - rem);
     }
+    const bin = atob(slice);
+    const u8 = new Uint8Array(bin.length);
+    for (let j = 0; j < bin.length; j++) u8[j] = bin.charCodeAt(j);
+    out.push(u8);
+    total += u8.length;
   }
-  parts.push(enc.encode(`]}]}`));
-  const bodyBlob = new Blob(parts, { type: "application/json" });
-  // Clear userBlocks to release additional references.
+  const merged = new Uint8Array(total);
+  let off = 0;
+  for (const u of out) { merged.set(u, off); off += u.length; }
+  return merged;
+}
+
+// Upload a PDF to Anthropic's Files API (limit ~500 MB) and return the file_id.
+// This bypasses the 32 MB request-body limit on /v1/messages.
+async function uploadPdfToAnthropicFiles(apiKey: string, base64: string, filename: string): Promise<string> {
+  const bytes = base64ToBytes(base64);
+  const form = new FormData();
+  form.append("file", new Blob([bytes], { type: "application/pdf" }), filename || "report.pdf");
+  const resp = await fetch("https://api.anthropic.com/v1/files", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "files-api-2025-04-14",
+    },
+    body: form,
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    if (resp.status === 413) throw new Error("file_too_large");
+    throw new Error(`anthropic_files_error:${resp.status}:${t.slice(0, 500)}`);
+  }
+  const j = await resp.json();
+  if (!j?.id) throw new Error(`anthropic_files_error:no_id:${JSON.stringify(j).slice(0, 300)}`);
+  return j.id as string;
+}
+
+async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: unknown[]): Promise<string> {
+  // userBlocks may include {type:"document", source:{type:"file", file_id}} (Files API)
+  // or small inline base64 attachments (kept for email path). JSON.stringify is fine
+  // here because the Files API path means no large base64 strings are ever in memory.
+  const requestBody = JSON.stringify({
+    model: ANTHROPIC_MODEL,
+    max_tokens: 8000,
+    system: systemPrompt,
+    messages: [{ role: "user", content: userBlocks }],
+  });
+  // Drop references so GC can reclaim any small base64 attachments.
   (userBlocks as any).length = 0;
 
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
@@ -368,12 +407,14 @@ async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: u
     headers: {
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
+      "anthropic-beta": "files-api-2025-04-14",
       "content-type": "application/json",
     },
-    body: bodyBlob,
+    body: requestBody,
   });
   if (!resp.ok) {
     const t = await resp.text();
+    if (resp.status === 413) throw new Error("file_too_large");
     if (resp.status === 429) {
       // Surface Anthropic's recommended wait time so the client can honor ITPM throttling exactly.
       const retryAfter = resp.headers.get("retry-after")
@@ -499,8 +540,11 @@ or a parallel/feeder vehicle). Apply these rules strictly:
 
     if (source_type === "pdf") {
       if (!pdf_base64) throw new Error("pdf_base64 required for source_type=pdf");
+      // Upload via the Files API (supports up to ~500 MB) and reference by file_id —
+      // the inline base64 path on /v1/messages caps at ~32 MB total request body.
+      const fileId = await uploadPdfToAnthropicFiles(ANTHROPIC_API_KEY, pdf_base64, file_name ?? "report.pdf");
       userBlocks = [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf_base64 } },
+        { type: "document", source: { type: "file", file_id: fileId } },
         { type: "text", text: `Extract the fund quarterly metrics and the holdings schedule from this PDF (${file_name ?? "report"}). Return ONLY the JSON object.` },
       ];
     } else if (source_type === "excel") {
@@ -546,7 +590,14 @@ or a parallel/feeder vehicle). Apply these rules strictly:
       if (parsed && typeof parsed === "object") normalized = postProcessPayload(parsed as ExtractedPayload);
       else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
-      extractionError = e instanceof Error ? e.message : String(e);
+      const raw = e instanceof Error ? e.message : String(e);
+      if (raw === "file_too_large") {
+        extractionError = "This PDF is too large for automated extraction (Anthropic limit ~500 MB). Please compress the PDF and re-upload, or contact admin.";
+      } else if (raw.startsWith("anthropic_error:413") || raw.startsWith("anthropic_files_error:413")) {
+        extractionError = "This PDF exceeds the AI provider's request size limit. Please compress and re-upload.";
+      } else {
+        extractionError = raw;
+      }
     }
 
     // In dry_run mode, return the parsed payload without persisting anything.
