@@ -665,6 +665,19 @@ function ExtractionSandboxInner() {
             </Select>
           </div>
           <div className="md:col-span-2 flex items-end gap-2">
+            <div className="w-32">
+              <Label className="text-xs text-muted-foreground">FX rate (→USD)</Label>
+              <input
+                type="number"
+                step="0.0001"
+                min="0"
+                value={fxRate}
+                onChange={(e) => setFxRate(e.target.value)}
+                placeholder="1.094"
+                className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm font-mono"
+                title="USD per 1 unit of source currency (e.g. EUR). Applied uniformly when the report is in a non-USD currency. Leave blank to skip FX."
+              />
+            </div>
             <input
               ref={fileInputRef}
               type="file"
