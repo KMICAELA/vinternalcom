@@ -447,7 +447,8 @@ serve(async (req) => {
       fund_id,               // uuid (optional but recommended)
       quarter_id,            // uuid (optional but recommended)
       file_name,
-      pdf_base64,            // string
+      pdf_base64,            // string (legacy/small files)
+      pdf_storage_path,      // string — path in fund-reports bucket (preferred for large PDFs)
       excel_payload,         // { sheets: [{ name, rows: any[][] }] }
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
