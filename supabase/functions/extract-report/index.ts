@@ -339,6 +339,30 @@ function parseEml(emlText: string): { body: string; attachments: { filename: str
 }
 
 async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: unknown[]): Promise<string> {
+  // Build the request body as a Blob of pieces to avoid a full JSON.stringify
+  // copy of any large embedded base64 PDF (which can OOM the worker on big files).
+  const enc = new TextEncoder();
+  const parts: BlobPart[] = [];
+  parts.push(enc.encode(`{"model":${JSON.stringify(ANTHROPIC_MODEL)},"max_tokens":8000,"system":${JSON.stringify(systemPrompt)},"messages":[{"role":"user","content":[`));
+  for (let i = 0; i < userBlocks.length; i++) {
+    const b = userBlocks[i] as any;
+    if (i > 0) parts.push(enc.encode(","));
+    if (b && b.type === "document" && b.source?.type === "base64") {
+      // Emit base64 string as its own Blob part — never copied through JSON.stringify.
+      parts.push(enc.encode(`{"type":"document","source":{"type":"base64","media_type":${JSON.stringify(b.source.media_type)},"data":"`));
+      parts.push(b.source.data);
+      parts.push(enc.encode(`"}}`));
+      // Drop our reference so GC can reclaim the big string.
+      b.source.data = null;
+    } else {
+      parts.push(enc.encode(JSON.stringify(b)));
+    }
+  }
+  parts.push(enc.encode(`]}]}`));
+  const bodyBlob = new Blob(parts, { type: "application/json" });
+  // Clear userBlocks to release additional references.
+  (userBlocks as any).length = 0;
+
   const resp = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -346,12 +370,7 @@ async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: u
       "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 8000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userBlocks }],
-    }),
+    body: bodyBlob,
   });
   if (!resp.ok) {
     const t = await resp.text();
