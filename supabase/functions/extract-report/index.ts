@@ -540,8 +540,11 @@ or a parallel/feeder vehicle). Apply these rules strictly:
 
     if (source_type === "pdf") {
       if (!pdf_base64) throw new Error("pdf_base64 required for source_type=pdf");
+      // Upload via the Files API (supports up to ~500 MB) and reference by file_id —
+      // the inline base64 path on /v1/messages caps at ~32 MB total request body.
+      const fileId = await uploadPdfToAnthropicFiles(ANTHROPIC_API_KEY, pdf_base64, file_name ?? "report.pdf");
       userBlocks = [
-        { type: "document", source: { type: "base64", media_type: "application/pdf", data: pdf_base64 } },
+        { type: "document", source: { type: "file", file_id: fileId } },
         { type: "text", text: `Extract the fund quarterly metrics and the holdings schedule from this PDF (${file_name ?? "report"}). Return ONLY the JSON object.` },
       ];
     } else if (source_type === "excel") {
