@@ -590,7 +590,14 @@ or a parallel/feeder vehicle). Apply these rules strictly:
       if (parsed && typeof parsed === "object") normalized = postProcessPayload(parsed as ExtractedPayload);
       else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
-      extractionError = e instanceof Error ? e.message : String(e);
+      const raw = e instanceof Error ? e.message : String(e);
+      if (raw === "file_too_large") {
+        extractionError = "This PDF is too large for automated extraction (Anthropic limit ~500 MB). Please compress the PDF and re-upload, or contact admin.";
+      } else if (raw.startsWith("anthropic_error:413") || raw.startsWith("anthropic_files_error:413")) {
+        extractionError = "This PDF exceeds the AI provider's request size limit. Please compress and re-upload.";
+      } else {
+        extractionError = raw;
+      }
     }
 
     // In dry_run mode, return the parsed payload without persisting anything.
