@@ -389,6 +389,28 @@ async function uploadPdfToAnthropicFiles(apiKey: string, base64: string, filenam
   return j.id as string;
 }
 
+async function uploadPdfBlobToAnthropicFiles(apiKey: string, blob: Blob, filename: string): Promise<string> {
+  const form = new FormData();
+  form.append("file", new Blob([blob], { type: "application/pdf" }), filename || "report.pdf");
+  const resp = await fetch("https://api.anthropic.com/v1/files", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "files-api-2025-04-14",
+    },
+    body: form,
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    if (resp.status === 413) throw new Error("file_too_large");
+    throw new Error(`anthropic_files_error:${resp.status}:${t.slice(0, 500)}`);
+  }
+  const j = await resp.json();
+  if (!j?.id) throw new Error(`anthropic_files_error:no_id`);
+  return j.id as string;
+}
+
 async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: unknown[]): Promise<string> {
   // userBlocks may include {type:"document", source:{type:"file", file_id}} (Files API)
   // or small inline base64 attachments (kept for email path). JSON.stringify is fine
@@ -447,7 +469,8 @@ serve(async (req) => {
       fund_id,               // uuid (optional but recommended)
       quarter_id,            // uuid (optional but recommended)
       file_name,
-      pdf_base64,            // string
+      pdf_base64,            // string (legacy/small files)
+      pdf_storage_path,      // string — path in fund-reports bucket (preferred for large PDFs)
       excel_payload,         // { sheets: [{ name, rows: any[][] }] }
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
@@ -539,10 +562,18 @@ or a parallel/feeder vehicle). Apply these rules strictly:
     }
 
     if (source_type === "pdf") {
-      if (!pdf_base64) throw new Error("pdf_base64 required for source_type=pdf");
-      // Upload via the Files API (supports up to ~500 MB) and reference by file_id —
-      // the inline base64 path on /v1/messages caps at ~32 MB total request body.
-      const fileId = await uploadPdfToAnthropicFiles(ANTHROPIC_API_KEY, pdf_base64, file_name ?? "report.pdf");
+      let fileId: string;
+      if (pdf_storage_path) {
+        // Preferred path for large PDFs: download from storage as a Blob and stream
+        // straight to Anthropic Files API. No base64 ever lives in worker memory.
+        const dl = await supabase.storage.from("fund-reports").download(pdf_storage_path);
+        if (dl.error || !dl.data) throw new Error(`storage_download_failed:${dl.error?.message ?? "no data"}`);
+        fileId = await uploadPdfBlobToAnthropicFiles(ANTHROPIC_API_KEY, dl.data, file_name ?? "report.pdf");
+      } else if (pdf_base64) {
+        fileId = await uploadPdfToAnthropicFiles(ANTHROPIC_API_KEY, pdf_base64, file_name ?? "report.pdf");
+      } else {
+        throw new Error("pdf_base64 or pdf_storage_path required for source_type=pdf");
+      }
       userBlocks = [
         { type: "document", source: { type: "file", file_id: fileId } },
         { type: "text", text: `Extract the fund quarterly metrics and the holdings schedule from this PDF (${file_name ?? "report"}). Return ONLY the JSON object.` },

@@ -345,7 +345,21 @@ export default function AddReportWizard({
       const body: any = { source_type: effectiveSource, fund_id: fundId, quarter_id: realQuarterId };
       if (effectiveSource === "pdf" && effectivePdf) {
         body.file_name = effectivePdf.name;
-        body.pdf_base64 = await fileToBase64(effectivePdf);
+        // For large PDFs, base64-in-JSON OOMs the edge worker. Upload to storage
+        // first and let the function stream the file to Anthropic's Files API.
+        const LARGE_PDF_THRESHOLD = 8 * 1024 * 1024; // 8 MB raw
+        if (effectivePdf.size > LARGE_PDF_THRESHOLD) {
+          const safeName = effectivePdf.name.replace(/[^\w.\-() ]+/g, "_");
+          const path = `extract-staging/${crypto.randomUUID()}/${safeName}`;
+          const up = await supabase.storage.from("fund-reports").upload(path, effectivePdf, {
+            contentType: effectivePdf.type || "application/pdf",
+            upsert: false,
+          });
+          if (up.error) throw up.error;
+          body.pdf_storage_path = path;
+        } else {
+          body.pdf_base64 = await fileToBase64(effectivePdf);
+        }
         // Keep file in state so confirmDraft can re-upload it
         setPdfFile(effectivePdf);
       } else if (effectiveSource === "excel" && effectiveXlsx) {
