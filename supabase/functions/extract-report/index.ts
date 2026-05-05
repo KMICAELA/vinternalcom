@@ -389,6 +389,26 @@ async function uploadPdfToAnthropicFiles(apiKey: string, base64: string, filenam
   return j.id as string;
 }
 
+async function uploadPdfBlobToAnthropicFiles(apiKey: string, blob: Blob, filename: string): Promise<string> {
+  const form = new FormData();
+  form.append("file", new Blob([blob], { type: "application/pdf" }), filename || "report.pdf");
+  const resp = await fetch("https://api.anthropic.com/v1/files", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-beta": "files-api-2025-04-14",
+    },
+    body: form,
+  });
+  if (!resp.ok) {
+    const t = await resp.text();
+    if (resp.status === 413) throw new Error("file_too_large");
+    throw new Error(`anthropic_files_error:${resp.status}:${t.slice(0, 500)}`);
+  }
+  const j = await resp.json();
+  if (!j?.id) throw new Error(`anthropic_files_error:no_id`);
+
 async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: unknown[]): Promise<string> {
   // userBlocks may include {type:"document", source:{type:"file", file_id}} (Files API)
   // or small inline base64 attachments (kept for email path). JSON.stringify is fine
