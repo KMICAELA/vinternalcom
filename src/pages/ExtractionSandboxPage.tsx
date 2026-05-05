@@ -192,6 +192,10 @@ function ExtractionSandboxInner() {
   const [quarterId, setQuarterId] = useState<string>("");
   const [files, setFiles] = useState<SandboxFile[]>([]);
   const [compare, setCompare] = useState(false);
+  // Single uniform FX rate (USD per 1 unit of source currency, e.g. EUR).
+  // Applied uniformly by the edge function to every numeric field after extraction.
+  // 1.094 = ECB EUR/USD reference rate at 31/12/2025 (default for Quantonation reports).
+  const [fxRate, setFxRate] = useState<string>("1.094");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Live-DB snapshots for compare mode (re-fetched per quarter)
