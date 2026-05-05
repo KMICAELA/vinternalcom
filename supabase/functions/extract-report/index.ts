@@ -567,7 +567,10 @@ serve(async (req) => {
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
       dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
+      fx_rate_override,      // number — USD per 1 unit of source currency (e.g. 1.094 for EUR→USD)
     } = body ?? {};
+    const fxRate: number | null =
+      typeof fx_rate_override === "number" && fx_rate_override > 0 ? fx_rate_override : null;
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
       return new Response(JSON.stringify({ error: "source_type must be pdf | excel | email" }), {
