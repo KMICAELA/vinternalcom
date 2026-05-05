@@ -78,21 +78,113 @@ function normalizeRound(raw: string | null | undefined): { round: string | null;
   return { round: titleCase(raw), round_detail: null, instrument_extracted: instrument };
 }
 
+// Company alias map — fuzzy duplicate consolidation. Keys are lowercased
+// raw names (or trimmed variants) seen in extractions; values are the
+// canonical commercial name. Sub-tranches of a venture-studio parent get
+// rolled into the parent (Quantonation Canada).
+const COMPANY_ALIAS: Record<string, string> = {
+  "project eleven": "Project 11",
+  "project 11": "Project 11",
+  "zoo": "Zoo",
+  "zoo.dev": "Zoo",
+  "quminex": "Quantonation Canada",
+  "silq": "Quantonation Canada",
+  "quantonation canada": "Quantonation Canada",
+};
+
+function canonicalCompanyName(raw: string | null | undefined): string {
+  const t = (raw ?? "").trim();
+  if (!t) return "";
+  const key = t.toLowerCase().replace(/\s+/g, " ");
+  if (COMPANY_ALIAS[key]) return COMPANY_ALIAS[key];
+  // strip common suffixes
+  const stripped = key.replace(/\s+(inc\.?|llc|ltd\.?|corp\.?|co\.?|sa|sas|sarl|gmbh)$/i, "").trim();
+  if (COMPANY_ALIAS[stripped]) return COMPANY_ALIAS[stripped];
+  return t;
+}
+
+// Sum two numbers treating null as 0; returns null only if BOTH are null.
+function sumNullable(a: number | null | undefined, b: number | null | undefined): number | null {
+  if ((a === null || a === undefined) && (b === null || b === undefined)) return null;
+  return Number(a ?? 0) + Number(b ?? 0);
+}
+
+function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
+  const merged = new Map<string, ExtractedHolding>();
+  for (const h of holdings) {
+    const canonical = canonicalCompanyName(h.company_name);
+    if (!canonical) continue;
+    const existing = merged.get(canonical);
+    if (!existing) {
+      merged.set(canonical, { ...h, company_name: canonical });
+      continue;
+    }
+    // Merge: sum financials, keep earliest investment_date, append round detail.
+    existing.fund_cost_usd = sumNullable(existing.fund_cost_usd, h.fund_cost_usd);
+    existing.fund_fmv_usd = sumNullable(existing.fund_fmv_usd, h.fund_fmv_usd);
+    existing.fund_proceeds_usd = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
+    if (h.investment_date && (!existing.investment_date || h.investment_date < existing.investment_date)) {
+      existing.investment_date = h.investment_date;
+    }
+    // Concatenate distinct round labels into round_detail for traceability.
+    const detailParts = new Set(
+      [existing.round_detail, h.round, h.round_detail].filter(Boolean).map(String),
+    );
+    if (detailParts.size > 0) existing.round_detail = Array.from(detailParts).join(" + ");
+    if (h.needs_review) existing.needs_review = true;
+  }
+  return Array.from(merged.values());
+}
+
+// Apply a single FX rate uniformly to every USD-typed numeric field in the
+// payload. Used when the model returned values in the source currency
+// (e.g. EUR) and the caller passed an fx_rate_override (USD per 1 unit of
+// source currency). After conversion `currency` is rewritten to "USD" and
+// the original currency / rate are appended to `notes` for auditability.
+function applyFxConversion(p: ExtractedPayload, fxRate: number, sourceCcy: string): ExtractedPayload {
+  if (!fxRate || fxRate <= 0) return p;
+  const conv = (v: number | null | undefined): number | null =>
+    v === null || v === undefined ? (v ?? null) : Math.round(Number(v) * fxRate);
+  p.fund_total_contributions_usd = conv(p.fund_total_contributions_usd);
+  p.fund_total_nav_usd = conv(p.fund_total_nav_usd);
+  p.twh_contributions_usd = conv(p.twh_contributions_usd);
+  p.twh_distributions_usd = conv(p.twh_distributions_usd);
+  p.twh_nav_usd = conv(p.twh_nav_usd);
+  for (const h of p.holdings ?? []) {
+    h.fund_cost_usd = conv(h.fund_cost_usd);
+    h.fund_fmv_usd = conv(h.fund_fmv_usd);
+    h.fund_proceeds_usd = conv(h.fund_proceeds_usd);
+  }
+  const fxNote = `FX applied: 1 ${sourceCcy} = ${fxRate} USD (uniform).`;
+  p.notes = p.notes ? `${p.notes}\n${fxNote}` : fxNote;
+  p.currency = "USD";
+  return p;
+}
+
 // Apply normalization + clean up zeros that should be null (TBD).
-function postProcessPayload(p: ExtractedPayload): ExtractedPayload {
+function postProcessPayload(
+  p: ExtractedPayload,
+  opts?: { fxRate?: number | null; dedupe?: boolean },
+): ExtractedPayload {
   if (!p || !Array.isArray(p.holdings)) return p;
   p.holdings = p.holdings.map((h) => {
     const norm = normalizeRound(h.round);
     if (norm.round !== h.round) h.round = norm.round;
     if (norm.round_detail && !h.round_detail) h.round_detail = norm.round_detail;
     if (norm.instrument_extracted && !h.instrument) h.instrument = norm.instrument_extracted;
-    // Coerce undefined to null for downstream consumers — DO NOT coerce 0 to null
-    // (a $0 FMV is a meaningful write-off marker).
     if (h.fund_cost_usd === undefined) h.fund_cost_usd = null;
     if (h.fund_fmv_usd === undefined) h.fund_fmv_usd = null;
     if (h.fund_proceeds_usd === undefined) h.fund_proceeds_usd = null;
     return h;
   });
+  if (opts?.dedupe !== false) {
+    p.holdings = dedupeHoldings(p.holdings);
+  }
+  // FX conversion runs LAST so dedup sums are also converted at the same rate.
+  const sourceCcy = (p.currency ?? "").toUpperCase();
+  if (opts?.fxRate && sourceCcy && sourceCcy !== "USD") {
+    applyFxConversion(p, opts.fxRate, sourceCcy);
+  }
   return p;
 }
 
@@ -475,7 +567,10 @@ serve(async (req) => {
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
       dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
+      fx_rate_override,      // number — USD per 1 unit of source currency (e.g. 1.094 for EUR→USD)
     } = body ?? {};
+    const fxRate: number | null =
+      typeof fx_rate_override === "number" && fx_rate_override > 0 ? fx_rate_override : null;
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
       return new Response(JSON.stringify({ error: "source_type must be pdf | excel | email" }), {
@@ -558,7 +653,34 @@ or a parallel/feeder vehicle). Apply these rules strictly:
    an explicit fund tag but the table's heading attributes it to the target fund, INCLUDE it.
 
 3) Set "notes" to a one-line summary that explicitly states which summary-table row you
-   selected and how many companies you included vs excluded by fund attribution.`;
+   selected and how many companies you included vs excluded by fund attribution.
+
+4) PORTFOLIO-TABLE COLUMN-HEADER RULE (multi-vehicle annual reports):
+   When a holdings table has a column header that NAMES a specific vehicle
+   (e.g. "Investment Date Quantonation 1", "Investment Date Quantonation 2",
+   "Cost Fund I", "FMV Fund II"), treat that header as the fund tag for EVERY
+   row of the table. Match against the target fund using fuzzy rules
+   ("Quantonation 2" ≈ "Quantonation II" ≈ "Quantonation 2 Feeder",
+    "Fund II" ≈ "Fund 2"). Include the table only if the header matches the
+   target fund. If the same PDF contains separate tables for different
+   vehicles (e.g. p.63 "Quantonation 1" + p.64-65 "Quantonation 2"), DROP
+   every row from non-matching tables.
+
+5) NATIVE SOURCE CURRENCY:
+   When the report's holdings/financial values are stated in a currency OTHER
+   than USD (e.g. EUR, GBP), DO NOT convert to USD yourself. Leave numbers in
+   their native source units and set "currency" to the source code ("EUR",
+   "GBP", etc.). A downstream step applies a single uniform FX rate. Mixing
+   per-row FX rates produces inconsistent values — never do this.`;
+    }
+
+    // Inject FX-conversion hint when caller passed an override.
+    if (fxRate) {
+      systemPrompt += `
+
+FX OVERRIDE ACTIVE — caller will convert values from the source currency to USD
+at a single uniform rate. Return ALL numeric values in the source currency
+(do NOT pre-convert). Set "currency" to the source code (e.g. "EUR").`;
     }
 
     if (source_type === "pdf") {
@@ -618,8 +740,9 @@ or a parallel/feeder vehicle). Apply these rules strictly:
     try {
       rawText = await callAnthropic(ANTHROPIC_API_KEY, systemPrompt, userBlocks);
       const parsed = safeJson(rawText) as ExtractedPayload | null;
-      if (parsed && typeof parsed === "object") normalized = postProcessPayload(parsed as ExtractedPayload);
-      else extractionError = "Could not parse model output as JSON.";
+      if (parsed && typeof parsed === "object") {
+        normalized = postProcessPayload(parsed as ExtractedPayload, { fxRate, dedupe: true });
+      } else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
       if (raw === "file_too_large") {
