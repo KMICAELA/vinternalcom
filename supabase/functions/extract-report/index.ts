@@ -740,8 +740,9 @@ at a single uniform rate. Return ALL numeric values in the source currency
     try {
       rawText = await callAnthropic(ANTHROPIC_API_KEY, systemPrompt, userBlocks);
       const parsed = safeJson(rawText) as ExtractedPayload | null;
-      if (parsed && typeof parsed === "object") normalized = postProcessPayload(parsed as ExtractedPayload);
-      else extractionError = "Could not parse model output as JSON.";
+      if (parsed && typeof parsed === "object") {
+        normalized = postProcessPayload(parsed as ExtractedPayload, { fxRate, dedupe: true });
+      } else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
       if (raw === "file_too_large") {
