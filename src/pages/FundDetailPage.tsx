@@ -126,8 +126,14 @@ export default function FundDetailPage() {
             <ArrowLeft className="h-3 w-3" /> All funds
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">{fund.short_name ?? fund.name}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {fund.short_name ? fund.name + " · " : ""}Started {fmtDate(fund.start_date)} · {fund.reporting_currency}
+          <p className="text-sm text-muted-foreground mt-1 inline-flex items-center gap-1">
+            <span>
+              {fund.short_name ? fund.name + " · " : ""}Started {fmtDate(fund.start_date)} · {fund.reporting_currency}
+              {fund.native_currency && fund.native_currency !== "USD" ? ` (native ${fund.native_currency})` : ""}
+            </span>
+            {fund.native_currency && fund.native_currency !== "USD" && (
+              <FxBadge rate={fxRate} fromCurrency={fund.native_currency} updaterName={fxUpdater} />
+            )}
           </p>
         </div>
       </div>
