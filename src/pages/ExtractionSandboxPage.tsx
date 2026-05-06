@@ -489,6 +489,13 @@ function ExtractionSandboxInner() {
       for (const [fundId, fs] of fileGroups.byFund) {
         const fund = funds.find((f) => f.id === fundId);
         const fundLabel = fund?.short_name ?? fund?.name ?? "(unknown)";
+        // Detect currency from any payload (all files for one fund share fund native ccy).
+        const fundCcy = (fs[0]?.payload?.currency ?? "USD").toUpperCase();
+        const isNative = fundCcy !== "USD";
+        // Read from *_native when fund is non-USD (extraction now leaves *_usd null).
+        const pickCost = (h: any) => isNative ? h.fund_cost_native : h.fund_cost_usd;
+        const pickFmv = (h: any) => isNative ? h.fund_fmv_native : h.fund_fmv_usd;
+        const pickProc = (h: any) => isNative ? h.fund_proceeds_native : h.fund_proceeds_usd;
         // Flatten + dedupe by company within this fund (last-non-null wins)
         const byCompany = new Map<string, EnrichedHolding>();
         for (const f of fs) {
@@ -497,9 +504,12 @@ function ExtractionSandboxInner() {
             if (!name) continue;
             const k = name.toLowerCase();
             const existing = byCompany.get(k) ?? { ...h, company_name: name };
-            if (h.fund_cost_usd != null) existing.fund_cost_usd = h.fund_cost_usd;
-            if (h.fund_fmv_usd != null) existing.fund_fmv_usd = h.fund_fmv_usd;
-            if (h.fund_proceeds_usd != null) existing.fund_proceeds_usd = h.fund_proceeds_usd;
+            const cost = pickCost(h);
+            const fmv = pickFmv(h);
+            const proc = pickProc(h);
+            if (cost != null) existing.fund_cost_usd = cost;
+            if (fmv != null) existing.fund_fmv_usd = fmv;
+            if (proc != null) existing.fund_proceeds_usd = proc;
             if (h.round) existing.round = h.round;
             if (h.instrument) existing.instrument = h.instrument;
             byCompany.set(k, existing);
@@ -510,8 +520,6 @@ function ExtractionSandboxInner() {
           holdings: Array.from(byCompany.values()),
           currentQuarterEndDate: currentEnd,
         });
-        // Combine notes from all files for this fund and run the magnitude scrubber
-        // (catches "$2m" → 200,000 class of bugs the model occasionally introduces).
         const combinedNotes = fs
           .map((f) => f.payload?.notes ?? "")
           .filter(Boolean)
@@ -520,7 +528,7 @@ function ExtractionSandboxInner() {
         for (const h of enriched) {
           out.push({
             key: `${fundId}::${h.company_name.toLowerCase()}`,
-            fundLabel,
+            fundLabel: isNative ? `${fundLabel} · ${fundCcy}` : fundLabel,
             company: h.company_name,
             instrument: h.instrument ?? null,
             round: h.round ?? null,
