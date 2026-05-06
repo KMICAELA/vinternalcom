@@ -118,6 +118,16 @@ const sourceIcon = (t?: SourceType) =>
 const numOrNull = (v: number | null | undefined): number | null =>
   v === null || v === undefined || Number.isNaN(v) ? null : Number(v);
 
+const fmtMoney = (v: number | null | undefined, currency = "USD", opts: { compact?: boolean } = {}) => {
+  if ((currency ?? "USD").toUpperCase() === "USD") return fmtUSD(v, opts);
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const symbol = currency.toUpperCase() === "EUR" ? "€" : `${currency.toUpperCase()} `;
+  if (opts.compact && Math.abs(v) >= 1_000_000) return `${symbol}${(v / 1_000_000).toFixed(1)}M`;
+  if (opts.compact && Math.abs(v) >= 1_000) return `${symbol}${(v / 1_000).toFixed(1)}K`;
+  const sign = v < 0 ? "-" : "";
+  return `${sign}${symbol}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+};
+
 
 
 // Merge fund-level fields from multiple files for the same fund: last-non-null wins.
@@ -493,6 +503,7 @@ function ExtractionSandboxInner() {
     inherited_from_prior?: boolean;
     needs_review?: boolean;
     needs_round_review?: boolean;
+    currency: string;
   };
   const [underlyingRows, setUnderlyingRows] = useState<UnderlyingRow[]>([]);
 
@@ -535,6 +546,8 @@ function ExtractionSandboxInner() {
           fundId,
           holdings: Array.from(byCompany.values()),
           currentQuarterEndDate: currentEnd,
+          inheritValues: !isNative,
+          carryForwardMissing: !isNative,
         });
         const combinedNotes = fs
           .map((f) => f.payload?.notes ?? "")
@@ -554,6 +567,7 @@ function ExtractionSandboxInner() {
             inherited_from_prior: h.inherited_from_prior,
             needs_review: h.needs_review,
             needs_round_review: h.needs_round_review,
+            currency: fundCcy,
           });
         }
       }
