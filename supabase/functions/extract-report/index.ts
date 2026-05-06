@@ -309,7 +309,7 @@ LP letter, portfolio update, commentary without a structured holdings table.
 MODE B — FMV UPDATE WHITELIST (the ONLY phrases that may change FMV)
 ═══════════════════════════════════════════════════════════════════════
 
-You may set fund_fmv_usd to a NEW value ONLY when the narrative matches
+You may set fund_fmv_native to a NEW value ONLY when the narrative matches
 one of these patterns. Otherwise leave fund_fmv_native as null and let the
 post-processing layer inherit the prior-quarter value.
 
@@ -435,7 +435,7 @@ PROCEEDS vs FMV — STRICT RULE:
 fund_proceeds_native reflects ONLY cash already received by the fund. Future-tense
 language ("will receive", "at close", "upon close", "expected", "agreed to
 receive", "pending") means the cash is NOT yet realized — keep
-fund_proceeds_native = 0 (or null) and book the value as fund_fmv_usd instead.
+fund_proceeds_native = 0 (or null) and book the value as fund_fmv_native instead.
 
 
 The "notes" field should state the detected mode and a one-line summary
@@ -657,8 +657,7 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Look up the selected fund's name + aliases AND its native currency.
-    // The native currency drives whether we ask the model for native-source
-    // values and apply an FX conversion via the fund_fx_rates table.
+    // The native currency drives whether we ask the model for native-source values.
     let selectedFundName: string | null = null;
     let selectedFundShort: string | null = null;
     let selectedFundNativeCcy = "USD";
@@ -780,7 +779,7 @@ FUND NATIVE CURRENCY: ${selectedFundNativeCcy}
 The selected fund reports in ${selectedFundNativeCcy}. Return ALL numeric values
 in ${selectedFundNativeCcy} (do NOT pre-convert to USD). Set "currency" to "${selectedFundNativeCcy}".
 Use the *_native JSON fields. Set every *_usd field to null for this non-USD fund.
-Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_native = 600000, fund_cost_usd = null; "Investment Value (€) = 800,000" -> fund_fmv_native = 800000, fund_fmv_native = null. Never output 719219, 958959, 11746400, or any other EUR×FX converted value.`;
+Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_native = 600000, fund_cost_usd = null; "Investment Value (€) = 800,000" -> fund_fmv_native = 800000, fund_fmv_usd = null. Never output 719219, 958959, 11746400, or any other EUR×FX converted value.`;
     }
 
     if (source_type === "pdf") {
