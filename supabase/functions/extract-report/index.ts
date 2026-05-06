@@ -146,7 +146,7 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
     // Merge: sum financials, keep earliest investment_date, append round detail.
     existing.fund_cost_usd = sumNullable(existing.fund_cost_usd, h.fund_cost_usd);
     existing.fund_fmv_usd = sumNullable(existing.fund_fmv_usd, h.fund_fmv_usd);
-    existing.fund_proceeds_native = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
+    existing.fund_proceeds_usd = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
     existing.fund_cost_native = sumNullable(existing.fund_cost_native, h.fund_cost_native);
     existing.fund_fmv_native = sumNullable(existing.fund_fmv_native, h.fund_fmv_native);
     existing.fund_proceeds_native = sumNullable(existing.fund_proceeds_native, h.fund_proceeds_native);
@@ -187,8 +187,8 @@ function moveValuesToNative(p: ExtractedPayload): ExtractedPayload {
     h.fund_fmv_native = h.fund_fmv_native ?? h.fund_fmv_usd ?? null;
     h.fund_proceeds_native = h.fund_proceeds_native ?? h.fund_proceeds_usd ?? null;
     h.fund_cost_usd = null;
-    h.fund_fmv_native = null;
-    h.fund_proceeds_native = null;
+    h.fund_fmv_usd = null;
+    h.fund_proceeds_usd = null;
   }
   return p;
 }
@@ -205,8 +205,8 @@ function postProcessPayload(
     if (norm.round_detail && !h.round_detail) h.round_detail = norm.round_detail;
     if (norm.instrument_extracted && !h.instrument) h.instrument = norm.instrument_extracted;
     if (h.fund_cost_usd === undefined) h.fund_cost_usd = null;
-    if (h.fund_fmv_usd === undefined) h.fund_fmv_native = null;
-    if (h.fund_proceeds_native === undefined) h.fund_proceeds_native = null;
+    if (h.fund_fmv_usd === undefined) h.fund_fmv_usd = null;
+    if (h.fund_proceeds_usd === undefined) h.fund_proceeds_usd = null;
     return h;
   });
   if (opts?.dedupe !== false) {
