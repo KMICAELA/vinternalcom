@@ -149,44 +149,40 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
   return Array.from(merged.values());
 }
 
-// Dual-write FX conversion. The model returns numbers in the source
-// currency (e.g. EUR). We KEEP those values in *_native and ADDITIONALLY
-// populate *_usd by multiplying by the supplied fxRate. After this runs,
-// `currency` still reflects the source (so consumers know what the native
-// columns are denominated in) and `fx_rate_used` records the multiplier.
-function applyFxConversion(p: ExtractedPayload, fxRate: number, sourceCcy: string): ExtractedPayload {
-  if (!fxRate || fxRate <= 0) return p;
-  const conv = (v: number | null | undefined): number | null =>
-    v === null || v === undefined ? null : Math.round(Number(v) * fxRate);
-  // Top-level metrics: model values are native -> mirror to *_native, derive *_usd.
+// Move model output (which is in source currency) into the *_native fields.
+// We NO LONGER multiply by an FX rate at extraction time — the database
+// triggers (lookup_fund_fx_rate + *_derive_usd) will compute *_usd at write
+// time, using the rate stored in fund_fx_rates. This guarantees a single
+// source of truth for FX and lets rates be updated without re-extracting.
+function moveValuesToNative(p: ExtractedPayload): ExtractedPayload {
+  // Top-level metrics
   p.fund_total_contributions_native = p.fund_total_contributions_usd ?? null;
   p.fund_total_nav_native = p.fund_total_nav_usd ?? null;
   p.twh_contributions_native = p.twh_contributions_usd ?? null;
   p.twh_distributions_native = p.twh_distributions_usd ?? null;
   p.twh_nav_native = p.twh_nav_usd ?? null;
-  p.fund_total_contributions_usd = conv(p.fund_total_contributions_usd);
-  p.fund_total_nav_usd = conv(p.fund_total_nav_usd);
-  p.twh_contributions_usd = conv(p.twh_contributions_usd);
-  p.twh_distributions_usd = conv(p.twh_distributions_usd);
-  p.twh_nav_usd = conv(p.twh_nav_usd);
+  // Null out the *_usd fields so downstream callers know to leave USD
+  // derivation to the DB trigger.
+  p.fund_total_contributions_usd = null;
+  p.fund_total_nav_usd = null;
+  p.twh_contributions_usd = null;
+  p.twh_distributions_usd = null;
+  p.twh_nav_usd = null;
   for (const h of p.holdings ?? []) {
     h.fund_cost_native = h.fund_cost_usd ?? null;
     h.fund_fmv_native = h.fund_fmv_usd ?? null;
     h.fund_proceeds_native = h.fund_proceeds_usd ?? null;
-    h.fund_cost_usd = conv(h.fund_cost_usd);
-    h.fund_fmv_usd = conv(h.fund_fmv_usd);
-    h.fund_proceeds_usd = conv(h.fund_proceeds_usd);
+    h.fund_cost_usd = null;
+    h.fund_fmv_usd = null;
+    h.fund_proceeds_usd = null;
   }
-  p.fx_rate_used = fxRate;
-  const fxNote = `FX applied: 1 ${sourceCcy} = ${fxRate} USD (from fund_fx_rates).`;
-  p.notes = p.notes ? `${p.notes}\n${fxNote}` : fxNote;
   return p;
 }
 
 // Apply normalization + clean up zeros that should be null (TBD).
 function postProcessPayload(
   p: ExtractedPayload,
-  opts?: { fxRate?: number | null; dedupe?: boolean },
+  opts?: { fxRate?: number | null; sourceCcy?: string | null; dedupe?: boolean },
 ): ExtractedPayload {
   if (!p || !Array.isArray(p.holdings)) return p;
   p.holdings = p.holdings.map((h) => {
@@ -202,10 +198,18 @@ function postProcessPayload(
   if (opts?.dedupe !== false) {
     p.holdings = dedupeHoldings(p.holdings);
   }
-  // FX conversion runs LAST so dedup sums are also converted at the same rate.
-  const sourceCcy = (p.currency ?? "").toUpperCase();
-  if (opts?.fxRate && sourceCcy && sourceCcy !== "USD") {
-    applyFxConversion(p, opts.fxRate, sourceCcy);
+  // For non-USD funds: the model returned values in native currency.
+  // Move them to *_native and leave *_usd null so the DB trigger fills them
+  // in via the configured fund_fx_rates lookup at write time.
+  const sourceCcy = (opts?.sourceCcy ?? p.currency ?? "USD").toUpperCase();
+  if (sourceCcy && sourceCcy !== "USD") {
+    p.currency = sourceCcy;
+    moveValuesToNative(p);
+    if (opts?.fxRate) p.fx_rate_used = opts.fxRate; // informational only
+    const note = opts?.fxRate
+      ? `Values stored in ${sourceCcy}; USD derived at DB write via fund_fx_rates (1 ${sourceCcy} = ${opts.fxRate} USD).`
+      : `Values stored in ${sourceCcy}; USD will be derived once an FX rate is configured in fund_fx_rates for this fund/quarter.`;
+    p.notes = p.notes ? `${p.notes}\n${note}` : note;
   }
   return p;
 }
