@@ -32,6 +32,9 @@ type Holding = {
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
+  fund_cost_native?: number | null;
+  fund_fmv_native?: number | null;
+  fund_proceeds_native?: number | null;
 };
 
 type Payload = {
@@ -43,6 +46,11 @@ type Payload = {
   twh_contributions_usd: number | null;
   twh_distributions_usd: number | null;
   twh_nav_usd: number | null;
+  fund_total_contributions_native?: number | null;
+  fund_total_nav_native?: number | null;
+  twh_contributions_native?: number | null;
+  twh_distributions_native?: number | null;
+  twh_nav_native?: number | null;
   holdings: Holding[];
   notes: string | null;
 };
@@ -112,6 +120,20 @@ async function parseExcel(file: File): Promise<{ sheets: { name: string; rows: a
   });
   return { sheets };
 }
+
+const fmtMoney = (v: number | null | undefined, currency = "USD", opts: { compact?: boolean } = {}) => {
+  if ((currency ?? "USD").toUpperCase() === "USD") return fmtUSD(v, opts);
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const ccy = currency.toUpperCase();
+  const symbol = ccy === "EUR" ? "€" : `${ccy} `;
+  if (opts.compact && Math.abs(v) >= 1_000_000) return `${symbol}${(v / 1_000_000).toFixed(1)}M`;
+  if (opts.compact && Math.abs(v) >= 1_000) return `${symbol}${(v / 1_000).toFixed(1)}K`;
+  const sign = v < 0 ? "-" : "";
+  return `${sign}${symbol}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+};
+
+const valueKey = (base: "fund_cost" | "fund_fmv" | "fund_proceeds", isNative: boolean) =>
+  `${base}_${isNative ? "native" : "usd"}` as keyof Holding;
 
 export default function AddReportWizard({
   open,
@@ -402,11 +424,14 @@ export default function AddReportWizard({
       const initialPayload = (draft.normalized_payload as Payload | null) ?? emptyPayload();
       // Enrich holdings with prior-quarter round/instrument inheritance.
       const currentQ = quarters.find((q) => q.id === quarterId);
+      const isNative = (initialPayload.currency ?? "USD").toUpperCase() !== "USD";
       try {
         const enrichedRaw = await inheritHoldingMetadata({
           fundId,
           holdings: initialPayload.holdings ?? [],
           currentQuarterEndDate: currentQ?.quarter_end_date ?? null,
+          inheritValues: !isNative,
+          carryForwardMissing: !isNative,
         });
         const enriched = scrubMagnitudes(initialPayload.notes, enrichedRaw);
         setPayload({ ...initialPayload, holdings: enriched as Holding[] });
@@ -745,11 +770,20 @@ function ReviewStep({
     setPayload({ ...payload, holdings: payload.holdings.filter((_, i) => i !== idx) });
   };
   const addHolding = () => {
+    const isNative = (payload.currency ?? "USD").toUpperCase() !== "USD";
     setPayload({
       ...payload,
-      holdings: [...payload.holdings, { company_name: "", investment_date: null, instrument: null, round: null, fund_cost_usd: 0, fund_fmv_usd: 0, fund_proceeds_usd: 0 }],
+      holdings: [...payload.holdings, isNative
+        ? { company_name: "", investment_date: null, instrument: null, round: null, fund_cost_usd: null, fund_fmv_usd: null, fund_proceeds_usd: null, fund_cost_native: 0, fund_fmv_native: 0, fund_proceeds_native: 0 }
+        : { company_name: "", investment_date: null, instrument: null, round: null, fund_cost_usd: 0, fund_fmv_usd: 0, fund_proceeds_usd: 0 }],
     });
   };
+
+  const currency = (payload.currency ?? "USD").toUpperCase();
+  const isNative = currency !== "USD";
+  const costKey = valueKey("fund_cost", isNative);
+  const fmvKey = valueKey("fund_fmv", isNative);
+  const proceedsKey = valueKey("fund_proceeds", isNative);
 
   const accept = sourceType === "pdf" ? "application/pdf" : sourceType === "excel" ? ".xlsx,.xls" : ".eml,message/rfc822";
   const onPick = (f: File | null) => {
@@ -786,7 +820,7 @@ function ReviewStep({
       )}
 
       <Card className="p-4 space-y-3">
-        <h4 className="text-sm font-semibold">Fund-level snapshot</h4>
+          <h4 className="text-sm font-semibold">Fund-level snapshot{isNative ? ` (${currency} native)` : ""}</h4>
         <div className="grid grid-cols-2 gap-3">
           <NumField label="TWH contributions (USD)" value={payload.twh_contributions_usd} onChange={(v) => setField("twh_contributions_usd", v)} />
           <NumField label="TWH distributions (USD)" value={payload.twh_distributions_usd} onChange={(v) => setField("twh_distributions_usd", v)} />
@@ -836,9 +870,9 @@ function ReviewStep({
                   </td>
                   <td className="px-2 py-1"><Input className="h-7 text-xs" value={h.round ?? ""} onChange={(e) => setHolding(i, "round", e.target.value)} /></td>
                   <td className="px-2 py-1"><Input className="h-7 text-xs" value={h.instrument ?? ""} onChange={(e) => setHolding(i, "instrument", e.target.value)} /></td>
-                  <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={h.fund_cost_usd ?? 0} onChange={(e) => setHolding(i, "fund_cost_usd", Number(e.target.value))} /></td>
-                  <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={h.fund_fmv_usd ?? 0} onChange={(e) => setHolding(i, "fund_fmv_usd", Number(e.target.value))} /></td>
-                  <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={h.fund_proceeds_usd ?? 0} onChange={(e) => setHolding(i, "fund_proceeds_usd", Number(e.target.value))} /></td>
+                  <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={(h as any)[costKey] ?? 0} onChange={(e) => setHolding(i, costKey, Number(e.target.value))} /></td>
+                  <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={(h as any)[fmvKey] ?? 0} onChange={(e) => setHolding(i, fmvKey, Number(e.target.value))} /></td>
+                  <td className="px-2 py-1 text-right"><Input className="h-7 text-xs text-right font-mono" type="number" value={(h as any)[proceedsKey] ?? 0} onChange={(e) => setHolding(i, proceedsKey, Number(e.target.value))} /></td>
                   <td className="px-2 py-1 text-right"><Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => removeHolding(i)}>×</Button></td>
                 </tr>
                 );
@@ -851,9 +885,9 @@ function ReviewStep({
                   <td className="px-2 py-2">Totals</td>
                   <td></td>
                   <td></td>
-                  <td className="px-2 py-2 text-right font-mono">{fmtUSD(payload.holdings.reduce((a, h) => a + (h.fund_cost_usd ?? 0), 0), { compact: true })}</td>
-                  <td className="px-2 py-2 text-right font-mono">{fmtUSD(payload.holdings.reduce((a, h) => a + (h.fund_fmv_usd ?? 0), 0), { compact: true })}</td>
-                  <td className="px-2 py-2 text-right font-mono">{fmtUSD(payload.holdings.reduce((a, h) => a + (h.fund_proceeds_usd ?? 0), 0), { compact: true })}</td>
+                  <td className="px-2 py-2 text-right font-mono">{fmtMoney(payload.holdings.reduce((a, h) => a + ((h as any)[costKey] ?? 0), 0), currency, { compact: true })}</td>
+                  <td className="px-2 py-2 text-right font-mono">{fmtMoney(payload.holdings.reduce((a, h) => a + ((h as any)[fmvKey] ?? 0), 0), currency, { compact: true })}</td>
+                  <td className="px-2 py-2 text-right font-mono">{fmtMoney(payload.holdings.reduce((a, h) => a + ((h as any)[proceedsKey] ?? 0), 0), currency, { compact: true })}</td>
                   <td></td>
                 </tr>
               )}

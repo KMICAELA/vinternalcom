@@ -69,8 +69,12 @@ export async function inheritHoldingMetadata(opts: {
   fundId: string;
   holdings: RawHolding[];
   currentQuarterEndDate?: string | null;
+  inheritValues?: boolean;
+  carryForwardMissing?: boolean;
 }): Promise<EnrichedHolding[]> {
   const { fundId, holdings } = opts;
+  const inheritValues = opts.inheritValues ?? true;
+  const carryForwardMissing = opts.carryForwardMissing ?? true;
   if (!fundId) return holdings.map((h) => ({ ...h }));
 
   // 1. Resolve companies for the current extraction.
@@ -158,14 +162,14 @@ export async function inheritHoldingMetadata(opts: {
       if (!out.round && prior.round) { out.round = prior.round; inheritedSomething = true; }
       if (!out.instrument && prior.instrument) { out.instrument = prior.instrument; inheritedSomething = true; }
       const curCost = h.fund_cost_usd;
-      if ((curCost == null || Number(curCost) === 0) && prior.fund_cost_usd != null && prior.fund_cost_usd > 0) {
+      if (inheritValues && (curCost == null || Number(curCost) === 0) && prior.fund_cost_usd != null && prior.fund_cost_usd > 0) {
         out.fund_cost_usd = prior.fund_cost_usd;
         out.inherited_cost = true;
         inheritedSomething = true;
       }
       const curFmv = h.fund_fmv_usd;
       // FMV: only inherit when null (no extraction). $0 stays as a markdown.
-      if (curFmv == null && prior.fund_fmv_usd != null && prior.fund_fmv_usd > 0) {
+      if (inheritValues && curFmv == null && prior.fund_fmv_usd != null && prior.fund_fmv_usd > 0) {
         out.fund_fmv_usd = prior.fund_fmv_usd;
         out.inherited_fmv = true;
         inheritedSomething = true;
@@ -214,6 +218,7 @@ export async function inheritHoldingMetadata(opts: {
   // 4. CARRY-FORWARD: append synthetic rows for prior holdings the current
   //    extraction did NOT mention. They keep cost/fmv/round/instrument intact.
   for (const [companyId, prior] of priorByCompany) {
+    if (!carryForwardMissing) break;
     if (seenCompanyIds.has(companyId)) continue;
     if (!prior.company_name) continue;
     const norm = normalizeRound(prior.round);

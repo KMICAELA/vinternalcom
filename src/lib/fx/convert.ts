@@ -17,8 +17,7 @@ export interface FundFxRate {
 /**
  * Look up the FX rate to apply for a given fund + quarter + currency pair.
  * Resolution order: fund-specific row -> global row (fund_id null) -> null.
- * Caller is responsible for falling back to the legacy `fx_rates` table or
- * showing a "FX rate not set" warning.
+ * Callers should show a "FX rate not set" warning when no rate exists.
  */
 export async function getFundFxRate(
   fundId: string | null,

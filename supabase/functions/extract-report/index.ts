@@ -22,9 +22,8 @@ type ExtractedHolding = {
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
-  // Native-currency mirrors. Populated alongside *_usd whenever an FX
-  // conversion happens. When `currency` is USD these will equal the *_usd
-  // values. Persisted to underlying_holdings.*_native columns.
+  // Native-currency fields. Non-USD model output is expected here; legacy
+  // *_usd fields stay null until database triggers derive USD at write time.
   fund_cost_native?: number | null;
   fund_fmv_native?: number | null;
   fund_proceeds_native?: number | null;
@@ -49,7 +48,7 @@ type ExtractedPayload = {
   twh_contributions_native?: number | null;
   twh_distributions_native?: number | null;
   twh_nav_native?: number | null;
-  fx_rate_used?: number | null;            // rate applied (1 native = X USD); null if no conversion
+  fx_rate_used?: number | null;            // informational only; never applied during extraction
   holdings: ExtractedHolding[];
   notes: string | null;
 };
@@ -148,6 +147,9 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
     existing.fund_cost_usd = sumNullable(existing.fund_cost_usd, h.fund_cost_usd);
     existing.fund_fmv_usd = sumNullable(existing.fund_fmv_usd, h.fund_fmv_usd);
     existing.fund_proceeds_usd = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
+    existing.fund_cost_native = sumNullable(existing.fund_cost_native, h.fund_cost_native);
+    existing.fund_fmv_native = sumNullable(existing.fund_fmv_native, h.fund_fmv_native);
+    existing.fund_proceeds_native = sumNullable(existing.fund_proceeds_native, h.fund_proceeds_native);
     if (h.investment_date && (!existing.investment_date || h.investment_date < existing.investment_date)) {
       existing.investment_date = h.investment_date;
     }
@@ -168,11 +170,11 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
 // source of truth for FX and lets rates be updated without re-extracting.
 function moveValuesToNative(p: ExtractedPayload): ExtractedPayload {
   // Top-level metrics
-  p.fund_total_contributions_native = p.fund_total_contributions_usd ?? null;
-  p.fund_total_nav_native = p.fund_total_nav_usd ?? null;
-  p.twh_contributions_native = p.twh_contributions_usd ?? null;
-  p.twh_distributions_native = p.twh_distributions_usd ?? null;
-  p.twh_nav_native = p.twh_nav_usd ?? null;
+  p.fund_total_contributions_native = p.fund_total_contributions_native ?? p.fund_total_contributions_usd ?? null;
+  p.fund_total_nav_native = p.fund_total_nav_native ?? p.fund_total_nav_usd ?? null;
+  p.twh_contributions_native = p.twh_contributions_native ?? p.twh_contributions_usd ?? null;
+  p.twh_distributions_native = p.twh_distributions_native ?? p.twh_distributions_usd ?? null;
+  p.twh_nav_native = p.twh_nav_native ?? p.twh_nav_usd ?? null;
   // Null out the *_usd fields so downstream callers know to leave USD
   // derivation to the DB trigger.
   p.fund_total_contributions_usd = null;
@@ -181,9 +183,9 @@ function moveValuesToNative(p: ExtractedPayload): ExtractedPayload {
   p.twh_distributions_usd = null;
   p.twh_nav_usd = null;
   for (const h of p.holdings ?? []) {
-    h.fund_cost_native = h.fund_cost_usd ?? null;
-    h.fund_fmv_native = h.fund_fmv_usd ?? null;
-    h.fund_proceeds_native = h.fund_proceeds_usd ?? null;
+    h.fund_cost_native = h.fund_cost_native ?? h.fund_cost_usd ?? null;
+    h.fund_fmv_native = h.fund_fmv_native ?? h.fund_fmv_usd ?? null;
+    h.fund_proceeds_native = h.fund_proceeds_native ?? h.fund_proceeds_usd ?? null;
     h.fund_cost_usd = null;
     h.fund_fmv_usd = null;
     h.fund_proceeds_usd = null;
@@ -226,29 +228,59 @@ function postProcessPayload(
   return p;
 }
 
+function summarizeModelOutput(rawText: string, normalized: ExtractedPayload | null, sourceCcy: string) {
+  const sampleCompanies = ["Resolve Stroke", "Quantum Italia", "Tau Systems", "Zoo", "Chiral Nano"];
+  const holdings = normalized?.holdings ?? [];
+  return {
+    source_currency: sourceCcy,
+    payload_currency: normalized?.currency ?? null,
+    raw_mentions_11987: rawText.includes("1.1987"),
+    raw_mentions_117254: rawText.includes("1.17254"),
+    samples: sampleCompanies.map((name) => {
+      const h = holdings.find((row) => (row.company_name ?? "").toLowerCase() === name.toLowerCase());
+      return h ? {
+        company_name: h.company_name,
+        fund_cost_native: h.fund_cost_native ?? null,
+        fund_fmv_native: h.fund_fmv_native ?? null,
+        fund_cost_usd: h.fund_cost_usd ?? null,
+        fund_fmv_usd: h.fund_fmv_usd ?? null,
+      } : { company_name: name, missing: true };
+    }),
+  };
+}
+
 const SYSTEM_BASE = `You are a financial-statement extraction agent for a venture fund-of-funds called TWH (Americas Fund I, managed by 1200VC).
 Your task is to extract structured data from a fund quarterly report and return ONLY a JSON object matching the schema below.
-All numeric amounts MUST be in USD base units (no thousands separators, no currency symbol). Use null when a value is not stated in the source.
+CRITICAL CURRENCY RULE: Extract numeric amounts exactly in the source/native currency printed in the document. NEVER perform FX conversion, never infer an exchange rate, and never multiply EUR/GBP/native values into USD. If you see Ticket (€) = 600,000, return fund_cost_native = 600000 and currency = "EUR". If you see Investment Value (€) = 800,000, return fund_fmv_native = 800000 and currency = "EUR". Do not convert under any circumstances.
+All numeric amounts MUST be in base units (no thousands separators, no currency symbol). Use null when a value is not stated in the source.
 
 {
   "fund_name": string | null,
   "report_date": "YYYY-MM-DD" | null,
   "currency": "USD" | "EUR" | "GBP" | string | null,
   "extraction_mode": "A" | "B",
-  "fund_total_contributions_usd": number | null,
-  "fund_total_nav_usd": number | null,
-  "twh_contributions_usd": number | null,
-  "twh_distributions_usd": number | null,
-  "twh_nav_usd": number | null,
+  "fund_total_contributions_native": number | null,
+  "fund_total_nav_native": number | null,
+  "twh_contributions_native": number | null,
+  "twh_distributions_native": number | null,
+  "twh_nav_native": number | null,
+  "fund_total_contributions_usd": null,
+  "fund_total_nav_usd": null,
+  "twh_contributions_usd": null,
+  "twh_distributions_usd": null,
+  "twh_nav_usd": null,
   "holdings": [
     {
       "company_name": string,
       "investment_date": "YYYY-MM-DD" | null,
       "instrument": string | null,
       "round": string | null,
-      "fund_cost_usd": number | null,
-      "fund_fmv_usd": number | null,
-      "fund_proceeds_usd": number | null,
+      "fund_cost_native": number | null,
+      "fund_fmv_native": number | null,
+      "fund_proceeds_native": number | null,
+      "fund_cost_usd": null,
+      "fund_fmv_usd": null,
+      "fund_proceeds_usd": null,
       "fmv_change_reason": string | null,
       "needs_review": boolean,
       "review_reason": string | null
@@ -267,6 +299,12 @@ headers like "Cost", "Investment", "Basis", "Fair Value", "FMV", "Market
 Value", "Carrying Value", "Round", "Round Invested", "Security Type", or
 "Instrument". Common in audited FS, fund-admin schedules, formal PCAPs.
 → Extract values DIRECTLY from the table, row by row. No inference.
+If the table uses Quantonation-style headers, map them as follows:
+  • "Ticket (€)" / "Ticket" / "Cost" / "Invested" -> fund_cost_native
+  • "Investment Value (€)" / "Fair Value" / "FMV" -> fund_fmv_native
+  • "Multiple" helps validate FMV = cost × multiple, but do not use FX.
+For example, Ticket (€) 600,000 and Investment Value (€) 600,000 for Resolve
+Stroke must produce fund_cost_native = 600000 and fund_fmv_native = 600000.
 
 MODE B — Narrative-only report (no per-holding table).
 LP letter, portfolio update, commentary without a structured holdings table.
@@ -277,38 +315,38 @@ LP letter, portfolio update, commentary without a structured holdings table.
 MODE B — FMV UPDATE WHITELIST (the ONLY phrases that may change FMV)
 ═══════════════════════════════════════════════════════════════════════
 
-You may set fund_fmv_usd to a NEW value ONLY when the narrative matches
-one of these patterns. Otherwise leave fund_fmv_usd as null and let the
+You may set fund_fmv_native to a NEW value ONLY when the narrative matches
+one of these patterns. Otherwise leave fund_fmv_native as null and let the
 post-processing layer inherit the prior-quarter value.
 
-  (a) EXACT $ STAKE — "Our position is now valued at $4.2M",
+  (a) EXACT SOURCE-CURRENCY STAKE — "Our position is now valued at $4.2M",
       "Fund holds $X in [Co]", "marked at $Y"
-      → fund_fmv_usd = stated dollar value
+      → fund_fmv_native = stated dollar value
       → fmv_change_reason = the exact phrase
 
   (b) EXPLICIT MULTIPLIER ON ENTRY — "doubles our entry valuation",
       "3x markup on cost", "marked up 1.5x from last quarter"
-      → fund_fmv_usd = (cost or prior FMV) × multiplier (only if base
+      → fund_fmv_native = (cost or prior FMV) × multiplier (only if base
         is unambiguously stated)
 
   (c) EXIT / ACQUISITION TERMS — "we'll receive $X cash + $Y stock at
       close", "acquired for $Z to us"
-      → fund_fmv_usd = sum of stated components
+      → fund_fmv_native = sum of stated components
 
   (d) WRITE-OFF — "shut down", "bankruptcy", "fully written off",
       "marked to zero"
-      → fund_fmv_usd = 0  (zero is meaningful — represents a markdown)
+      → fund_fmv_native = 0  (zero is meaningful — represents a markdown)
 
 EXPLICITLY FORBIDDEN — these never trigger an FMV change:
   ✗ "Raised Series X at $Y post-money" (company-level event, not a
-    fund-position dollar figure)
+    fund-position source-currency figure)
   ✗ "Up round" / "down round" without a stated multiplier
   ✗ "Strong quarter", "growing revenue" (qualitative)
   ✗ Any inference from "fund owns X% × company valuation Y"
 
 When a forbidden pattern appears (e.g. company raised a new round but
 the fund's specific dollar position isn't stated):
-  → fund_fmv_usd = null
+  → fund_fmv_native = null
   → needs_review = true
   → review_reason = brief description of the unquantified event
 
@@ -318,7 +356,7 @@ NEW-COMPANY HANDLING (any mode)
 
 When a company is named in the report and you have no prior context, you
 may extract company_name, round, instrument, investment_date if stated.
-Cost / FMV / proceeds: ONLY if the EXACT fund-specific dollar amount is
+Cost / FMV / proceeds: ONLY if the EXACT fund-specific source-currency amount is
 stated. Otherwise leave as null.
 Never compute cost or FMV from indirect signals.
 
@@ -362,24 +400,20 @@ GENERAL RULES
 - CURRENCY HANDLING — DO NOT PERFORM ANY FX CONVERSION YOURSELF.
   Always return numbers in the SOURCE CURRENCY of the document, exactly as
   printed. Set "currency" to the source code (e.g. "EUR", "GBP", "USD").
-  The schema field names end in "_usd" for legacy reasons — IGNORE that
-  suffix and populate them with values in the source currency. A downstream
-  step applies a single uniform FX rate from a centralized rate table; if
-  you pre-convert (or read a USD column the source admin already converted),
-  you will produce double-conversion errors and corrupt downstream numbers.
-  When the document has BOTH a native column (e.g. EUR) and a USD column
-  (e.g. "USD Equivalent", "USD@1.1987"), you MUST read the NATIVE column
-  and IGNORE the USD column entirely.
+  Use *_native fields for non-USD values and set *_usd fields to null. A
+  downstream database step applies a single uniform FX rate later; if you
+  pre-convert, you will produce double-conversion errors and corrupt numbers.
+  If both native and converted columns exist, read only the native column.
 - Do NOT invent companies. If the source has no holdings info, return holdings: [].
 - Do NOT wrap your answer in markdown. Return ONLY the JSON object.
 
 CRITICAL — UNIT / MAGNITUDE HANDLING:
-ALL numeric fields must be in BASE USD UNITS (e.g. $2,000,000 not 2 or 2000 or "2M").
+ALL numeric fields must be in BASE SOURCE-CURRENCY UNITS (e.g. €2,000,000 not 2 or 2000 or "2M").
 Detect and apply the column/table unit scale BEFORE writing the number:
-  • Headers "Cost (K)", "FMV ($K)", "in 000s" → multiply by 1,000
-  • Headers "Cost (M)", "FMV ($M)", "in millions", "MM" → multiply by 1,000,000
-  • Inline "2m" / "2M" / "2mm" / "$2M" / "2 million" → 2000000
-  • Inline "500k" / "500K" / "$500k" → 500000
+  • Headers "Cost (K)", "FMV (€K)", "FMV ($K)", "in 000s" → multiply by 1,000
+  • Headers "Cost (M)", "FMV (€M)", "FMV ($M)", "in millions", "MM" → multiply by 1,000,000
+  • Inline "2m" / "2M" / "2mm" / "€2M" / "$2M" / "2 million" → 2000000
+  • Inline "500k" / "500K" / "€500k" / "$500k" → 500000
   • Bare "2,000" inside a "(K)" table → 2000000
   • Bare "2.5" inside a "($M)" table → 2500000
 NEVER return a value in thousands without scaling up.
@@ -388,22 +422,22 @@ look suspiciously small you have likely missed a magnitude.
 
 CONCRETE EXAMPLES (these have been wrong before — get them right):
   • Narrative "received $500K distribution this quarter" (PAST TENSE / SETTLED)
-      → fund_proceeds_usd = 500000
+      → fund_proceeds_native = 500000
   • Narrative "Tamarack will receive our initial investment back in cash (2m)"
       (FUTURE TENSE — deal hasn't closed, no cash received yet)
-      → fund_proceeds_usd = 0  (NOT 2000000)
-      → fund_fmv_usd = 2000000  (component of acquisition value)
+      → fund_proceeds_native = 0  (NOT 2000000)
+      → fund_fmv_native = 2000000  (component of acquisition value)
       → needs_review = true, review_reason = "Acquisition pending close — update on settlement"
   • Narrative "$2m" anywhere in prose → 2000000 (when proceeds, must be settled)
   • Narrative "raised a $15M Series B" → 15000000 (this is a company-level event,
-    not a fund position — leave fund_* fields null unless fund's $ stake is stated)
+    not a fund position — leave fund_*_native fields null unless fund's $ stake is stated)
 The lowercase "m" suffix ALWAYS means millions in venture/PE context, never thousands.
 
 PROCEEDS vs FMV — STRICT RULE:
-fund_proceeds_usd reflects ONLY cash already received by the fund. Future-tense
+fund_proceeds_native reflects ONLY cash already received by the fund. Future-tense
 language ("will receive", "at close", "upon close", "expected", "agreed to
 receive", "pending") means the cash is NOT yet realized — keep
-fund_proceeds_usd = 0 (or null) and book the value as fund_fmv_usd instead.
+fund_proceeds_native = 0 (or null) and book the value as fund_fmv_native instead.
 
 
 The "notes" field should state the detected mode and a one-line summary
@@ -625,8 +659,7 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Look up the selected fund's name + aliases AND its native currency.
-    // The native currency drives whether we ask the model for native-source
-    // values and apply an FX conversion via the fund_fx_rates table.
+    // The native currency drives whether we ask the model for native-source values.
     let selectedFundName: string | null = null;
     let selectedFundShort: string | null = null;
     let selectedFundNativeCcy = "USD";
@@ -643,8 +676,8 @@ serve(async (req) => {
       }
     }
 
-    // Auto-lookup the FX rate from fund_fx_rates when the fund is non-USD-native.
-    // Resolution order: fund-specific row -> global (fund_id null) row.
+    // Look up the FX rate only for diagnostics/downstream context. Extraction
+    // itself must never apply this rate; DB triggers derive USD after writes.
     let fxRate: number | null = null;
     let fxRateMissing = false;
     if (fund_id && quarter_id && selectedFundNativeCcy !== "USD") {
@@ -740,16 +773,15 @@ or a parallel/feeder vehicle). Apply these rules strictly:
    per-row FX rates produces inconsistent values — never do this.`;
     }
 
-    // Inject FX-conversion hint when the target fund is non-USD-native.
+    // Inject native-currency guard when the target fund is non-USD-native.
     if (selectedFundNativeCcy !== "USD") {
       systemPrompt += `
 
 FUND NATIVE CURRENCY: ${selectedFundNativeCcy}
 The selected fund reports in ${selectedFundNativeCcy}. Return ALL numeric values
 in ${selectedFundNativeCcy} (do NOT pre-convert to USD). Set "currency" to "${selectedFundNativeCcy}".
-A downstream step applies a single uniform FX rate from the fund_fx_rates table${
-        fxRate ? ` (currently 1 ${selectedFundNativeCcy} = ${fxRate} USD)` : ` (NO RATE CONFIGURED YET — values will display in ${selectedFundNativeCcy} until an admin sets one)`
-      }.`;
+Use the *_native JSON fields. Set every *_usd field to null for this non-USD fund.
+Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_native = 600000, fund_cost_usd = null; "Investment Value (€) = 800,000" -> fund_fmv_native = 800000, fund_fmv_usd = null. Never output 719219, 958959, 11746400, or any other EUR×FX converted value.`;
     }
 
     if (source_type === "pdf") {
@@ -805,6 +837,7 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
     // Call Anthropic.
     let normalized: ExtractedPayload | null = null;
     let rawText = "";
+    let diagnostic: ReturnType<typeof summarizeModelOutput> | null = null;
     let extractionError: string | null = null;
     try {
       rawText = await callAnthropic(ANTHROPIC_API_KEY, systemPrompt, userBlocks);
@@ -815,6 +848,8 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
           sourceCcy: selectedFundNativeCcy,
           dedupe: true,
         });
+        diagnostic = summarizeModelOutput(rawText, normalized, selectedFundNativeCcy);
+        console.log("extract-report currency diagnostic", JSON.stringify(diagnostic));
       } else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
@@ -842,6 +877,7 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
           rate_used: fxRate,
           rate_missing: fxRateMissing,
         },
+        diagnostic,
       };
       return new Response(
         JSON.stringify({ draft, source_document_id: null, dry_run: true }),
