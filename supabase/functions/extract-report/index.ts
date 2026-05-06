@@ -299,6 +299,12 @@ headers like "Cost", "Investment", "Basis", "Fair Value", "FMV", "Market
 Value", "Carrying Value", "Round", "Round Invested", "Security Type", or
 "Instrument". Common in audited FS, fund-admin schedules, formal PCAPs.
 → Extract values DIRECTLY from the table, row by row. No inference.
+If the table uses Quantonation-style headers, map them as follows:
+  • "Ticket (€)" / "Ticket" / "Cost" / "Invested" -> fund_cost_native
+  • "Investment Value (€)" / "Fair Value" / "FMV" -> fund_fmv_native
+  • "Multiple" helps validate FMV = cost × multiple, but do not use FX.
+For example, Ticket (€) 600,000 and Investment Value (€) 600,000 for Resolve
+Stroke must produce fund_cost_native = 600000 and fund_fmv_native = 600000.
 
 MODE B — Narrative-only report (no per-holding table).
 LP letter, portfolio update, commentary without a structured holdings table.
