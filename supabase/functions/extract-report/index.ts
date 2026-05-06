@@ -146,7 +146,7 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
     // Merge: sum financials, keep earliest investment_date, append round detail.
     existing.fund_cost_usd = sumNullable(existing.fund_cost_usd, h.fund_cost_usd);
     existing.fund_fmv_usd = sumNullable(existing.fund_fmv_usd, h.fund_fmv_usd);
-    existing.fund_proceeds_usd = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
+    existing.fund_proceeds_native = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
     existing.fund_cost_native = sumNullable(existing.fund_cost_native, h.fund_cost_native);
     existing.fund_fmv_native = sumNullable(existing.fund_fmv_native, h.fund_fmv_native);
     existing.fund_proceeds_native = sumNullable(existing.fund_proceeds_native, h.fund_proceeds_native);
@@ -187,8 +187,8 @@ function moveValuesToNative(p: ExtractedPayload): ExtractedPayload {
     h.fund_fmv_native = h.fund_fmv_native ?? h.fund_fmv_usd ?? null;
     h.fund_proceeds_native = h.fund_proceeds_native ?? h.fund_proceeds_usd ?? null;
     h.fund_cost_usd = null;
-    h.fund_fmv_usd = null;
-    h.fund_proceeds_usd = null;
+    h.fund_fmv_native = null;
+    h.fund_proceeds_native = null;
   }
   return p;
 }
@@ -205,8 +205,8 @@ function postProcessPayload(
     if (norm.round_detail && !h.round_detail) h.round_detail = norm.round_detail;
     if (norm.instrument_extracted && !h.instrument) h.instrument = norm.instrument_extracted;
     if (h.fund_cost_usd === undefined) h.fund_cost_usd = null;
-    if (h.fund_fmv_usd === undefined) h.fund_fmv_usd = null;
-    if (h.fund_proceeds_usd === undefined) h.fund_proceeds_usd = null;
+    if (h.fund_fmv_usd === undefined) h.fund_fmv_native = null;
+    if (h.fund_proceeds_native === undefined) h.fund_proceeds_native = null;
     return h;
   });
   if (opts?.dedupe !== false) {
@@ -310,37 +310,37 @@ MODE B — FMV UPDATE WHITELIST (the ONLY phrases that may change FMV)
 ═══════════════════════════════════════════════════════════════════════
 
 You may set fund_fmv_usd to a NEW value ONLY when the narrative matches
-one of these patterns. Otherwise leave fund_fmv_usd as null and let the
+one of these patterns. Otherwise leave fund_fmv_native as null and let the
 post-processing layer inherit the prior-quarter value.
 
-  (a) EXACT $ STAKE — "Our position is now valued at $4.2M",
+  (a) EXACT SOURCE-CURRENCY STAKE — "Our position is now valued at $4.2M",
       "Fund holds $X in [Co]", "marked at $Y"
-      → fund_fmv_usd = stated dollar value
+      → fund_fmv_native = stated dollar value
       → fmv_change_reason = the exact phrase
 
   (b) EXPLICIT MULTIPLIER ON ENTRY — "doubles our entry valuation",
       "3x markup on cost", "marked up 1.5x from last quarter"
-      → fund_fmv_usd = (cost or prior FMV) × multiplier (only if base
+      → fund_fmv_native = (cost or prior FMV) × multiplier (only if base
         is unambiguously stated)
 
   (c) EXIT / ACQUISITION TERMS — "we'll receive $X cash + $Y stock at
       close", "acquired for $Z to us"
-      → fund_fmv_usd = sum of stated components
+      → fund_fmv_native = sum of stated components
 
   (d) WRITE-OFF — "shut down", "bankruptcy", "fully written off",
       "marked to zero"
-      → fund_fmv_usd = 0  (zero is meaningful — represents a markdown)
+      → fund_fmv_native = 0  (zero is meaningful — represents a markdown)
 
 EXPLICITLY FORBIDDEN — these never trigger an FMV change:
   ✗ "Raised Series X at $Y post-money" (company-level event, not a
-    fund-position dollar figure)
+    fund-position source-currency figure)
   ✗ "Up round" / "down round" without a stated multiplier
   ✗ "Strong quarter", "growing revenue" (qualitative)
   ✗ Any inference from "fund owns X% × company valuation Y"
 
 When a forbidden pattern appears (e.g. company raised a new round but
 the fund's specific dollar position isn't stated):
-  → fund_fmv_usd = null
+  → fund_fmv_native = null
   → needs_review = true
   → review_reason = brief description of the unquantified event
 
@@ -350,7 +350,7 @@ NEW-COMPANY HANDLING (any mode)
 
 When a company is named in the report and you have no prior context, you
 may extract company_name, round, instrument, investment_date if stated.
-Cost / FMV / proceeds: ONLY if the EXACT fund-specific dollar amount is
+Cost / FMV / proceeds: ONLY if the EXACT fund-specific source-currency amount is
 stated. Otherwise leave as null.
 Never compute cost or FMV from indirect signals.
 
@@ -406,12 +406,12 @@ GENERAL RULES
 - Do NOT wrap your answer in markdown. Return ONLY the JSON object.
 
 CRITICAL — UNIT / MAGNITUDE HANDLING:
-ALL numeric fields must be in BASE USD UNITS (e.g. $2,000,000 not 2 or 2000 or "2M").
+ALL numeric fields must be in BASE SOURCE-CURRENCY UNITS (e.g. €2,000,000 not 2 or 2000 or "2M").
 Detect and apply the column/table unit scale BEFORE writing the number:
-  • Headers "Cost (K)", "FMV ($K)", "in 000s" → multiply by 1,000
-  • Headers "Cost (M)", "FMV ($M)", "in millions", "MM" → multiply by 1,000,000
-  • Inline "2m" / "2M" / "2mm" / "$2M" / "2 million" → 2000000
-  • Inline "500k" / "500K" / "$500k" → 500000
+  • Headers "Cost (K)", "FMV (€K)", "FMV ($K)", "in 000s" → multiply by 1,000
+  • Headers "Cost (M)", "FMV (€M)", "FMV ($M)", "in millions", "MM" → multiply by 1,000,000
+  • Inline "2m" / "2M" / "2mm" / "€2M" / "$2M" / "2 million" → 2000000
+  • Inline "500k" / "500K" / "€500k" / "$500k" → 500000
   • Bare "2,000" inside a "(K)" table → 2000000
   • Bare "2.5" inside a "($M)" table → 2500000
 NEVER return a value in thousands without scaling up.
@@ -420,22 +420,22 @@ look suspiciously small you have likely missed a magnitude.
 
 CONCRETE EXAMPLES (these have been wrong before — get them right):
   • Narrative "received $500K distribution this quarter" (PAST TENSE / SETTLED)
-      → fund_proceeds_usd = 500000
+      → fund_proceeds_native = 500000
   • Narrative "Tamarack will receive our initial investment back in cash (2m)"
       (FUTURE TENSE — deal hasn't closed, no cash received yet)
-      → fund_proceeds_usd = 0  (NOT 2000000)
-      → fund_fmv_usd = 2000000  (component of acquisition value)
+      → fund_proceeds_native = 0  (NOT 2000000)
+      → fund_fmv_native = 2000000  (component of acquisition value)
       → needs_review = true, review_reason = "Acquisition pending close — update on settlement"
   • Narrative "$2m" anywhere in prose → 2000000 (when proceeds, must be settled)
   • Narrative "raised a $15M Series B" → 15000000 (this is a company-level event,
-    not a fund position — leave fund_* fields null unless fund's $ stake is stated)
+    not a fund position — leave fund_*_native fields null unless fund's $ stake is stated)
 The lowercase "m" suffix ALWAYS means millions in venture/PE context, never thousands.
 
 PROCEEDS vs FMV — STRICT RULE:
-fund_proceeds_usd reflects ONLY cash already received by the fund. Future-tense
+fund_proceeds_native reflects ONLY cash already received by the fund. Future-tense
 language ("will receive", "at close", "upon close", "expected", "agreed to
 receive", "pending") means the cash is NOT yet realized — keep
-fund_proceeds_usd = 0 (or null) and book the value as fund_fmv_usd instead.
+fund_proceeds_native = 0 (or null) and book the value as fund_fmv_usd instead.
 
 
 The "notes" field should state the detected mode and a one-line summary
@@ -780,7 +780,7 @@ FUND NATIVE CURRENCY: ${selectedFundNativeCcy}
 The selected fund reports in ${selectedFundNativeCcy}. Return ALL numeric values
 in ${selectedFundNativeCcy} (do NOT pre-convert to USD). Set "currency" to "${selectedFundNativeCcy}".
 Use the *_native JSON fields. Set every *_usd field to null for this non-USD fund.
-Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_native = 600000, fund_cost_usd = null; "Investment Value (€) = 800,000" -> fund_fmv_native = 800000, fund_fmv_usd = null. Never output 719219, 958959, 11746400, or any other EUR×FX converted value.`;
+Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_native = 600000, fund_cost_usd = null; "Investment Value (€) = 800,000" -> fund_fmv_native = 800000, fund_fmv_native = null. Never output 719219, 958959, 11746400, or any other EUR×FX converted value.`;
     }
 
     if (source_type === "pdf") {
