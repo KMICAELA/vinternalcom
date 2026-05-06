@@ -195,7 +195,7 @@ function ExtractionSandboxInner() {
   // Single uniform FX rate (USD per 1 unit of source currency, e.g. EUR).
   // Applied uniformly by the edge function to every numeric field after extraction.
   // 1.094 = ECB EUR/USD reference rate at 31/12/2025 (default for Quantonation reports).
-  const [fxRate, setFxRate] = useState<string>("1.094");
+  const [fxRate] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Live-DB snapshots for compare mode (re-fetched per quarter)
@@ -351,12 +351,10 @@ function ExtractionSandboxInner() {
     setFiles((prev) => prev.map((x) => (x.id === f.id ? { ...x, status: "extracting", error: undefined } : x)));
     const fundIdForApi = f.fundId === DIRECT_TAG ? null : f.fundId;
     try {
-      const fxNum = Number(fxRate);
       const res = await runExtractFile({
         file: f.file,
         fundId: fundIdForApi,
         quarterId,
-        fxRateOverride: Number.isFinite(fxNum) && fxNum > 0 ? fxNum : null,
       });
       setFiles((prev) =>
         prev.map((x) =>
@@ -665,18 +663,8 @@ function ExtractionSandboxInner() {
             </Select>
           </div>
           <div className="md:col-span-2 flex items-end gap-2">
-            <div className="w-32">
-              <Label className="text-xs text-muted-foreground">FX rate (→USD)</Label>
-              <input
-                type="number"
-                step="0.0001"
-                min="0"
-                value={fxRate}
-                onChange={(e) => setFxRate(e.target.value)}
-                placeholder="1.094"
-                className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm font-mono"
-                title="USD per 1 unit of source currency (e.g. EUR). Applied uniformly when the report is in a non-USD currency. Leave blank to skip FX."
-              />
+            <div className="text-xs text-muted-foreground italic">
+              FX rates are auto-applied from <strong>Settings → FX Rates</strong> when the fund's native currency is non-USD.
             </div>
             <input
               ref={fileInputRef}
