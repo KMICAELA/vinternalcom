@@ -27,6 +27,7 @@ type Fund = {
   short_name: string | null;
   start_date: string | null;
   reporting_currency: string;
+  native_currency: string;
 };
 
 type HistoryRow = {
