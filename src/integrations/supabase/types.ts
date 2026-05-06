@@ -448,16 +448,81 @@ export type Database = {
           },
         ]
       }
+      fund_fx_rates: {
+        Row: {
+          created_at: string
+          from_currency: string
+          fund_id: string | null
+          id: string
+          quarter_id: string
+          rate: number
+          source: string
+          to_currency: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          from_currency: string
+          fund_id?: string | null
+          id?: string
+          quarter_id: string
+          rate: number
+          source?: string
+          to_currency?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          from_currency?: string
+          fund_id?: string | null
+          id?: string
+          quarter_id?: string
+          rate?: number
+          source?: string
+          to_currency?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fund_fx_rates_fund_id_fkey"
+            columns: ["fund_id"]
+            isOneToOne: false
+            referencedRelation: "funds"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_fx_rates_quarter_id_fkey"
+            columns: ["quarter_id"]
+            isOneToOne: false
+            referencedRelation: "quarters"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fund_fx_rates_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fund_quarter_snapshots: {
         Row: {
           confirmed_at: string | null
           confirmed_by: string | null
           created_at: string
+          currency: string
           dpi: number | null
           extracted_at: string | null
           fund_id: string
+          fund_total_contributions_native: number | null
           fund_total_contributions_usd: number
+          fund_total_distributions_native: number | null
           fund_total_distributions_usd: number | null
+          fund_total_nav_native: number | null
           fund_total_nav_usd: number
           id: string
           irr: number | null
@@ -465,8 +530,11 @@ export type Database = {
           quarter_id: string
           source_report_id: string | null
           tvpi: number | null
+          twh_contributions_native: number | null
           twh_contributions_usd: number
+          twh_distributions_native: number | null
           twh_distributions_usd: number
+          twh_nav_native: number | null
           twh_nav_usd: number
           updated_at: string
         }
@@ -474,11 +542,15 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          currency?: string
           dpi?: number | null
           extracted_at?: string | null
           fund_id: string
+          fund_total_contributions_native?: number | null
           fund_total_contributions_usd?: number
+          fund_total_distributions_native?: number | null
           fund_total_distributions_usd?: number | null
+          fund_total_nav_native?: number | null
           fund_total_nav_usd?: number
           id?: string
           irr?: number | null
@@ -486,8 +558,11 @@ export type Database = {
           quarter_id: string
           source_report_id?: string | null
           tvpi?: number | null
+          twh_contributions_native?: number | null
           twh_contributions_usd?: number
+          twh_distributions_native?: number | null
           twh_distributions_usd?: number
+          twh_nav_native?: number | null
           twh_nav_usd?: number
           updated_at?: string
         }
@@ -495,11 +570,15 @@ export type Database = {
           confirmed_at?: string | null
           confirmed_by?: string | null
           created_at?: string
+          currency?: string
           dpi?: number | null
           extracted_at?: string | null
           fund_id?: string
+          fund_total_contributions_native?: number | null
           fund_total_contributions_usd?: number
+          fund_total_distributions_native?: number | null
           fund_total_distributions_usd?: number | null
+          fund_total_nav_native?: number | null
           fund_total_nav_usd?: number
           id?: string
           irr?: number | null
@@ -507,8 +586,11 @@ export type Database = {
           quarter_id?: string
           source_report_id?: string | null
           tvpi?: number | null
+          twh_contributions_native?: number | null
           twh_contributions_usd?: number
+          twh_distributions_native?: number | null
           twh_distributions_usd?: number
+          twh_nav_native?: number | null
           twh_nav_usd?: number
           updated_at?: string
         }
@@ -542,6 +624,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          native_currency: string
           reporting_currency: string
           short_name: string | null
           start_date: string | null
@@ -552,6 +635,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          native_currency?: string
           reporting_currency?: string
           short_name?: string | null
           start_date?: string | null
@@ -562,6 +646,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          native_currency?: string
           reporting_currency?: string
           short_name?: string | null
           start_date?: string | null
@@ -1060,9 +1145,13 @@ export type Database = {
         Row: {
           company_id: string
           created_at: string
+          currency: string
+          fund_cost_native: number | null
           fund_cost_usd: number | null
+          fund_fmv_native: number | null
           fund_fmv_usd: number | null
           fund_id: string
+          fund_proceeds_native: number | null
           fund_proceeds_usd: number | null
           id: string
           instrument: string | null
@@ -1073,18 +1162,25 @@ export type Database = {
           round_detail: string | null
           source_report_id: string | null
           tranche_seq: number
+          twh_cost_native: number | null
           twh_cost_usd: number | null
+          twh_fmv_native: number | null
           twh_fmv_usd: number | null
           twh_ownership_pct: number | null
+          twh_proceeds_native: number | null
           twh_proceeds_usd: number | null
           updated_at: string
         }
         Insert: {
           company_id: string
           created_at?: string
+          currency?: string
+          fund_cost_native?: number | null
           fund_cost_usd?: number | null
+          fund_fmv_native?: number | null
           fund_fmv_usd?: number | null
           fund_id: string
+          fund_proceeds_native?: number | null
           fund_proceeds_usd?: number | null
           id?: string
           instrument?: string | null
@@ -1095,18 +1191,25 @@ export type Database = {
           round_detail?: string | null
           source_report_id?: string | null
           tranche_seq?: number
+          twh_cost_native?: number | null
           twh_cost_usd?: number | null
+          twh_fmv_native?: number | null
           twh_fmv_usd?: number | null
           twh_ownership_pct?: number | null
+          twh_proceeds_native?: number | null
           twh_proceeds_usd?: number | null
           updated_at?: string
         }
         Update: {
           company_id?: string
           created_at?: string
+          currency?: string
+          fund_cost_native?: number | null
           fund_cost_usd?: number | null
+          fund_fmv_native?: number | null
           fund_fmv_usd?: number | null
           fund_id?: string
+          fund_proceeds_native?: number | null
           fund_proceeds_usd?: number | null
           id?: string
           instrument?: string | null
@@ -1117,9 +1220,12 @@ export type Database = {
           round_detail?: string | null
           source_report_id?: string | null
           tranche_seq?: number
+          twh_cost_native?: number | null
           twh_cost_usd?: number | null
+          twh_fmv_native?: number | null
           twh_fmv_usd?: number | null
           twh_ownership_pct?: number | null
+          twh_proceeds_native?: number | null
           twh_proceeds_usd?: number | null
           updated_at?: string
         }
