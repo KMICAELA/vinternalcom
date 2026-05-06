@@ -195,7 +195,7 @@ function ExtractionSandboxInner() {
   // Single uniform FX rate (USD per 1 unit of source currency, e.g. EUR).
   // Applied uniformly by the edge function to every numeric field after extraction.
   // 1.094 = ECB EUR/USD reference rate at 31/12/2025 (default for Quantonation reports).
-  const [fxRate] = useState<string>("");
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Live-DB snapshots for compare mode (re-fetched per quarter)
