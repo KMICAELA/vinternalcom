@@ -178,7 +178,7 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
     }
     const { error: fsErr } = await supabase
       .from("fund_quarter_snapshots")
-      .upsert(fundSnap, { onConflict: "fund_id,quarter_id" });
+      .upsert(fundSnap as any, { onConflict: "fund_id,quarter_id" });
     if (fsErr) result.errors.push(`fund_snapshot: ${fsErr.message}`);
     else result.fund_snapshots_written = 1;
   }
