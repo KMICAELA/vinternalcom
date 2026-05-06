@@ -230,6 +230,7 @@ function postProcessPayload(
 
 function summarizeModelOutput(rawText: string, normalized: ExtractedPayload | null, sourceCcy: string) {
   const sampleCompanies = ["Resolve Stroke", "Quantum Italia", "Tau Systems", "Zoo", "Chiral Nano"];
+  const tranchePeek = ["Diraq", "Qblox"];
   const holdings = normalized?.holdings ?? [];
   return {
     source_currency: sourceCcy,
@@ -245,6 +246,17 @@ function summarizeModelOutput(rawText: string, normalized: ExtractedPayload | nu
         fund_cost_usd: h.fund_cost_usd ?? null,
         fund_fmv_usd: h.fund_fmv_usd ?? null,
       } : { company_name: name, missing: true };
+    }),
+    tranche_peek: tranchePeek.flatMap((name) => {
+      const matches = holdings.filter((row) => (row.company_name ?? "").toLowerCase().includes(name.toLowerCase()));
+      return matches.map((h) => ({
+        company_name: h.company_name,
+        investment_date: h.investment_date ?? null,
+        round: h.round ?? null,
+        instrument: h.instrument ?? null,
+        fund_cost_native: h.fund_cost_native ?? null,
+        fund_fmv_native: h.fund_fmv_native ?? null,
+      }));
     }),
   };
 }
