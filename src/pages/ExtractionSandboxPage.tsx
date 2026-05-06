@@ -816,7 +816,14 @@ function ExtractionSandboxInner() {
                         const liveDpi = live ? calcDpi(live.twh_contributions_usd, live.twh_distributions_usd) : null;
                         return (
                           <TableRow key={r.fundId} className="table-row-hover">
-                            <TableCell className="font-medium">{r.fundLabel}</TableCell>
+                            <TableCell className="font-medium">
+                              {r.fundLabel}
+                              {r.merged.currency && r.merged.currency !== "USD" && (
+                                <Badge variant="outline" className="ml-2 text-[10px] text-amber-400 border-amber-400/30">
+                                  {r.merged.currency} (native)
+                                </Badge>
+                              )}
+                            </TableCell>
                             <TableCell><CompareCell compare={compare}
                               extracted={fmtUSD(r.merged.twh_contributions_usd ?? 0, { compact: true })}
                               live={live ? fmtUSD(live.twh_contributions_usd, { compact: true }) : "—"} /></TableCell>
