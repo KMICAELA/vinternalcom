@@ -8,19 +8,28 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { CheckCircle2, CornerDownRight, AlertTriangle } from "lucide-react";
 import { fmtUSD, fmtMultiple, calcMoic, signClass } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
+import { FxBadge } from "@/components/FxBadge";
+import { useFundFxRate } from "@/lib/fx/useFundFxRate";
 
 type Row = {
   id: string;
   company: string;
   fund: string;
+  fund_id: string;
   round: string | null;
   round_detail: string | null;
   instrument: string | null;
+  currency: string;
   cost: number | null;
   fmv: number | null;
   proceeds: number | null;
   twh_pct: number;
 };
+
+function FxCell({ fundId, quarterId, currency }: { fundId: string; quarterId: string; currency: string }) {
+  const { rate, updaterName } = useFundFxRate(fundId, quarterId, currency);
+  return <FxBadge rate={rate} fromCurrency={currency} updaterName={updaterName} />;
+}
 
 // Render NULL → "—" (TBD), not $0. $0 is meaningful (write-off) and stays formatted.
 const fmtUsdOrTbd = (v: number | null, opts?: { compact?: boolean }) =>
@@ -64,7 +73,7 @@ export default function UnderlyingPortfolioPage() {
       const [{ data: holdings }, { data: commits }] = await Promise.all([
         supabase
           .from("underlying_holdings")
-          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, fund_id, round, round_detail, instrument, funds(name, short_name), companies(legal_name, commercial_name)")
+          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, funds(name, short_name), companies(legal_name, commercial_name)")
           .eq("quarter_id", selected.id),
         supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
@@ -73,6 +82,8 @@ export default function UnderlyingPortfolioPage() {
         id: h.id,
         company: h.companies?.commercial_name ?? h.companies?.legal_name ?? "—",
         fund: h.funds?.short_name ?? h.funds?.name ?? "—",
+        fund_id: h.fund_id,
+        currency: h.currency ?? "USD",
         round: h.round ?? null,
         round_detail: h.round_detail ?? null,
         instrument: h.instrument ?? null,
@@ -156,7 +167,12 @@ export default function UnderlyingPortfolioPage() {
                       <TableRow key={r.id} className="table-row-hover">
                         <TableCell><ConfidenceIcon row={r} /></TableCell>
                         <TableCell className="font-medium">{r.company}</TableCell>
-                        <TableCell className="text-muted-foreground max-w-[260px] truncate">{r.fund}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[260px] truncate">
+                          {r.fund}
+                          {selected && r.currency !== "USD" && (
+                            <FxCell fundId={r.fund_id} quarterId={selected.id} currency={r.currency} />
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs">
                           <span className="text-muted-foreground">{r.round ?? "—"}</span>
                           {r.round_detail && (

@@ -8,6 +8,9 @@ import { ArrowLeft } from "lucide-react";
 import { fmtUSD, fmtPct, fmtMultiple, fmtDate, calcDpi, calcTvpi } from "@/lib/format";
 import { computeXirr } from "@/lib/irr";
 import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { FxBadge } from "@/components/FxBadge";
+import { useFundFxRate } from "@/lib/fx/useFundFxRate";
+import { useSelectedQuarter } from "@/contexts/QuarterContext";
 
 type Quarter = { id: string; label: string; quarter_end_date: string };
 type Snap = {
@@ -24,6 +27,7 @@ type Fund = {
   short_name: string | null;
   start_date: string | null;
   reporting_currency: string;
+  native_currency: string;
 };
 
 type HistoryRow = {
@@ -42,13 +46,19 @@ export default function FundDetailPage() {
   const [commitment, setCommitment] = useState<{ twh: number; total: number; pct: number } | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selected } = useSelectedQuarter();
+  const { rate: fxRate, updaterName: fxUpdater } = useFundFxRate(
+    fund?.id ?? null,
+    selected?.id ?? null,
+    fund?.native_currency ?? null,
+  );
 
   useEffect(() => {
     if (!id) return;
     setLoading(true);
     (async () => {
       const [{ data: f }, { data: c }, { data: snaps }, { data: quarters }, { data: flows }] = await Promise.all([
-        supabase.from("funds").select("id, name, short_name, start_date, reporting_currency").eq("id", id).maybeSingle(),
+        supabase.from("funds").select("id, name, short_name, start_date, reporting_currency, native_currency").eq("id", id).maybeSingle(),
         supabase.from("fund_commitments").select("twh_commitment_usd, total_fund_commitment_usd, twh_ownership_pct").eq("fund_id", id).maybeSingle(),
         supabase.from("fund_quarter_snapshots").select("quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd").eq("fund_id", id),
         supabase.from("quarters").select("id, label, quarter_end_date").order("quarter_end_date", { ascending: true }),
@@ -116,8 +126,14 @@ export default function FundDetailPage() {
             <ArrowLeft className="h-3 w-3" /> All funds
           </Link>
           <h1 className="text-2xl font-semibold tracking-tight">{fund.short_name ?? fund.name}</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {fund.short_name ? fund.name + " · " : ""}Started {fmtDate(fund.start_date)} · {fund.reporting_currency}
+          <p className="text-sm text-muted-foreground mt-1 inline-flex items-center gap-1">
+            <span>
+              {fund.short_name ? fund.name + " · " : ""}Started {fmtDate(fund.start_date)} · {fund.reporting_currency}
+              {fund.native_currency && fund.native_currency !== "USD" ? ` (native ${fund.native_currency})` : ""}
+            </span>
+            {fund.native_currency && fund.native_currency !== "USD" && (
+              <FxBadge rate={fxRate} fromCurrency={fund.native_currency} updaterName={fxUpdater} />
+            )}
           </p>
         </div>
       </div>
