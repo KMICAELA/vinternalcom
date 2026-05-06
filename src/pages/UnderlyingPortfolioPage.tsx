@@ -73,7 +73,7 @@ export default function UnderlyingPortfolioPage() {
       const [{ data: holdings }, { data: commits }] = await Promise.all([
         supabase
           .from("underlying_holdings")
-          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, fund_id, round, round_detail, instrument, funds(name, short_name), companies(legal_name, commercial_name)")
+          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, funds(name, short_name), companies(legal_name, commercial_name)")
           .eq("quarter_id", selected.id),
         supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
@@ -82,6 +82,8 @@ export default function UnderlyingPortfolioPage() {
         id: h.id,
         company: h.companies?.commercial_name ?? h.companies?.legal_name ?? "—",
         fund: h.funds?.short_name ?? h.funds?.name ?? "—",
+        fund_id: h.fund_id,
+        currency: h.currency ?? "USD",
         round: h.round ?? null,
         round_detail: h.round_detail ?? null,
         instrument: h.instrument ?? null,
