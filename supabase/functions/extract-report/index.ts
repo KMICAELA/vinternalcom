@@ -22,6 +22,12 @@ type ExtractedHolding = {
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
+  // Native-currency mirrors. Populated alongside *_usd whenever an FX
+  // conversion happens. When `currency` is USD these will equal the *_usd
+  // values. Persisted to underlying_holdings.*_native columns.
+  fund_cost_native?: number | null;
+  fund_fmv_native?: number | null;
+  fund_proceeds_native?: number | null;
   fmv_change_reason?: string | null;       // narrative phrase that triggered FMV update (Mode B)
   needs_review?: boolean;                  // model-flagged (e.g. unquantified company event)
   review_reason?: string | null;
@@ -37,6 +43,13 @@ type ExtractedPayload = {
   twh_contributions_usd: number | null;
   twh_distributions_usd: number | null;
   twh_nav_usd: number | null;
+  // Native-currency mirrors of the fund-level metrics.
+  fund_total_contributions_native?: number | null;
+  fund_total_nav_native?: number | null;
+  twh_contributions_native?: number | null;
+  twh_distributions_native?: number | null;
+  twh_nav_native?: number | null;
+  fx_rate_used?: number | null;            // rate applied (1 native = X USD); null if no conversion
   holdings: ExtractedHolding[];
   notes: string | null;
 };
@@ -136,28 +149,37 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
   return Array.from(merged.values());
 }
 
-// Apply a single FX rate uniformly to every USD-typed numeric field in the
-// payload. Used when the model returned values in the source currency
-// (e.g. EUR) and the caller passed an fx_rate_override (USD per 1 unit of
-// source currency). After conversion `currency` is rewritten to "USD" and
-// the original currency / rate are appended to `notes` for auditability.
+// Dual-write FX conversion. The model returns numbers in the source
+// currency (e.g. EUR). We KEEP those values in *_native and ADDITIONALLY
+// populate *_usd by multiplying by the supplied fxRate. After this runs,
+// `currency` still reflects the source (so consumers know what the native
+// columns are denominated in) and `fx_rate_used` records the multiplier.
 function applyFxConversion(p: ExtractedPayload, fxRate: number, sourceCcy: string): ExtractedPayload {
   if (!fxRate || fxRate <= 0) return p;
   const conv = (v: number | null | undefined): number | null =>
-    v === null || v === undefined ? (v ?? null) : Math.round(Number(v) * fxRate);
+    v === null || v === undefined ? null : Math.round(Number(v) * fxRate);
+  // Top-level metrics: model values are native -> mirror to *_native, derive *_usd.
+  p.fund_total_contributions_native = p.fund_total_contributions_usd ?? null;
+  p.fund_total_nav_native = p.fund_total_nav_usd ?? null;
+  p.twh_contributions_native = p.twh_contributions_usd ?? null;
+  p.twh_distributions_native = p.twh_distributions_usd ?? null;
+  p.twh_nav_native = p.twh_nav_usd ?? null;
   p.fund_total_contributions_usd = conv(p.fund_total_contributions_usd);
   p.fund_total_nav_usd = conv(p.fund_total_nav_usd);
   p.twh_contributions_usd = conv(p.twh_contributions_usd);
   p.twh_distributions_usd = conv(p.twh_distributions_usd);
   p.twh_nav_usd = conv(p.twh_nav_usd);
   for (const h of p.holdings ?? []) {
+    h.fund_cost_native = h.fund_cost_usd ?? null;
+    h.fund_fmv_native = h.fund_fmv_usd ?? null;
+    h.fund_proceeds_native = h.fund_proceeds_usd ?? null;
     h.fund_cost_usd = conv(h.fund_cost_usd);
     h.fund_fmv_usd = conv(h.fund_fmv_usd);
     h.fund_proceeds_usd = conv(h.fund_proceeds_usd);
   }
-  const fxNote = `FX applied: 1 ${sourceCcy} = ${fxRate} USD (uniform).`;
+  p.fx_rate_used = fxRate;
+  const fxNote = `FX applied: 1 ${sourceCcy} = ${fxRate} USD (from fund_fx_rates).`;
   p.notes = p.notes ? `${p.notes}\n${fxNote}` : fxNote;
-  p.currency = "USD";
   return p;
 }
 
@@ -567,10 +589,7 @@ serve(async (req) => {
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
       dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
-      fx_rate_override,      // number — USD per 1 unit of source currency (e.g. 1.094 for EUR→USD)
     } = body ?? {};
-    const fxRate: number | null =
-      typeof fx_rate_override === "number" && fx_rate_override > 0 ? fx_rate_override : null;
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
       return new Response(JSON.stringify({ error: "source_type must be pdf | excel | email" }), {
@@ -580,20 +599,42 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Look up the selected fund's name + aliases so we can steer the model to the right
-    // row in multi-vehicle summary tables and the right companies in narrative attribution.
+    // Look up the selected fund's name + aliases AND its native currency.
+    // The native currency drives whether we ask the model for native-source
+    // values and apply an FX conversion via the fund_fx_rates table.
     let selectedFundName: string | null = null;
     let selectedFundShort: string | null = null;
+    let selectedFundNativeCcy = "USD";
     if (fund_id) {
       const { data: f } = await supabase
         .from("funds")
-        .select("name, short_name")
+        .select("name, short_name, native_currency")
         .eq("id", fund_id)
         .maybeSingle();
       if (f) {
         selectedFundName = (f as any).name ?? null;
         selectedFundShort = (f as any).short_name ?? null;
+        selectedFundNativeCcy = ((f as any).native_currency ?? "USD").toUpperCase();
       }
+    }
+
+    // Auto-lookup the FX rate from fund_fx_rates when the fund is non-USD-native.
+    // Resolution order: fund-specific row -> global (fund_id null) row.
+    let fxRate: number | null = null;
+    let fxRateMissing = false;
+    if (fund_id && quarter_id && selectedFundNativeCcy !== "USD") {
+      const { data: fxRows } = await supabase
+        .from("fund_fx_rates")
+        .select("rate, fund_id")
+        .eq("from_currency", selectedFundNativeCcy)
+        .eq("to_currency", "USD")
+        .eq("quarter_id", quarter_id)
+        .or(`fund_id.eq.${fund_id},fund_id.is.null`);
+      const fundSpecific = (fxRows ?? []).find((r: any) => r.fund_id === fund_id);
+      const fallback = (fxRows ?? []).find((r: any) => r.fund_id === null);
+      const found = fundSpecific ?? fallback;
+      if (found) fxRate = Number((found as any).rate);
+      else fxRateMissing = true;
     }
 
     // In dry_run mode (sandbox), skip ALL DB writes — no source_documents, no extraction_drafts.
@@ -674,13 +715,16 @@ or a parallel/feeder vehicle). Apply these rules strictly:
    per-row FX rates produces inconsistent values — never do this.`;
     }
 
-    // Inject FX-conversion hint when caller passed an override.
-    if (fxRate) {
+    // Inject FX-conversion hint when the target fund is non-USD-native.
+    if (selectedFundNativeCcy !== "USD") {
       systemPrompt += `
 
-FX OVERRIDE ACTIVE — caller will convert values from the source currency to USD
-at a single uniform rate. Return ALL numeric values in the source currency
-(do NOT pre-convert). Set "currency" to the source code (e.g. "EUR").`;
+FUND NATIVE CURRENCY: ${selectedFundNativeCcy}
+The selected fund reports in ${selectedFundNativeCcy}. Return ALL numeric values
+in ${selectedFundNativeCcy} (do NOT pre-convert to USD). Set "currency" to "${selectedFundNativeCcy}".
+A downstream step applies a single uniform FX rate from the fund_fx_rates table${
+        fxRate ? ` (currently 1 ${selectedFundNativeCcy} = ${fxRate} USD)` : ` (NO RATE CONFIGURED YET — values will display in ${selectedFundNativeCcy} until an admin sets one)`
+      }.`;
     }
 
     if (source_type === "pdf") {
@@ -764,11 +808,14 @@ at a single uniform rate. Return ALL numeric values in the source currency
         quarter_id: quarter_id ?? null,
         source_type,
         error_message: extractionError,
+        fx: {
+          native_currency: selectedFundNativeCcy,
+          rate_used: fxRate,
+          rate_missing: fxRateMissing,
+        },
       };
       return new Response(
         JSON.stringify({ draft, source_document_id: null, dry_run: true }),
-        // Sandbox failures are data/results, not app errors. Return 200 so the UI can
-        // show the failed file inline without triggering a runtime error overlay.
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
     }

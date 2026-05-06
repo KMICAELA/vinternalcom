@@ -98,17 +98,15 @@ function parseRetryAfterMs(errMsg: string | null | undefined): number | null {
  * Run the AI extraction edge function in dry-run mode (no DB writes).
  * Used by the admin extraction sandbox to test extraction accuracy without touching live data.
  *
- * fxRateOverride: USD per 1 unit of source currency (e.g. 1.094 for EUR→USD on 31/12/2025).
- * When set, the model is instructed to return values in the source currency and
- * the edge function applies a single uniform conversion to all numeric fields.
+ * FX conversion is now driven by the fund_fx_rates table (looked up server-side
+ * from the fund's native_currency). No client-supplied override is needed.
  */
 export async function runExtractFile(opts: {
   file: File;
   fundId?: string | null;
   quarterId?: string | null;
-  fxRateOverride?: number | null;
 }): Promise<ExtractionResult> {
-  const { file, fundId, quarterId, fxRateOverride } = opts;
+  const { file, fundId, quarterId } = opts;
   const sourceType = detectSourceType(file);
 
   const body: Record<string, unknown> = {
@@ -118,9 +116,6 @@ export async function runExtractFile(opts: {
     file_name: file.name,
     dry_run: true,
   };
-  if (fxRateOverride && fxRateOverride > 0) {
-    body.fx_rate_override = fxRateOverride;
-  }
 
   if (sourceType === "pdf") {
     body.pdf_base64 = await fileToBase64(file);
