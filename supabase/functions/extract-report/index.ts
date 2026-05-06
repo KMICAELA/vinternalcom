@@ -22,9 +22,8 @@ type ExtractedHolding = {
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
-  // Native-currency mirrors. Populated alongside *_usd whenever an FX
-  // conversion happens. When `currency` is USD these will equal the *_usd
-  // values. Persisted to underlying_holdings.*_native columns.
+  // Native-currency fields. Non-USD model output is expected here; legacy
+  // *_usd fields stay null until database triggers derive USD at write time.
   fund_cost_native?: number | null;
   fund_fmv_native?: number | null;
   fund_proceeds_native?: number | null;
@@ -49,7 +48,7 @@ type ExtractedPayload = {
   twh_contributions_native?: number | null;
   twh_distributions_native?: number | null;
   twh_nav_native?: number | null;
-  fx_rate_used?: number | null;            // rate applied (1 native = X USD); null if no conversion
+  fx_rate_used?: number | null;            // informational only; never applied during extraction
   holdings: ExtractedHolding[];
   notes: string | null;
 };
@@ -148,6 +147,9 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
     existing.fund_cost_usd = sumNullable(existing.fund_cost_usd, h.fund_cost_usd);
     existing.fund_fmv_usd = sumNullable(existing.fund_fmv_usd, h.fund_fmv_usd);
     existing.fund_proceeds_usd = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
+    existing.fund_cost_native = sumNullable(existing.fund_cost_native, h.fund_cost_native);
+    existing.fund_fmv_native = sumNullable(existing.fund_fmv_native, h.fund_fmv_native);
+    existing.fund_proceeds_native = sumNullable(existing.fund_proceeds_native, h.fund_proceeds_native);
     if (h.investment_date && (!existing.investment_date || h.investment_date < existing.investment_date)) {
       existing.investment_date = h.investment_date;
     }
@@ -168,11 +170,11 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
 // source of truth for FX and lets rates be updated without re-extracting.
 function moveValuesToNative(p: ExtractedPayload): ExtractedPayload {
   // Top-level metrics
-  p.fund_total_contributions_native = p.fund_total_contributions_usd ?? null;
-  p.fund_total_nav_native = p.fund_total_nav_usd ?? null;
-  p.twh_contributions_native = p.twh_contributions_usd ?? null;
-  p.twh_distributions_native = p.twh_distributions_usd ?? null;
-  p.twh_nav_native = p.twh_nav_usd ?? null;
+  p.fund_total_contributions_native = p.fund_total_contributions_native ?? p.fund_total_contributions_usd ?? null;
+  p.fund_total_nav_native = p.fund_total_nav_native ?? p.fund_total_nav_usd ?? null;
+  p.twh_contributions_native = p.twh_contributions_native ?? p.twh_contributions_usd ?? null;
+  p.twh_distributions_native = p.twh_distributions_native ?? p.twh_distributions_usd ?? null;
+  p.twh_nav_native = p.twh_nav_native ?? p.twh_nav_usd ?? null;
   // Null out the *_usd fields so downstream callers know to leave USD
   // derivation to the DB trigger.
   p.fund_total_contributions_usd = null;
@@ -181,9 +183,9 @@ function moveValuesToNative(p: ExtractedPayload): ExtractedPayload {
   p.twh_distributions_usd = null;
   p.twh_nav_usd = null;
   for (const h of p.holdings ?? []) {
-    h.fund_cost_native = h.fund_cost_usd ?? null;
-    h.fund_fmv_native = h.fund_fmv_usd ?? null;
-    h.fund_proceeds_native = h.fund_proceeds_usd ?? null;
+    h.fund_cost_native = h.fund_cost_native ?? h.fund_cost_usd ?? null;
+    h.fund_fmv_native = h.fund_fmv_native ?? h.fund_fmv_usd ?? null;
+    h.fund_proceeds_native = h.fund_proceeds_native ?? h.fund_proceeds_usd ?? null;
     h.fund_cost_usd = null;
     h.fund_fmv_usd = null;
     h.fund_proceeds_usd = null;
