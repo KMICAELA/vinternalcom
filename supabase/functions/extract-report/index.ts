@@ -675,8 +675,8 @@ serve(async (req) => {
       }
     }
 
-    // Auto-lookup the FX rate from fund_fx_rates when the fund is non-USD-native.
-    // Resolution order: fund-specific row -> global (fund_id null) row.
+    // Look up the FX rate only for diagnostics/downstream context. Extraction
+    // itself must never apply this rate; DB triggers derive USD after writes.
     let fxRate: number | null = null;
     let fxRateMissing = false;
     if (fund_id && quarter_id && selectedFundNativeCcy !== "USD") {
@@ -772,16 +772,15 @@ or a parallel/feeder vehicle). Apply these rules strictly:
    per-row FX rates produces inconsistent values — never do this.`;
     }
 
-    // Inject FX-conversion hint when the target fund is non-USD-native.
+    // Inject native-currency guard when the target fund is non-USD-native.
     if (selectedFundNativeCcy !== "USD") {
       systemPrompt += `
 
 FUND NATIVE CURRENCY: ${selectedFundNativeCcy}
 The selected fund reports in ${selectedFundNativeCcy}. Return ALL numeric values
 in ${selectedFundNativeCcy} (do NOT pre-convert to USD). Set "currency" to "${selectedFundNativeCcy}".
-A downstream step applies a single uniform FX rate from the fund_fx_rates table${
-        fxRate ? ` (currently 1 ${selectedFundNativeCcy} = ${fxRate} USD)` : ` (NO RATE CONFIGURED YET — values will display in ${selectedFundNativeCcy} until an admin sets one)`
-      }.`;
+Use the *_native JSON fields. Set every *_usd field to null for this non-USD fund.
+Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_native = 600000, fund_cost_usd = null; "Investment Value (€) = 800,000" -> fund_fmv_native = 800000, fund_fmv_usd = null. Never output 719219, 958959, 11746400, or any other EUR×FX converted value.`;
     }
 
     if (source_type === "pdf") {
@@ -837,6 +836,7 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
     // Call Anthropic.
     let normalized: ExtractedPayload | null = null;
     let rawText = "";
+    let diagnostic: ReturnType<typeof summarizeModelOutput> | null = null;
     let extractionError: string | null = null;
     try {
       rawText = await callAnthropic(ANTHROPIC_API_KEY, systemPrompt, userBlocks);
@@ -847,6 +847,8 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
           sourceCcy: selectedFundNativeCcy,
           dedupe: true,
         });
+        diagnostic = summarizeModelOutput(rawText, normalized, selectedFundNativeCcy);
+        console.log("extract-report currency diagnostic", JSON.stringify(diagnostic));
       } else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
@@ -874,6 +876,7 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
           rate_used: fxRate,
           rate_missing: fxRateMissing,
         },
+        diagnostic,
       };
       return new Response(
         JSON.stringify({ draft, source_document_id: null, dry_run: true }),
