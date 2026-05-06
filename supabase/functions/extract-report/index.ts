@@ -789,7 +789,11 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
       rawText = await callAnthropic(ANTHROPIC_API_KEY, systemPrompt, userBlocks);
       const parsed = safeJson(rawText) as ExtractedPayload | null;
       if (parsed && typeof parsed === "object") {
-        normalized = postProcessPayload(parsed as ExtractedPayload, { fxRate, dedupe: true });
+        normalized = postProcessPayload(parsed as ExtractedPayload, {
+          fxRate,
+          sourceCcy: selectedFundNativeCcy,
+          dedupe: true,
+        });
       } else extractionError = "Could not parse model output as JSON.";
     } catch (e) {
       const raw = e instanceof Error ? e.message : String(e);
