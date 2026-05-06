@@ -394,14 +394,10 @@ GENERAL RULES
 - CURRENCY HANDLING — DO NOT PERFORM ANY FX CONVERSION YOURSELF.
   Always return numbers in the SOURCE CURRENCY of the document, exactly as
   printed. Set "currency" to the source code (e.g. "EUR", "GBP", "USD").
-  The schema field names end in "_usd" for legacy reasons — IGNORE that
-  suffix and populate them with values in the source currency. A downstream
-  step applies a single uniform FX rate from a centralized rate table; if
-  you pre-convert (or read a USD column the source admin already converted),
-  you will produce double-conversion errors and corrupt downstream numbers.
-  When the document has BOTH a native column (e.g. EUR) and a USD column
-  (e.g. "USD Equivalent", "USD@1.1987"), you MUST read the NATIVE column
-  and IGNORE the USD column entirely.
+  Use *_native fields for non-USD values and set *_usd fields to null. A
+  downstream database step applies a single uniform FX rate later; if you
+  pre-convert, you will produce double-conversion errors and corrupt numbers.
+  If both native and converted columns exist, read only the native column.
 - Do NOT invent companies. If the source has no holdings info, return holdings: [].
 - Do NOT wrap your answer in markdown. Return ONLY the JSON object.
 
