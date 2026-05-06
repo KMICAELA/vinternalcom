@@ -230,27 +230,36 @@ function postProcessPayload(
 
 const SYSTEM_BASE = `You are a financial-statement extraction agent for a venture fund-of-funds called TWH (Americas Fund I, managed by 1200VC).
 Your task is to extract structured data from a fund quarterly report and return ONLY a JSON object matching the schema below.
-All numeric amounts MUST be in USD base units (no thousands separators, no currency symbol). Use null when a value is not stated in the source.
+CRITICAL CURRENCY RULE: Extract numeric amounts exactly in the source/native currency printed in the document. NEVER perform FX conversion, never infer an exchange rate, and never multiply EUR/GBP/native values into USD. If you see Ticket (€) = 600,000, return fund_cost_native = 600000 and currency = "EUR". If you see Investment Value (€) = 800,000, return fund_fmv_native = 800000 and currency = "EUR". Do not convert under any circumstances.
+All numeric amounts MUST be in base units (no thousands separators, no currency symbol). Use null when a value is not stated in the source.
 
 {
   "fund_name": string | null,
   "report_date": "YYYY-MM-DD" | null,
   "currency": "USD" | "EUR" | "GBP" | string | null,
   "extraction_mode": "A" | "B",
-  "fund_total_contributions_usd": number | null,
-  "fund_total_nav_usd": number | null,
-  "twh_contributions_usd": number | null,
-  "twh_distributions_usd": number | null,
-  "twh_nav_usd": number | null,
+  "fund_total_contributions_native": number | null,
+  "fund_total_nav_native": number | null,
+  "twh_contributions_native": number | null,
+  "twh_distributions_native": number | null,
+  "twh_nav_native": number | null,
+  "fund_total_contributions_usd": null,
+  "fund_total_nav_usd": null,
+  "twh_contributions_usd": null,
+  "twh_distributions_usd": null,
+  "twh_nav_usd": null,
   "holdings": [
     {
       "company_name": string,
       "investment_date": "YYYY-MM-DD" | null,
       "instrument": string | null,
       "round": string | null,
-      "fund_cost_usd": number | null,
-      "fund_fmv_usd": number | null,
-      "fund_proceeds_usd": number | null,
+      "fund_cost_native": number | null,
+      "fund_fmv_native": number | null,
+      "fund_proceeds_native": number | null,
+      "fund_cost_usd": null,
+      "fund_fmv_usd": null,
+      "fund_proceeds_usd": null,
       "fmv_change_reason": string | null,
       "needs_review": boolean,
       "review_reason": string | null
