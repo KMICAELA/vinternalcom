@@ -357,9 +357,32 @@ export default function FxRatesSection() {
               <Input type="number" step="0.000001" value={form.rate} onChange={(e) => setForm((f) => ({ ...f, rate: e.target.value }))} />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={requestSave}>{form.id ? "Save changes" : "Add rate"}</Button>
+          <DialogFooter className="sm:justify-between">
+            <div>
+              {form.id && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm("Delete this FX rate? Holdings and snapshots will fall back to native currency display.")) return;
+                    const { error } = await supabase.from("fund_fx_rates").delete().eq("id", form.id!);
+                    if (error) {
+                      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+                      return;
+                    }
+                    toast({ title: "FX rate deleted" });
+                    setDialogOpen(false);
+                    loadAll();
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={requestSave}>{form.id ? "Save changes" : "Add rate"}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
