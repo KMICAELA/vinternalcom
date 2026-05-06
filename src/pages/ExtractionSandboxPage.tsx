@@ -839,19 +839,19 @@ function ExtractionSandboxInner() {
                               )}
                             </TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.merged.twh_contributions_usd ?? 0, { compact: true })}
+                              extracted={fmtMoney(r.merged.twh_contributions_usd ?? 0, r.merged.currency, { compact: true })}
                               live={live ? fmtUSD(live.twh_contributions_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.merged.twh_distributions_usd ?? 0, { compact: true })}
+                              extracted={fmtMoney(r.merged.twh_distributions_usd ?? 0, r.merged.currency, { compact: true })}
                               live={live ? fmtUSD(live.twh_distributions_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.merged.twh_nav_usd ?? 0, { compact: true })}
+                              extracted={fmtMoney(r.merged.twh_nav_usd ?? 0, r.merged.currency, { compact: true })}
                               live={live ? fmtUSD(live.twh_nav_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.merged.fund_total_contributions_usd ?? 0, { compact: true })}
+                              extracted={fmtMoney(r.merged.fund_total_contributions_usd ?? 0, r.merged.currency, { compact: true })}
                               live={live ? fmtUSD(live.fund_total_contributions_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.merged.fund_total_nav_usd ?? 0, { compact: true })}
+                              extracted={fmtMoney(r.merged.fund_total_nav_usd ?? 0, r.merged.currency, { compact: true })}
                               live={live ? fmtUSD(live.fund_total_nav_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell><CompareCell compare={compare}
                               extracted={fmtMultiple(dpi)}
@@ -1019,13 +1019,13 @@ function ExtractionSandboxInner() {
                             <TableCell className="text-muted-foreground text-xs">{r.round ?? "—"}</TableCell>
                             <TableCell className="text-muted-foreground text-xs">{r.instrument ?? "—"}</TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.cost, { compact: true })}
+                              extracted={fmtMoney(r.cost, r.currency, { compact: true })}
                               live={live ? fmtUSD(live.fund_cost_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.fmv, { compact: true })}
+                              extracted={fmtMoney(r.fmv, r.currency, { compact: true })}
                               live={live ? fmtUSD(live.fund_fmv_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell><CompareCell compare={compare}
-                              extracted={fmtUSD(r.proceeds, { compact: true })}
+                              extracted={fmtMoney(r.proceeds, r.currency, { compact: true })}
                               live={live ? fmtUSD(live.fund_proceeds_usd, { compact: true }) : "—"} /></TableCell>
                             <TableCell>
                               <CompareCell compare={compare}
