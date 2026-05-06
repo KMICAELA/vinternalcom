@@ -22,6 +22,12 @@ type ExtractedHolding = {
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
+  // Native-currency mirrors. Populated alongside *_usd whenever an FX
+  // conversion happens. When `currency` is USD these will equal the *_usd
+  // values. Persisted to underlying_holdings.*_native columns.
+  fund_cost_native?: number | null;
+  fund_fmv_native?: number | null;
+  fund_proceeds_native?: number | null;
   fmv_change_reason?: string | null;       // narrative phrase that triggered FMV update (Mode B)
   needs_review?: boolean;                  // model-flagged (e.g. unquantified company event)
   review_reason?: string | null;
@@ -37,6 +43,13 @@ type ExtractedPayload = {
   twh_contributions_usd: number | null;
   twh_distributions_usd: number | null;
   twh_nav_usd: number | null;
+  // Native-currency mirrors of the fund-level metrics.
+  fund_total_contributions_native?: number | null;
+  fund_total_nav_native?: number | null;
+  twh_contributions_native?: number | null;
+  twh_distributions_native?: number | null;
+  twh_nav_native?: number | null;
+  fx_rate_used?: number | null;            // rate applied (1 native = X USD); null if no conversion
   holdings: ExtractedHolding[];
   notes: string | null;
 };
@@ -136,28 +149,37 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
   return Array.from(merged.values());
 }
 
-// Apply a single FX rate uniformly to every USD-typed numeric field in the
-// payload. Used when the model returned values in the source currency
-// (e.g. EUR) and the caller passed an fx_rate_override (USD per 1 unit of
-// source currency). After conversion `currency` is rewritten to "USD" and
-// the original currency / rate are appended to `notes` for auditability.
+// Dual-write FX conversion. The model returns numbers in the source
+// currency (e.g. EUR). We KEEP those values in *_native and ADDITIONALLY
+// populate *_usd by multiplying by the supplied fxRate. After this runs,
+// `currency` still reflects the source (so consumers know what the native
+// columns are denominated in) and `fx_rate_used` records the multiplier.
 function applyFxConversion(p: ExtractedPayload, fxRate: number, sourceCcy: string): ExtractedPayload {
   if (!fxRate || fxRate <= 0) return p;
   const conv = (v: number | null | undefined): number | null =>
-    v === null || v === undefined ? (v ?? null) : Math.round(Number(v) * fxRate);
+    v === null || v === undefined ? null : Math.round(Number(v) * fxRate);
+  // Top-level metrics: model values are native -> mirror to *_native, derive *_usd.
+  p.fund_total_contributions_native = p.fund_total_contributions_usd ?? null;
+  p.fund_total_nav_native = p.fund_total_nav_usd ?? null;
+  p.twh_contributions_native = p.twh_contributions_usd ?? null;
+  p.twh_distributions_native = p.twh_distributions_usd ?? null;
+  p.twh_nav_native = p.twh_nav_usd ?? null;
   p.fund_total_contributions_usd = conv(p.fund_total_contributions_usd);
   p.fund_total_nav_usd = conv(p.fund_total_nav_usd);
   p.twh_contributions_usd = conv(p.twh_contributions_usd);
   p.twh_distributions_usd = conv(p.twh_distributions_usd);
   p.twh_nav_usd = conv(p.twh_nav_usd);
   for (const h of p.holdings ?? []) {
+    h.fund_cost_native = h.fund_cost_usd ?? null;
+    h.fund_fmv_native = h.fund_fmv_usd ?? null;
+    h.fund_proceeds_native = h.fund_proceeds_usd ?? null;
     h.fund_cost_usd = conv(h.fund_cost_usd);
     h.fund_fmv_usd = conv(h.fund_fmv_usd);
     h.fund_proceeds_usd = conv(h.fund_proceeds_usd);
   }
-  const fxNote = `FX applied: 1 ${sourceCcy} = ${fxRate} USD (uniform).`;
+  p.fx_rate_used = fxRate;
+  const fxNote = `FX applied: 1 ${sourceCcy} = ${fxRate} USD (from fund_fx_rates).`;
   p.notes = p.notes ? `${p.notes}\n${fxNote}` : fxNote;
-  p.currency = "USD";
   return p;
 }
 
