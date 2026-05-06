@@ -32,6 +32,9 @@ type Holding = {
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
+  fund_cost_native?: number | null;
+  fund_fmv_native?: number | null;
+  fund_proceeds_native?: number | null;
 };
 
 type Payload = {
@@ -43,6 +46,11 @@ type Payload = {
   twh_contributions_usd: number | null;
   twh_distributions_usd: number | null;
   twh_nav_usd: number | null;
+  fund_total_contributions_native?: number | null;
+  fund_total_nav_native?: number | null;
+  twh_contributions_native?: number | null;
+  twh_distributions_native?: number | null;
+  twh_nav_native?: number | null;
   holdings: Holding[];
   notes: string | null;
 };
@@ -402,11 +410,14 @@ export default function AddReportWizard({
       const initialPayload = (draft.normalized_payload as Payload | null) ?? emptyPayload();
       // Enrich holdings with prior-quarter round/instrument inheritance.
       const currentQ = quarters.find((q) => q.id === quarterId);
+      const isNative = (initialPayload.currency ?? "USD").toUpperCase() !== "USD";
       try {
         const enrichedRaw = await inheritHoldingMetadata({
           fundId,
           holdings: initialPayload.holdings ?? [],
           currentQuarterEndDate: currentQ?.quarter_end_date ?? null,
+          inheritValues: !isNative,
+          carryForwardMissing: !isNative,
         });
         const enriched = scrubMagnitudes(initialPayload.notes, enrichedRaw);
         setPayload({ ...initialPayload, holdings: enriched as Holding[] });
