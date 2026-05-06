@@ -60,6 +60,8 @@ type Profile = { id: string; full_name: string | null; email: string | null };
 
 const SOURCES: FxRateSource[] = ["manual", "auto_ecb", "auto_frankfurter"];
 
+interface ImpactCounts { holdings: number; snapshots: number }
+
 interface FormState {
   id?: string;
   fund_id: string; // "__global__" sentinel for null
@@ -94,6 +96,8 @@ export default function FxRatesSection() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [previousRate, setPreviousRate] = useState<number | null>(null);
+  const [impact, setImpact] = useState<ImpactCounts>({ holdings: 0, snapshots: 0 });
 
   async function loadAll() {
     const [{ data: fxData }, { data: fundsData }, { data: qData }, { data: profData }] =
@@ -135,6 +139,7 @@ export default function FxRatesSection() {
 
   function openAdd() {
     setForm({ ...EMPTY_FORM, quarter_id: quarters[0]?.id ?? "" });
+    setPreviousRate(null);
     setDialogOpen(true);
   }
   function openEdit(r: Row) {
@@ -147,15 +152,44 @@ export default function FxRatesSection() {
       rate: String(r.rate),
       source: r.source,
     });
+    setPreviousRate(Number(r.rate));
     setDialogOpen(true);
   }
 
-  function requestSave() {
+  async function requestSave() {
     const rateNum = Number(form.rate);
     if (!form.quarter_id || !form.from_currency || !form.to_currency || !Number.isFinite(rateNum) || rateNum <= 0) {
       toast({ title: "Invalid input", description: "Quarter, currencies, and a positive rate are required.", variant: "destructive" });
       return;
     }
+    // Duplicate check (only on add, or when key fields changed during edit)
+    const dup = rows.find((r) =>
+      r.id !== form.id &&
+      (r.fund_id ?? null) === (form.fund_id === "__global__" ? null : form.fund_id) &&
+      r.quarter_id === form.quarter_id &&
+      r.from_currency === form.from_currency.toUpperCase() &&
+      r.to_currency === form.to_currency.toUpperCase()
+    );
+    if (dup) {
+      toast({ title: "Duplicate rate", description: "A rate already exists for this fund/quarter/currency pair.", variant: "destructive" });
+      return;
+    }
+    // Compute impact for the confirmation modal
+    const fundId = form.fund_id === "__global__" ? null : form.fund_id;
+    const fromCcy = form.from_currency.toUpperCase();
+    let holdings = 0;
+    let snapshots = 0;
+    if (fundId) {
+      const [{ count: hCount }, { count: sCount }] = await Promise.all([
+        supabase.from("underlying_holdings").select("id", { count: "exact", head: true })
+          .eq("fund_id", fundId).eq("quarter_id", form.quarter_id).eq("currency", fromCcy),
+        supabase.from("fund_quarter_snapshots").select("id", { count: "exact", head: true })
+          .eq("fund_id", fundId).eq("quarter_id", form.quarter_id).eq("currency", fromCcy),
+      ]);
+      holdings = hCount ?? 0;
+      snapshots = sCount ?? 0;
+    }
+    setImpact({ holdings, snapshots });
     setConfirmOpen(true);
   }
 
