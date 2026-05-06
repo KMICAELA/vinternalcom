@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import FxRatesSection from "@/components/settings/FxRatesSection";
 
 const SettingsPage = () => {
   const { user, role } = useAuth();
@@ -42,11 +43,13 @@ const SettingsPage = () => {
         </div>
       </Card>
 
+      <FxRatesSection />
+
       <Card className="p-6 bg-card border-border">
         <h2 className="text-sm font-medium text-foreground mb-2">Coming soon</h2>
         <ul className="text-xs text-muted-foreground space-y-1 list-disc pl-5">
           <li>Users &amp; roles management (invite, promote, revoke)</li>
-          <li>FX rates audit log</li>
+          <li>FX rates audit log &amp; auto-fetch (ECB / Frankfurter)</li>
           <li>Taxonomy editor (regions, themes, industries, SDGs, instruments, rounds)</li>
           <li>LP share token management</li>
         </ul>
