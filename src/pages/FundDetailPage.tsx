@@ -46,6 +46,12 @@ export default function FundDetailPage() {
   const [commitment, setCommitment] = useState<{ twh: number; total: number; pct: number } | null>(null);
   const [history, setHistory] = useState<HistoryRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const { selected } = useSelectedQuarter();
+  const { rate: fxRate, updaterName: fxUpdater } = useFundFxRate(
+    fund?.id ?? null,
+    selected?.id ?? null,
+    fund?.native_currency ?? null,
+  );
 
   useEffect(() => {
     if (!id) return;
