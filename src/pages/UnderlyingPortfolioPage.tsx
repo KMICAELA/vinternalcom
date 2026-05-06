@@ -8,19 +8,28 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { CheckCircle2, CornerDownRight, AlertTriangle } from "lucide-react";
 import { fmtUSD, fmtMultiple, calcMoic, signClass } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
+import { FxBadge } from "@/components/FxBadge";
+import { useFundFxRate } from "@/lib/fx/useFundFxRate";
 
 type Row = {
   id: string;
   company: string;
   fund: string;
+  fund_id: string;
   round: string | null;
   round_detail: string | null;
   instrument: string | null;
+  currency: string;
   cost: number | null;
   fmv: number | null;
   proceeds: number | null;
   twh_pct: number;
 };
+
+function FxCell({ fundId, quarterId, currency }: { fundId: string; quarterId: string; currency: string }) {
+  const { rate, updaterName } = useFundFxRate(fundId, quarterId, currency);
+  return <FxBadge rate={rate} fromCurrency={currency} updaterName={updaterName} />;
+}
 
 // Render NULL → "—" (TBD), not $0. $0 is meaningful (write-off) and stays formatted.
 const fmtUsdOrTbd = (v: number | null, opts?: { compact?: boolean }) =>
