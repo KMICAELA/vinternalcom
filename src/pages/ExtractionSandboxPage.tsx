@@ -120,13 +120,16 @@ const numOrNull = (v: number | null | undefined): number | null =>
 
 
 
-// Merge fund-level fields from multiple files for the same fund: last-non-null wins
+// Merge fund-level fields from multiple files for the same fund: last-non-null wins.
+// For non-USD funds the edge function leaves *_usd null and populates *_native;
+// we fall back to the native column so the sandbox still shows the extracted numbers.
 function mergeFundFields(payloads: ExtractedPayload[]): {
   twh_contributions_usd: number | null;
   twh_distributions_usd: number | null;
   twh_nav_usd: number | null;
   fund_total_contributions_usd: number | null;
   fund_total_nav_usd: number | null;
+  currency: string;
 } {
   const out: any = {
     twh_contributions_usd: null,
@@ -134,10 +137,23 @@ function mergeFundFields(payloads: ExtractedPayload[]): {
     twh_nav_usd: null,
     fund_total_contributions_usd: null,
     fund_total_nav_usd: null,
+    currency: "USD",
   };
+  const usdKeys = [
+    "twh_contributions_usd",
+    "twh_distributions_usd",
+    "twh_nav_usd",
+    "fund_total_contributions_usd",
+    "fund_total_nav_usd",
+  ] as const;
   for (const p of payloads) {
-    for (const k of Object.keys(out)) {
-      const v = (p as any)[k];
+    const ccy = (p.currency ?? "USD").toUpperCase();
+    if (ccy !== "USD") out.currency = ccy;
+    const isNative = ccy !== "USD";
+    for (const k of usdKeys) {
+      const usdV = (p as any)[k];
+      const nativeV = isNative ? (p as any)[k.replace(/_usd$/, "_native")] : null;
+      const v = usdV ?? nativeV;
       if (v !== null && v !== undefined) out[k] = Number(v);
     }
   }
