@@ -60,6 +60,8 @@ type Profile = { id: string; full_name: string | null; email: string | null };
 
 const SOURCES: FxRateSource[] = ["manual", "auto_ecb", "auto_frankfurter"];
 
+interface ImpactCounts { holdings: number; snapshots: number }
+
 interface FormState {
   id?: string;
   fund_id: string; // "__global__" sentinel for null
@@ -94,6 +96,8 @@ export default function FxRatesSection() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [previousRate, setPreviousRate] = useState<number | null>(null);
+  const [impact, setImpact] = useState<ImpactCounts>({ holdings: 0, snapshots: 0 });
 
   async function loadAll() {
     const [{ data: fxData }, { data: fundsData }, { data: qData }, { data: profData }] =
@@ -135,6 +139,7 @@ export default function FxRatesSection() {
 
   function openAdd() {
     setForm({ ...EMPTY_FORM, quarter_id: quarters[0]?.id ?? "" });
+    setPreviousRate(null);
     setDialogOpen(true);
   }
   function openEdit(r: Row) {
@@ -147,15 +152,44 @@ export default function FxRatesSection() {
       rate: String(r.rate),
       source: r.source,
     });
+    setPreviousRate(Number(r.rate));
     setDialogOpen(true);
   }
 
-  function requestSave() {
+  async function requestSave() {
     const rateNum = Number(form.rate);
     if (!form.quarter_id || !form.from_currency || !form.to_currency || !Number.isFinite(rateNum) || rateNum <= 0) {
       toast({ title: "Invalid input", description: "Quarter, currencies, and a positive rate are required.", variant: "destructive" });
       return;
     }
+    // Duplicate check (only on add, or when key fields changed during edit)
+    const dup = rows.find((r) =>
+      r.id !== form.id &&
+      (r.fund_id ?? null) === (form.fund_id === "__global__" ? null : form.fund_id) &&
+      r.quarter_id === form.quarter_id &&
+      r.from_currency === form.from_currency.toUpperCase() &&
+      r.to_currency === form.to_currency.toUpperCase()
+    );
+    if (dup) {
+      toast({ title: "Duplicate rate", description: "A rate already exists for this fund/quarter/currency pair.", variant: "destructive" });
+      return;
+    }
+    // Compute impact for the confirmation modal
+    const fundId = form.fund_id === "__global__" ? null : form.fund_id;
+    const fromCcy = form.from_currency.toUpperCase();
+    let holdings = 0;
+    let snapshots = 0;
+    if (fundId) {
+      const [{ count: hCount }, { count: sCount }] = await Promise.all([
+        supabase.from("underlying_holdings").select("id", { count: "exact", head: true })
+          .eq("fund_id", fundId).eq("quarter_id", form.quarter_id).eq("currency", fromCcy),
+        supabase.from("fund_quarter_snapshots").select("id", { count: "exact", head: true })
+          .eq("fund_id", fundId).eq("quarter_id", form.quarter_id).eq("currency", fromCcy),
+      ]);
+      holdings = hCount ?? 0;
+      snapshots = sCount ?? 0;
+    }
+    setImpact({ holdings, snapshots });
     setConfirmOpen(true);
   }
 
@@ -223,45 +257,47 @@ export default function FxRatesSection() {
         </Select>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Fund</TableHead>
-            <TableHead>Quarter</TableHead>
-            <TableHead>Pair</TableHead>
-            <TableHead className="text-right">Rate</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Updated by</TableHead>
-            <TableHead>Updated at</TableHead>
-            {isAdmin && <TableHead></TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filtered.length === 0 && (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">
-                No FX rates configured.
-              </TableCell>
+              <TableHead>Fund</TableHead>
+              <TableHead>Quarter</TableHead>
+              <TableHead>Pair</TableHead>
+              <TableHead className="text-right">Rate</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Updated by</TableHead>
+              <TableHead>Updated at</TableHead>
+              {isAdmin && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
-          )}
-          {filtered.map((r) => (
-            <TableRow key={r.id}>
-              <TableCell className="text-xs">{fundName(r.fund_id)}</TableCell>
-              <TableCell className="text-xs">{quarterLabel(r.quarter_id)}</TableCell>
-              <TableCell className="text-xs font-mono">{r.from_currency}→{r.to_currency}</TableCell>
-              <TableCell className="text-right font-mono text-xs">{Number(r.rate).toFixed(6)}</TableCell>
-              <TableCell><Badge variant="secondary" className="text-[10px]">{r.source.replace("_", " ")}</Badge></TableCell>
-              <TableCell className="text-xs">{profileName(r.updated_by)}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">{new Date(r.updated_at).toLocaleString()}</TableCell>
-              {isAdmin && (
-                <TableCell>
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>Edit</Button>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">
+                  No FX rates configured.
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </TableRow>
+            )}
+            {filtered.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="text-xs whitespace-nowrap">{fundName(r.fund_id)}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{quarterLabel(r.quarter_id)}</TableCell>
+                <TableCell className="text-xs font-mono whitespace-nowrap">{r.from_currency}→{r.to_currency}</TableCell>
+                <TableCell className="text-right font-mono text-xs whitespace-nowrap">{Number(r.rate).toFixed(6)}</TableCell>
+                <TableCell><Badge variant="secondary" className="text-[10px]">{r.source.replace("_", " ")}</Badge></TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{profileName(r.updated_by)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{new Date(r.updated_at).toLocaleDateString()}</TableCell>
+                {isAdmin && (
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>Edit</Button>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -321,9 +357,32 @@ export default function FxRatesSection() {
               <Input type="number" step="0.000001" value={form.rate} onChange={(e) => setForm((f) => ({ ...f, rate: e.target.value }))} />
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
-            <Button onClick={requestSave}>{form.id ? "Save changes" : "Add rate"}</Button>
+          <DialogFooter className="sm:justify-between">
+            <div>
+              {form.id && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm("Delete this FX rate? Holdings and snapshots will fall back to native currency display.")) return;
+                    const { error } = await supabase.from("fund_fx_rates").delete().eq("id", form.id!);
+                    if (error) {
+                      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
+                      return;
+                    }
+                    toast({ title: "FX rate deleted" });
+                    setDialogOpen(false);
+                    loadAll();
+                  }}
+                >
+                  Delete
+                </Button>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="ghost" onClick={() => setDialogOpen(false)}>Cancel</Button>
+              <Button onClick={requestSave}>{form.id ? "Save changes" : "Add rate"}</Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -332,13 +391,29 @@ export default function FxRatesSection() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm FX rate {form.id ? "update" : "creation"}</AlertDialogTitle>
-            <AlertDialogDescription>
-              You're about to set <span className="font-mono">{form.from_currency}→{form.to_currency}</span> to{" "}
-              <span className="font-mono">{form.rate}</span> for{" "}
-              <strong>{form.fund_id === "__global__" ? "all funds (global)" : funds.find((f) => f.id === form.fund_id)?.name}</strong>{" "}
-              in <strong>{quarters.find((q) => q.id === form.quarter_id)?.label}</strong>.
-              <br /><br />
-              All USD-converted values for this fund and quarter will be recomputed against the new rate.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                {previousRate != null && Number(form.rate) !== previousRate ? (
+                  <p>
+                    Updating <span className="font-mono">{form.from_currency}→{form.to_currency}</span> rate from{" "}
+                    <span className="font-mono">{previousRate}</span> to{" "}
+                    <span className="font-mono">{form.rate}</span>.
+                  </p>
+                ) : (
+                  <p>
+                    Setting <span className="font-mono">{form.from_currency}→{form.to_currency}</span> rate to{" "}
+                    <span className="font-mono">{form.rate}</span>.
+                  </p>
+                )}
+                <p className="text-muted-foreground">
+                  Scope: <strong>{form.fund_id === "__global__" ? "all funds (global)" : funds.find((f) => f.id === form.fund_id)?.name}</strong>{" "}
+                  · <strong>{quarters.find((q) => q.id === form.quarter_id)?.label}</strong>
+                </p>
+                <p className="text-muted-foreground">
+                  This will recompute USD values across <strong>{impact.holdings}</strong> holding{impact.holdings === 1 ? "" : "s"}{" "}
+                  and <strong>{impact.snapshots}</strong> quarter snapshot{impact.snapshots === 1 ? "" : "s"}. Confirm?
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
