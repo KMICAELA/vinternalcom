@@ -589,10 +589,7 @@ serve(async (req) => {
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
       dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
-      fx_rate_override,      // number — USD per 1 unit of source currency (e.g. 1.094 for EUR→USD)
     } = body ?? {};
-    const fxRate: number | null =
-      typeof fx_rate_override === "number" && fx_rate_override > 0 ? fx_rate_override : null;
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
       return new Response(JSON.stringify({ error: "source_type must be pdf | excel | email" }), {
@@ -602,20 +599,42 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Look up the selected fund's name + aliases so we can steer the model to the right
-    // row in multi-vehicle summary tables and the right companies in narrative attribution.
+    // Look up the selected fund's name + aliases AND its native currency.
+    // The native currency drives whether we ask the model for native-source
+    // values and apply an FX conversion via the fund_fx_rates table.
     let selectedFundName: string | null = null;
     let selectedFundShort: string | null = null;
+    let selectedFundNativeCcy = "USD";
     if (fund_id) {
       const { data: f } = await supabase
         .from("funds")
-        .select("name, short_name")
+        .select("name, short_name, native_currency")
         .eq("id", fund_id)
         .maybeSingle();
       if (f) {
         selectedFundName = (f as any).name ?? null;
         selectedFundShort = (f as any).short_name ?? null;
+        selectedFundNativeCcy = ((f as any).native_currency ?? "USD").toUpperCase();
       }
+    }
+
+    // Auto-lookup the FX rate from fund_fx_rates when the fund is non-USD-native.
+    // Resolution order: fund-specific row -> global (fund_id null) row.
+    let fxRate: number | null = null;
+    let fxRateMissing = false;
+    if (fund_id && quarter_id && selectedFundNativeCcy !== "USD") {
+      const { data: fxRows } = await supabase
+        .from("fund_fx_rates")
+        .select("rate, fund_id")
+        .eq("from_currency", selectedFundNativeCcy)
+        .eq("to_currency", "USD")
+        .eq("quarter_id", quarter_id)
+        .or(`fund_id.eq.${fund_id},fund_id.is.null`);
+      const fundSpecific = (fxRows ?? []).find((r: any) => r.fund_id === fund_id);
+      const fallback = (fxRows ?? []).find((r: any) => r.fund_id === null);
+      const found = fundSpecific ?? fallback;
+      if (found) fxRate = Number((found as any).rate);
+      else fxRateMissing = true;
     }
 
     // In dry_run mode (sandbox), skip ALL DB writes — no source_documents, no extraction_drafts.
