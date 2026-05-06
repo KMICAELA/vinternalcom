@@ -167,7 +167,12 @@ export default function UnderlyingPortfolioPage() {
                       <TableRow key={r.id} className="table-row-hover">
                         <TableCell><ConfidenceIcon row={r} /></TableCell>
                         <TableCell className="font-medium">{r.company}</TableCell>
-                        <TableCell className="text-muted-foreground max-w-[260px] truncate">{r.fund}</TableCell>
+                        <TableCell className="text-muted-foreground max-w-[260px] truncate">
+                          {r.fund}
+                          {selected && r.currency !== "USD" && (
+                            <FxCell fundId={r.fund_id} quarterId={selected.id} currency={r.currency} />
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs">
                           <span className="text-muted-foreground">{r.round ?? "—"}</span>
                           {r.round_detail && (
