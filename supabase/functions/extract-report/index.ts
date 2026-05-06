@@ -347,8 +347,17 @@ GENERAL RULES
 - "twh_*" fields = TWH's pro-rata share (often shown on a PCAP).
 - "fund_total_*" fields = whole-fund totals across all LPs.
 - holdings[] = the fund-level portfolio (one row per company). Skip subtotal/total rows.
-- Convert non-USD figures using the report's stated FX rate if present;
-  otherwise leave numbers in source units.
+- CURRENCY HANDLING — DO NOT PERFORM ANY FX CONVERSION YOURSELF.
+  Always return numbers in the SOURCE CURRENCY of the document, exactly as
+  printed. Set "currency" to the source code (e.g. "EUR", "GBP", "USD").
+  The schema field names end in "_usd" for legacy reasons — IGNORE that
+  suffix and populate them with values in the source currency. A downstream
+  step applies a single uniform FX rate from a centralized rate table; if
+  you pre-convert (or read a USD column the source admin already converted),
+  you will produce double-conversion errors and corrupt downstream numbers.
+  When the document has BOTH a native column (e.g. EUR) and a USD column
+  (e.g. "USD Equivalent", "USD@1.1987"), you MUST read the NATIVE column
+  and IGNORE the USD column entirely.
 - Do NOT invent companies. If the source has no holdings info, return holdings: [].
 - Do NOT wrap your answer in markdown. Return ONLY the JSON object.
 
