@@ -121,6 +121,20 @@ async function parseExcel(file: File): Promise<{ sheets: { name: string; rows: a
   return { sheets };
 }
 
+const fmtMoney = (v: number | null | undefined, currency = "USD", opts: { compact?: boolean } = {}) => {
+  if ((currency ?? "USD").toUpperCase() === "USD") return fmtUSD(v, opts);
+  if (v === null || v === undefined || Number.isNaN(v)) return "—";
+  const ccy = currency.toUpperCase();
+  const symbol = ccy === "EUR" ? "€" : `${ccy} `;
+  if (opts.compact && Math.abs(v) >= 1_000_000) return `${symbol}${(v / 1_000_000).toFixed(1)}M`;
+  if (opts.compact && Math.abs(v) >= 1_000) return `${symbol}${(v / 1_000).toFixed(1)}K`;
+  const sign = v < 0 ? "-" : "";
+  return `${sign}${symbol}${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+};
+
+const valueKey = (base: "fund_cost" | "fund_fmv" | "fund_proceeds", isNative: boolean) =>
+  `${base}_${isNative ? "native" : "usd"}` as keyof Holding;
+
 export default function AddReportWizard({
   open,
   onOpenChange,
