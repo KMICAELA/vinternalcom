@@ -100,19 +100,31 @@ const COMPANY_ALIAS: Record<string, string> = {
   "project 11": "Project 11",
   "zoo": "Zoo",
   "zoo.dev": "Zoo",
+  "zoo dev": "Zoo",
+  "zoo, inc": "Zoo",
+  "zoo inc": "Zoo",
   "quminex": "Quantonation Canada",
   "silq": "Quantonation Canada",
   "quantonation canada": "Quantonation Canada",
+  "quantonatio": "Quantonation Canada",
+  "quantonation": "Quantonation Canada",
 };
 
 function canonicalCompanyName(raw: string | null | undefined): string {
   const t = (raw ?? "").trim();
   if (!t) return "";
-  const key = t.toLowerCase().replace(/\s+/g, " ");
+  // Normalize: lowercase, collapse whitespace, strip trailing punctuation
+  let key = t.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:]+$/g, "");
   if (COMPANY_ALIAS[key]) return COMPANY_ALIAS[key];
-  // strip common suffixes
+  // Strip common suffixes
   const stripped = key.replace(/\s+(inc\.?|llc|ltd\.?|corp\.?|co\.?|sa|sas|sarl|gmbh)$/i, "").trim();
   if (COMPANY_ALIAS[stripped]) return COMPANY_ALIAS[stripped];
+  // Strip parenthetical aliases e.g. "Zoo (Zoo.dev)" → check inner alias
+  const paren = key.match(/^([^(]+?)\s*\(([^)]+)\)\s*$/);
+  if (paren) {
+    if (COMPANY_ALIAS[paren[1].trim()]) return COMPANY_ALIAS[paren[1].trim()];
+    if (COMPANY_ALIAS[paren[2].trim()]) return COMPANY_ALIAS[paren[2].trim()];
+  }
   return t;
 }
 
