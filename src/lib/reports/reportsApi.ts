@@ -231,7 +231,7 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
         holdingRow.fund_proceeds_native = h.fund_proceeds_native ?? null;
         // *_usd left null; trigger will fill via fund_fx_rates (or leave null if no rate).
       }
-      const { error: uhErr } = await supabase.from("underlying_holdings").insert(holdingRow);
+      const { error: uhErr } = await supabase.from("underlying_holdings").insert(holdingRow as any);
       if (uhErr) result.errors.push(`holding "${name}": ${uhErr.message}`);
       else result.underlying_holdings_written += 1;
     }
