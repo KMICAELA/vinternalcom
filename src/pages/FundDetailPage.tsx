@@ -8,6 +8,9 @@ import { ArrowLeft } from "lucide-react";
 import { fmtUSD, fmtPct, fmtMultiple, fmtDate, calcDpi, calcTvpi } from "@/lib/format";
 import { computeXirr } from "@/lib/irr";
 import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { FxBadge } from "@/components/FxBadge";
+import { useFundFxRate } from "@/lib/fx/useFundFxRate";
+import { useSelectedQuarter } from "@/contexts/QuarterContext";
 
 type Quarter = { id: string; label: string; quarter_end_date: string };
 type Snap = {
