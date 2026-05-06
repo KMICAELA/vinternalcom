@@ -715,13 +715,16 @@ or a parallel/feeder vehicle). Apply these rules strictly:
    per-row FX rates produces inconsistent values — never do this.`;
     }
 
-    // Inject FX-conversion hint when caller passed an override.
-    if (fxRate) {
+    // Inject FX-conversion hint when the target fund is non-USD-native.
+    if (selectedFundNativeCcy !== "USD") {
       systemPrompt += `
 
-FX OVERRIDE ACTIVE — caller will convert values from the source currency to USD
-at a single uniform rate. Return ALL numeric values in the source currency
-(do NOT pre-convert). Set "currency" to the source code (e.g. "EUR").`;
+FUND NATIVE CURRENCY: ${selectedFundNativeCcy}
+The selected fund reports in ${selectedFundNativeCcy}. Return ALL numeric values
+in ${selectedFundNativeCcy} (do NOT pre-convert to USD). Set "currency" to "${selectedFundNativeCcy}".
+A downstream step applies a single uniform FX rate from the fund_fx_rates table${
+        fxRate ? ` (currently 1 ${selectedFundNativeCcy} = ${fxRate} USD)` : ` (NO RATE CONFIGURED YET — values will display in ${selectedFundNativeCcy} until an admin sets one)`
+      }.`;
     }
 
     if (source_type === "pdf") {
