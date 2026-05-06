@@ -808,11 +808,14 @@ A downstream step applies a single uniform FX rate from the fund_fx_rates table$
         quarter_id: quarter_id ?? null,
         source_type,
         error_message: extractionError,
+        fx: {
+          native_currency: selectedFundNativeCcy,
+          rate_used: fxRate,
+          rate_missing: fxRateMissing,
+        },
       };
       return new Response(
         JSON.stringify({ draft, source_document_id: null, dry_run: true }),
-        // Sandbox failures are data/results, not app errors. Return 200 so the UI can
-        // show the failed file inline without triggering a runtime error overlay.
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
       );
     }
