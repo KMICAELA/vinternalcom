@@ -228,6 +228,27 @@ function postProcessPayload(
   return p;
 }
 
+function summarizeModelOutput(rawText: string, normalized: ExtractedPayload | null, sourceCcy: string) {
+  const sampleCompanies = ["Resolve Stroke", "Quantum Italia", "Tau Systems", "Zoo", "Chiral Nano"];
+  const holdings = normalized?.holdings ?? [];
+  return {
+    source_currency: sourceCcy,
+    payload_currency: normalized?.currency ?? null,
+    raw_mentions_11987: rawText.includes("1.1987"),
+    raw_mentions_117254: rawText.includes("1.17254"),
+    samples: sampleCompanies.map((name) => {
+      const h = holdings.find((row) => (row.company_name ?? "").toLowerCase() === name.toLowerCase());
+      return h ? {
+        company_name: h.company_name,
+        fund_cost_native: h.fund_cost_native ?? null,
+        fund_fmv_native: h.fund_fmv_native ?? null,
+        fund_cost_usd: h.fund_cost_usd ?? null,
+        fund_fmv_usd: h.fund_fmv_usd ?? null,
+      } : { company_name: name, missing: true };
+    }),
+  };
+}
+
 const SYSTEM_BASE = `You are a financial-statement extraction agent for a venture fund-of-funds called TWH (Americas Fund I, managed by 1200VC).
 Your task is to extract structured data from a fund quarterly report and return ONLY a JSON object matching the schema below.
 CRITICAL CURRENCY RULE: Extract numeric amounts exactly in the source/native currency printed in the document. NEVER perform FX conversion, never infer an exchange rate, and never multiply EUR/GBP/native values into USD. If you see Ticket (€) = 600,000, return fund_cost_native = 600000 and currency = "EUR". If you see Investment Value (€) = 800,000, return fund_fmv_native = 800000 and currency = "EUR". Do not convert under any circumstances.
