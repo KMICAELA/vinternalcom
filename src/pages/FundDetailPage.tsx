@@ -52,7 +52,7 @@ export default function FundDetailPage() {
     setLoading(true);
     (async () => {
       const [{ data: f }, { data: c }, { data: snaps }, { data: quarters }, { data: flows }] = await Promise.all([
-        supabase.from("funds").select("id, name, short_name, start_date, reporting_currency").eq("id", id).maybeSingle(),
+        supabase.from("funds").select("id, name, short_name, start_date, reporting_currency, native_currency").eq("id", id).maybeSingle(),
         supabase.from("fund_commitments").select("twh_commitment_usd, total_fund_commitment_usd, twh_ownership_pct").eq("fund_id", id).maybeSingle(),
         supabase.from("fund_quarter_snapshots").select("quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd").eq("fund_id", id),
         supabase.from("quarters").select("id, label, quarter_end_date").order("quarter_end_date", { ascending: true }),
