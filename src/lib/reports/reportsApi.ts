@@ -141,24 +141,44 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
   const payload = (report.extracted_payload ?? null) as ExtractedPayload | null;
   if (!payload) throw new Error("No extracted payload to promote");
 
+  const isUsd = !payload.currency || payload.currency.toUpperCase() === "USD";
+  const currency = isUsd ? "USD" : payload.currency!.toUpperCase();
+
   // 1. Fund-level metrics → fund_quarter_snapshots (if a fund_id is set)
+  // For non-USD funds we write *_native + currency and leave *_usd null;
+  // the DB trigger derives *_usd from fund_fx_rates at write time.
   if (report.fund_id) {
-    const fundSnap = {
+    const fundSnap: Record<string, any> = {
       fund_id: report.fund_id,
       quarter_id: report.quarter_id,
-      twh_contributions_usd: payload.twh_contributions_usd ?? 0,
-      twh_distributions_usd: payload.twh_distributions_usd ?? 0,
-      twh_nav_usd: payload.twh_nav_usd ?? 0,
-      fund_total_contributions_usd: payload.fund_total_contributions_usd ?? 0,
-      fund_total_nav_usd: payload.fund_total_nav_usd ?? 0,
+      currency,
       source_report_id: report.id,
       extracted_at: new Date().toISOString(),
       confirmed_at: new Date().toISOString(),
       confirmed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
     };
+    if (isUsd) {
+      fundSnap.twh_contributions_usd = payload.twh_contributions_usd ?? 0;
+      fundSnap.twh_distributions_usd = payload.twh_distributions_usd ?? 0;
+      fundSnap.twh_nav_usd = payload.twh_nav_usd ?? 0;
+      fundSnap.fund_total_contributions_usd = payload.fund_total_contributions_usd ?? 0;
+      fundSnap.fund_total_nav_usd = payload.fund_total_nav_usd ?? 0;
+    } else {
+      fundSnap.twh_contributions_native = payload.twh_contributions_native ?? null;
+      fundSnap.twh_distributions_native = payload.twh_distributions_native ?? null;
+      fundSnap.twh_nav_native = payload.twh_nav_native ?? null;
+      fundSnap.fund_total_contributions_native = payload.fund_total_contributions_native ?? null;
+      fundSnap.fund_total_nav_native = payload.fund_total_nav_native ?? null;
+      // Required NOT NULL columns get 0 placeholders; trigger will overwrite if rate exists.
+      fundSnap.twh_contributions_usd = 0;
+      fundSnap.twh_distributions_usd = 0;
+      fundSnap.twh_nav_usd = 0;
+      fundSnap.fund_total_contributions_usd = 0;
+      fundSnap.fund_total_nav_usd = 0;
+    }
     const { error: fsErr } = await supabase
       .from("fund_quarter_snapshots")
-      .upsert(fundSnap, { onConflict: "fund_id,quarter_id" });
+      .upsert(fundSnap as any, { onConflict: "fund_id,quarter_id" });
     if (fsErr) result.errors.push(`fund_snapshot: ${fsErr.message}`);
     else result.fund_snapshots_written = 1;
   }
@@ -191,18 +211,27 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
         companyId = created.id;
       }
 
-      const { error: uhErr } = await supabase.from("underlying_holdings").insert({
+      const holdingRow: Record<string, any> = {
         fund_id: report.fund_id,
         quarter_id: report.quarter_id,
         company_id: companyId,
         round: h.round ?? null,
         instrument: h.instrument ?? null,
         investment_date: h.investment_date ?? null,
-        fund_cost_usd: h.fund_cost_usd,
-        fund_fmv_usd: h.fund_fmv_usd,
-        fund_proceeds_usd: h.fund_proceeds_usd,
+        currency,
         source_report_id: report.id,
-      });
+      };
+      if (isUsd) {
+        holdingRow.fund_cost_usd = h.fund_cost_usd;
+        holdingRow.fund_fmv_usd = h.fund_fmv_usd;
+        holdingRow.fund_proceeds_usd = h.fund_proceeds_usd;
+      } else {
+        holdingRow.fund_cost_native = h.fund_cost_native ?? null;
+        holdingRow.fund_fmv_native = h.fund_fmv_native ?? null;
+        holdingRow.fund_proceeds_native = h.fund_proceeds_native ?? null;
+        // *_usd left null; trigger will fill via fund_fx_rates (or leave null if no rate).
+      }
+      const { error: uhErr } = await supabase.from("underlying_holdings").insert(holdingRow as any);
       if (uhErr) result.errors.push(`holding "${name}": ${uhErr.message}`);
       else result.underlying_holdings_written += 1;
     }

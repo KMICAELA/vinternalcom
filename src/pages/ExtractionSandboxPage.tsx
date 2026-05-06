@@ -120,13 +120,16 @@ const numOrNull = (v: number | null | undefined): number | null =>
 
 
 
-// Merge fund-level fields from multiple files for the same fund: last-non-null wins
+// Merge fund-level fields from multiple files for the same fund: last-non-null wins.
+// For non-USD funds the edge function leaves *_usd null and populates *_native;
+// we fall back to the native column so the sandbox still shows the extracted numbers.
 function mergeFundFields(payloads: ExtractedPayload[]): {
   twh_contributions_usd: number | null;
   twh_distributions_usd: number | null;
   twh_nav_usd: number | null;
   fund_total_contributions_usd: number | null;
   fund_total_nav_usd: number | null;
+  currency: string;
 } {
   const out: any = {
     twh_contributions_usd: null,
@@ -134,10 +137,23 @@ function mergeFundFields(payloads: ExtractedPayload[]): {
     twh_nav_usd: null,
     fund_total_contributions_usd: null,
     fund_total_nav_usd: null,
+    currency: "USD",
   };
+  const usdKeys = [
+    "twh_contributions_usd",
+    "twh_distributions_usd",
+    "twh_nav_usd",
+    "fund_total_contributions_usd",
+    "fund_total_nav_usd",
+  ] as const;
   for (const p of payloads) {
-    for (const k of Object.keys(out)) {
-      const v = (p as any)[k];
+    const ccy = (p.currency ?? "USD").toUpperCase();
+    if (ccy !== "USD") out.currency = ccy;
+    const isNative = ccy !== "USD";
+    for (const k of usdKeys) {
+      const usdV = (p as any)[k];
+      const nativeV = isNative ? (p as any)[k.replace(/_usd$/, "_native")] : null;
+      const v = usdV ?? nativeV;
       if (v !== null && v !== undefined) out[k] = Number(v);
     }
   }
@@ -489,6 +505,13 @@ function ExtractionSandboxInner() {
       for (const [fundId, fs] of fileGroups.byFund) {
         const fund = funds.find((f) => f.id === fundId);
         const fundLabel = fund?.short_name ?? fund?.name ?? "(unknown)";
+        // Detect currency from any payload (all files for one fund share fund native ccy).
+        const fundCcy = (fs[0]?.payload?.currency ?? "USD").toUpperCase();
+        const isNative = fundCcy !== "USD";
+        // Read from *_native when fund is non-USD (extraction now leaves *_usd null).
+        const pickCost = (h: any) => isNative ? h.fund_cost_native : h.fund_cost_usd;
+        const pickFmv = (h: any) => isNative ? h.fund_fmv_native : h.fund_fmv_usd;
+        const pickProc = (h: any) => isNative ? h.fund_proceeds_native : h.fund_proceeds_usd;
         // Flatten + dedupe by company within this fund (last-non-null wins)
         const byCompany = new Map<string, EnrichedHolding>();
         for (const f of fs) {
@@ -497,9 +520,12 @@ function ExtractionSandboxInner() {
             if (!name) continue;
             const k = name.toLowerCase();
             const existing = byCompany.get(k) ?? { ...h, company_name: name };
-            if (h.fund_cost_usd != null) existing.fund_cost_usd = h.fund_cost_usd;
-            if (h.fund_fmv_usd != null) existing.fund_fmv_usd = h.fund_fmv_usd;
-            if (h.fund_proceeds_usd != null) existing.fund_proceeds_usd = h.fund_proceeds_usd;
+            const cost = pickCost(h);
+            const fmv = pickFmv(h);
+            const proc = pickProc(h);
+            if (cost != null) existing.fund_cost_usd = cost;
+            if (fmv != null) existing.fund_fmv_usd = fmv;
+            if (proc != null) existing.fund_proceeds_usd = proc;
             if (h.round) existing.round = h.round;
             if (h.instrument) existing.instrument = h.instrument;
             byCompany.set(k, existing);
@@ -510,8 +536,6 @@ function ExtractionSandboxInner() {
           holdings: Array.from(byCompany.values()),
           currentQuarterEndDate: currentEnd,
         });
-        // Combine notes from all files for this fund and run the magnitude scrubber
-        // (catches "$2m" → 200,000 class of bugs the model occasionally introduces).
         const combinedNotes = fs
           .map((f) => f.payload?.notes ?? "")
           .filter(Boolean)
@@ -520,7 +544,7 @@ function ExtractionSandboxInner() {
         for (const h of enriched) {
           out.push({
             key: `${fundId}::${h.company_name.toLowerCase()}`,
-            fundLabel,
+            fundLabel: isNative ? `${fundLabel} · ${fundCcy}` : fundLabel,
             company: h.company_name,
             instrument: h.instrument ?? null,
             round: h.round ?? null,
@@ -792,7 +816,14 @@ function ExtractionSandboxInner() {
                         const liveDpi = live ? calcDpi(live.twh_contributions_usd, live.twh_distributions_usd) : null;
                         return (
                           <TableRow key={r.fundId} className="table-row-hover">
-                            <TableCell className="font-medium">{r.fundLabel}</TableCell>
+                            <TableCell className="font-medium">
+                              {r.fundLabel}
+                              {r.merged.currency && r.merged.currency !== "USD" && (
+                                <Badge variant="outline" className="ml-2 text-[10px] text-amber-400 border-amber-400/30">
+                                  {r.merged.currency} (native)
+                                </Badge>
+                              )}
+                            </TableCell>
                             <TableCell><CompareCell compare={compare}
                               extracted={fmtUSD(r.merged.twh_contributions_usd ?? 0, { compact: true })}
                               live={live ? fmtUSD(live.twh_contributions_usd, { compact: true }) : "—"} /></TableCell>

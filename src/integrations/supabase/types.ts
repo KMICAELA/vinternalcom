@@ -1298,6 +1298,10 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: { _user_id: string }; Returns: boolean }
+      lookup_fund_fx_rate: {
+        Args: { _from_currency: string; _fund_id: string; _quarter_id: string }
+        Returns: number
+      }
       normalize_round_name: {
         Args: { _raw: string }
         Returns: {

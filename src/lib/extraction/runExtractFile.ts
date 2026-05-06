@@ -11,6 +11,9 @@ export type ExtractedHolding = {
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
+  fund_cost_native?: number | null;
+  fund_fmv_native?: number | null;
+  fund_proceeds_native?: number | null;
 };
 
 export type ExtractedPayload = {
@@ -22,6 +25,12 @@ export type ExtractedPayload = {
   twh_contributions_usd: number | null;
   twh_distributions_usd: number | null;
   twh_nav_usd: number | null;
+  fund_total_contributions_native?: number | null;
+  fund_total_nav_native?: number | null;
+  twh_contributions_native?: number | null;
+  twh_distributions_native?: number | null;
+  twh_nav_native?: number | null;
+  fx_rate_used?: number | null;
   holdings: ExtractedHolding[];
   notes: string | null;
 };
