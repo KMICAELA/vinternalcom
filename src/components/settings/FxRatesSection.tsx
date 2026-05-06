@@ -257,45 +257,47 @@ export default function FxRatesSection() {
         </Select>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Fund</TableHead>
-            <TableHead>Quarter</TableHead>
-            <TableHead>Pair</TableHead>
-            <TableHead className="text-right">Rate</TableHead>
-            <TableHead>Source</TableHead>
-            <TableHead>Updated by</TableHead>
-            <TableHead>Updated at</TableHead>
-            {isAdmin && <TableHead></TableHead>}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {filtered.length === 0 && (
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
             <TableRow>
-              <TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">
-                No FX rates configured.
-              </TableCell>
+              <TableHead>Fund</TableHead>
+              <TableHead>Quarter</TableHead>
+              <TableHead>Pair</TableHead>
+              <TableHead className="text-right">Rate</TableHead>
+              <TableHead>Source</TableHead>
+              <TableHead>Updated by</TableHead>
+              <TableHead>Updated at</TableHead>
+              {isAdmin && <TableHead className="text-right">Actions</TableHead>}
             </TableRow>
-          )}
-          {filtered.map((r) => (
-            <TableRow key={r.id}>
-              <TableCell className="text-xs">{fundName(r.fund_id)}</TableCell>
-              <TableCell className="text-xs">{quarterLabel(r.quarter_id)}</TableCell>
-              <TableCell className="text-xs font-mono">{r.from_currency}→{r.to_currency}</TableCell>
-              <TableCell className="text-right font-mono text-xs">{Number(r.rate).toFixed(6)}</TableCell>
-              <TableCell><Badge variant="secondary" className="text-[10px]">{r.source.replace("_", " ")}</Badge></TableCell>
-              <TableCell className="text-xs">{profileName(r.updated_by)}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">{new Date(r.updated_at).toLocaleString()}</TableCell>
-              {isAdmin && (
-                <TableCell>
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>Edit</Button>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={isAdmin ? 8 : 7} className="text-center text-xs text-muted-foreground py-8">
+                  No FX rates configured.
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+              </TableRow>
+            )}
+            {filtered.map((r) => (
+              <TableRow key={r.id}>
+                <TableCell className="text-xs whitespace-nowrap">{fundName(r.fund_id)}</TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{quarterLabel(r.quarter_id)}</TableCell>
+                <TableCell className="text-xs font-mono whitespace-nowrap">{r.from_currency}→{r.to_currency}</TableCell>
+                <TableCell className="text-right font-mono text-xs whitespace-nowrap">{Number(r.rate).toFixed(6)}</TableCell>
+                <TableCell><Badge variant="secondary" className="text-[10px]">{r.source.replace("_", " ")}</Badge></TableCell>
+                <TableCell className="text-xs whitespace-nowrap">{profileName(r.updated_by)}</TableCell>
+                <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{new Date(r.updated_at).toLocaleDateString()}</TableCell>
+                {isAdmin && (
+                  <TableCell className="text-right">
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(r)}>Edit</Button>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -366,13 +368,29 @@ export default function FxRatesSection() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm FX rate {form.id ? "update" : "creation"}</AlertDialogTitle>
-            <AlertDialogDescription>
-              You're about to set <span className="font-mono">{form.from_currency}→{form.to_currency}</span> to{" "}
-              <span className="font-mono">{form.rate}</span> for{" "}
-              <strong>{form.fund_id === "__global__" ? "all funds (global)" : funds.find((f) => f.id === form.fund_id)?.name}</strong>{" "}
-              in <strong>{quarters.find((q) => q.id === form.quarter_id)?.label}</strong>.
-              <br /><br />
-              All USD-converted values for this fund and quarter will be recomputed against the new rate.
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm">
+                {previousRate != null && Number(form.rate) !== previousRate ? (
+                  <p>
+                    Updating <span className="font-mono">{form.from_currency}→{form.to_currency}</span> rate from{" "}
+                    <span className="font-mono">{previousRate}</span> to{" "}
+                    <span className="font-mono">{form.rate}</span>.
+                  </p>
+                ) : (
+                  <p>
+                    Setting <span className="font-mono">{form.from_currency}→{form.to_currency}</span> rate to{" "}
+                    <span className="font-mono">{form.rate}</span>.
+                  </p>
+                )}
+                <p className="text-muted-foreground">
+                  Scope: <strong>{form.fund_id === "__global__" ? "all funds (global)" : funds.find((f) => f.id === form.fund_id)?.name}</strong>{" "}
+                  · <strong>{quarters.find((q) => q.id === form.quarter_id)?.label}</strong>
+                </p>
+                <p className="text-muted-foreground">
+                  This will recompute USD values across <strong>{impact.holdings}</strong> holding{impact.holdings === 1 ? "" : "s"}{" "}
+                  and <strong>{impact.snapshots}</strong> quarter snapshot{impact.snapshots === 1 ? "" : "s"}. Confirm?
+                </p>
+              </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
