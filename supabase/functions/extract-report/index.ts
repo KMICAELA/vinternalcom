@@ -100,19 +100,31 @@ const COMPANY_ALIAS: Record<string, string> = {
   "project 11": "Project 11",
   "zoo": "Zoo",
   "zoo.dev": "Zoo",
+  "zoo dev": "Zoo",
+  "zoo, inc": "Zoo",
+  "zoo inc": "Zoo",
   "quminex": "Quantonation Canada",
   "silq": "Quantonation Canada",
   "quantonation canada": "Quantonation Canada",
+  "quantonatio": "Quantonation Canada",
+  "quantonation": "Quantonation Canada",
 };
 
 function canonicalCompanyName(raw: string | null | undefined): string {
   const t = (raw ?? "").trim();
   if (!t) return "";
-  const key = t.toLowerCase().replace(/\s+/g, " ");
+  // Normalize: lowercase, collapse whitespace, strip trailing punctuation
+  let key = t.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:]+$/g, "");
   if (COMPANY_ALIAS[key]) return COMPANY_ALIAS[key];
-  // strip common suffixes
+  // Strip common suffixes
   const stripped = key.replace(/\s+(inc\.?|llc|ltd\.?|corp\.?|co\.?|sa|sas|sarl|gmbh)$/i, "").trim();
   if (COMPANY_ALIAS[stripped]) return COMPANY_ALIAS[stripped];
+  // Strip parenthetical aliases e.g. "Zoo (Zoo.dev)" → check inner alias
+  const paren = key.match(/^([^(]+?)\s*\(([^)]+)\)\s*$/);
+  if (paren) {
+    if (COMPANY_ALIAS[paren[1].trim()]) return COMPANY_ALIAS[paren[1].trim()];
+    if (COMPANY_ALIAS[paren[2].trim()]) return COMPANY_ALIAS[paren[2].trim()];
+  }
   return t;
 }
 
@@ -347,8 +359,17 @@ GENERAL RULES
 - "twh_*" fields = TWH's pro-rata share (often shown on a PCAP).
 - "fund_total_*" fields = whole-fund totals across all LPs.
 - holdings[] = the fund-level portfolio (one row per company). Skip subtotal/total rows.
-- Convert non-USD figures using the report's stated FX rate if present;
-  otherwise leave numbers in source units.
+- CURRENCY HANDLING — DO NOT PERFORM ANY FX CONVERSION YOURSELF.
+  Always return numbers in the SOURCE CURRENCY of the document, exactly as
+  printed. Set "currency" to the source code (e.g. "EUR", "GBP", "USD").
+  The schema field names end in "_usd" for legacy reasons — IGNORE that
+  suffix and populate them with values in the source currency. A downstream
+  step applies a single uniform FX rate from a centralized rate table; if
+  you pre-convert (or read a USD column the source admin already converted),
+  you will produce double-conversion errors and corrupt downstream numbers.
+  When the document has BOTH a native column (e.g. EUR) and a USD column
+  (e.g. "USD Equivalent", "USD@1.1987"), you MUST read the NATIVE column
+  and IGNORE the USD column entirely.
 - Do NOT invent companies. If the source has no holdings info, return holdings: [].
 - Do NOT wrap your answer in markdown. Return ONLY the JSON object.
 
