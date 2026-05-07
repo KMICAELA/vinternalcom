@@ -108,9 +108,9 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="TWH Total Value" value={fmtUSD(totalValue, { compact: true })} sub={`NAV ${fmtUSD(totals.twh_nav, { compact: true })} + Directs FMV ${fmtUSD(totals.twh_directs_fmv, { compact: true })}`} icon={Wallet} />
-            <KpiCard label="TWH Contributions" value={fmtUSD(totalContrib, { compact: true })} sub={`Funds ${fmtUSD(totals.twh_contributions, { compact: true })} + Directs ${fmtUSD(totals.twh_directs_cost, { compact: true })}`} icon={TrendingUp} />
-            <KpiCard label="TVPI" value={fmtMultiple(tvpi)} sub={`DPI ${fmtMultiple(dpi)}`} icon={TrendingUp} />
+            <KpiCard label="TWH Total Value" value={fmtUSD(totalValue, { compact: true })} sub={`NAV ${fmtUSD(totals.twh_nav, { compact: true })} + Directs FMV ${fmtUSD(totals.twh_directs_fmv, { compact: true })}`} icon={Wallet} estimated={totals.estimated} />
+            <KpiCard label="TWH Contributions" value={fmtUSD(totalContrib, { compact: true })} sub={`Funds ${fmtUSD(totals.twh_contributions, { compact: true })} + Directs ${fmtUSD(totals.twh_directs_cost, { compact: true })}`} icon={TrendingUp} estimated={totals.estimated} />
+            <KpiCard label="TVPI" value={fmtMultiple(tvpi)} sub={`DPI ${fmtMultiple(dpi)}`} icon={TrendingUp} estimated={totals.estimated} />
             <KpiCard label="Portfolio" value={`${totals.fund_count} funds · ${totals.direct_count} directs`} icon={Briefcase} />
           </div>
 
