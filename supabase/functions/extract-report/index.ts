@@ -133,6 +133,22 @@ function sumNullable(a: number | null | undefined, b: number | null | undefined)
   return Number(a ?? 0) + Number(b ?? 0);
 }
 
+// Pick the larger non-null/non-zero value. Used when deduping same-company rows
+// where one came from a structured table (with values) and another from narrative
+// (often zero/null). NEVER overwrite a real value with null or 0.
+function preferTruthyMax(a: number | null | undefined, b: number | null | undefined): number | null {
+  const aNum = a == null ? null : Number(a);
+  const bNum = b == null ? null : Number(b);
+  if (aNum == null && bNum == null) return null;
+  if (aNum == null) return bNum;
+  if (bNum == null) return aNum;
+  // Both present — prefer the non-zero one; if both non-zero, take the max
+  // (table values dominate narrative blanks/zeros).
+  if (aNum === 0) return bNum;
+  if (bNum === 0) return aNum;
+  return Math.max(aNum, bNum);
+}
+
 function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
   const merged = new Map<string, ExtractedHolding>();
   for (const h of holdings) {
@@ -143,13 +159,15 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
       merged.set(canonical, { ...h, company_name: canonical });
       continue;
     }
-    // Merge: sum financials, keep earliest investment_date, append round detail.
-    existing.fund_cost_usd = sumNullable(existing.fund_cost_usd, h.fund_cost_usd);
-    existing.fund_fmv_usd = sumNullable(existing.fund_fmv_usd, h.fund_fmv_usd);
-    existing.fund_proceeds_usd = sumNullable(existing.fund_proceeds_usd, h.fund_proceeds_usd);
-    existing.fund_cost_native = sumNullable(existing.fund_cost_native, h.fund_cost_native);
-    existing.fund_fmv_native = sumNullable(existing.fund_fmv_native, h.fund_fmv_native);
-    existing.fund_proceeds_native = sumNullable(existing.fund_proceeds_native, h.fund_proceeds_native);
+    // Merge same-company duplicates (typically table row + narrative restatement).
+    // Prefer the truthy/larger value — never let a narrative blank overwrite a
+    // table value (e.g. table says $750K, narrative says nothing → keep $750K).
+    existing.fund_cost_usd = preferTruthyMax(existing.fund_cost_usd, h.fund_cost_usd);
+    existing.fund_fmv_usd = preferTruthyMax(existing.fund_fmv_usd, h.fund_fmv_usd);
+    existing.fund_proceeds_usd = preferTruthyMax(existing.fund_proceeds_usd, h.fund_proceeds_usd);
+    existing.fund_cost_native = preferTruthyMax(existing.fund_cost_native, h.fund_cost_native);
+    existing.fund_fmv_native = preferTruthyMax(existing.fund_fmv_native, h.fund_fmv_native);
+    existing.fund_proceeds_native = preferTruthyMax(existing.fund_proceeds_native, h.fund_proceeds_native);
     if (h.investment_date && (!existing.investment_date || h.investment_date < existing.investment_date)) {
       existing.investment_date = h.investment_date;
     }
@@ -317,6 +335,26 @@ If the table uses Quantonation-style headers, map them as follows:
   • "Multiple" helps validate FMV = cost × multiple, but do not use FX.
 For example, Ticket (€) 600,000 and Investment Value (€) 600,000 for Resolve
 Stroke must produce fund_cost_native = 600000 and fund_fmv_native = 600000.
+
+CANONICAL-SOURCE PRIORITY (CRITICAL — prevents duplicate rows):
+When a Schedule of Investments table is present (columns like Company /
+Initial Date / Invested Capital / Carrying Value / Ownership %), THAT TABLE
+IS THE COMPLETE HOLDINGS LIST. The number of rows in holdings[] must equal
+the number of data rows in that table (excluding subtotals/totals).
+
+Narrative paragraphs that re-discuss the same companies elsewhere in the
+document are CONTEXT, not separate investments:
+  ✗ Do NOT emit a second row for a company already in the table.
+  ✗ Do NOT emit a row from narrative if its name fuzzy-matches any table row
+    (e.g. "Andean" in narrative + "Andean Systems" in table → ONE row, from
+    the table). Apply case-insensitive substring + token-overlap matching.
+  ✗ Do NOT overwrite a table value with a narrative blank or zero. If the
+    table shows $750K and narrative says nothing about cost, keep $750K.
+  ✓ You MAY enrich a table row with narrative info (round, fmv_change_reason,
+    needs_review flag) but financial fields stay sourced from the table.
+
+If the same company appears in multiple narrative paragraphs (no table),
+emit ONE consolidated row — never one per paragraph.
 
 MODE B — Narrative-only report (no per-holding table).
 LP letter, portfolio update, commentary without a structured holdings table.
