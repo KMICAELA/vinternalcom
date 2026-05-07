@@ -295,6 +295,13 @@ export default function ConsolidatedPage() {
         />
       </div>
 
+      {agg.estimated && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <EstimatedBadge />
+          <span>Some funds report fund-level totals only; TWH share is estimated via ownership % until PCAPs are processed.</span>
+        </div>
+      )}
+
       {/* Reconciliation banner */}
       {reconWarn && entries.length > 0 && (
         <Card className="bg-card border-border p-4">
