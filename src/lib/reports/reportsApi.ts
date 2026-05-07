@@ -144,6 +144,13 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
   const isUsd = !payload.currency || payload.currency.toUpperCase() === "USD";
   const currency = isUsd ? "USD" : payload.currency!.toUpperCase();
 
+  // Backward-compat helpers: payloads from older extractions only have *_usd fields,
+  // newer non-USD payloads only have *_native. Accept either shape silently.
+  const pickNative = (nativeVal: number | null | undefined, usdVal: number | null | undefined) =>
+    nativeVal != null ? nativeVal : usdVal != null ? usdVal : null;
+  const pickUsd = (usdVal: number | null | undefined, nativeVal: number | null | undefined) =>
+    usdVal != null ? usdVal : nativeVal != null ? nativeVal : null;
+
   // 1. Fund-level metrics → fund_quarter_snapshots (if a fund_id is set)
   // For non-USD funds we write *_native + currency and leave *_usd null;
   // the DB trigger derives *_usd from fund_fx_rates at write time.
