@@ -11,13 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Download, ArrowLeft, RefreshCw, CheckCircle2, AlertCircle, AlertTriangle,
-  Archive, RotateCcw, FileText, Loader2, ExternalLink,
+  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
 import type { ExtractedPayload } from "@/lib/extraction/runExtractFile";
 import {
-  archiveReport, promoteReportToLive, signedReportUrl,
+  archiveReport, deleteReport, promoteReportToLive, signedReportUrl,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -62,7 +62,7 @@ export default function ReportDetailPage() {
   const { role } = useAuth();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive">(null);
+  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete">(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -358,6 +358,31 @@ export default function ReportDetailPage() {
             <Button onClick={onArchive} disabled={busy !== null} variant="outline" size="sm" className="gap-2 h-9 text-xs">
               {busy === "archive" ? <Loader2 className="h-3 w-3 animate-spin" /> : report.archived ? <RotateCcw className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
               {report.archived ? "Unarchive" : "Archive"}
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!report) return;
+                const msg = report.committed_to_db
+                  ? "Delete this report? Live data rows it produced will be kept but unlinked from this report. This cannot be undone."
+                  : "Delete this report and its file? This cannot be undone.";
+                if (!confirm(msg)) return;
+                setBusy("delete");
+                try {
+                  await deleteReport(report.id);
+                  toast.success("Report deleted");
+                  navigate("/reports");
+                } catch (e: any) {
+                  toast.error(e?.message ?? "Delete failed");
+                  setBusy(null);
+                }
+              }}
+              disabled={busy !== null}
+              variant="outline"
+              size="sm"
+              className="gap-2 h-9 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            >
+              {busy === "delete" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Delete report
             </Button>
           </div>
           {report.committed_to_db && report.committed_at && (
