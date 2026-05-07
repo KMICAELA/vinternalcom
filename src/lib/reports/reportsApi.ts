@@ -229,13 +229,13 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
         source_report_id: report.id,
       };
       if (isUsd) {
-        holdingRow.fund_cost_usd = h.fund_cost_usd;
-        holdingRow.fund_fmv_usd = h.fund_fmv_usd;
-        holdingRow.fund_proceeds_usd = h.fund_proceeds_usd;
+        holdingRow.fund_cost_usd = pickUsd(h.fund_cost_usd, h.fund_cost_native);
+        holdingRow.fund_fmv_usd = pickUsd(h.fund_fmv_usd, h.fund_fmv_native);
+        holdingRow.fund_proceeds_usd = pickUsd(h.fund_proceeds_usd, h.fund_proceeds_native);
       } else {
-        holdingRow.fund_cost_native = h.fund_cost_native ?? null;
-        holdingRow.fund_fmv_native = h.fund_fmv_native ?? null;
-        holdingRow.fund_proceeds_native = h.fund_proceeds_native ?? null;
+        holdingRow.fund_cost_native = pickNative(h.fund_cost_native, h.fund_cost_usd);
+        holdingRow.fund_fmv_native = pickNative(h.fund_fmv_native, h.fund_fmv_usd);
+        holdingRow.fund_proceeds_native = pickNative(h.fund_proceeds_native, h.fund_proceeds_usd);
         // *_usd left null; trigger will fill via fund_fx_rates (or leave null if no rate).
       }
       const { error: uhErr } = await supabase.from("underlying_holdings").insert(holdingRow as any);
