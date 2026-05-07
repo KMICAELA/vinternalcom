@@ -211,6 +211,7 @@ export default function FundsPage() {
                             ) : (
                               <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium w-fit">Missing</Badge>
                             )}
+                            {r.estimated && <EstimatedBadge className="w-fit" />}
           </div>
         </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>
