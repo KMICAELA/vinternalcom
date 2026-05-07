@@ -50,25 +50,36 @@ export default function DashboardPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [fundSnaps, directSnaps, directs, funds] = await Promise.all([
-        supabase.from("fund_quarter_snapshots").select("twh_contributions_usd, twh_distributions_usd, twh_nav_usd").eq("quarter_id", selected.id),
+      const [fundSnaps, directSnaps, directs, funds, commits] = await Promise.all([
+        supabase.from("fund_quarter_snapshots").select("fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd").eq("quarter_id", selected.id),
         supabase.from("direct_quarter_snapshots").select("twh_fmv_usd, twh_proceeds_usd, direct_id").eq("quarter_id", selected.id),
         supabase.from("directs").select("id, twh_cost_usd"),
         supabase.from("funds").select("id", { count: "exact", head: true }).eq("archived", false),
+        supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
       const f = fundSnaps.data ?? [];
       const ds = directSnaps.data ?? [];
       const dCost = new Map((directs.data ?? []).map((d) => [d.id, Number(d.twh_cost_usd)]));
       const directIds = new Set(ds.map((d) => d.direct_id));
+      const pctMap = new Map((commits.data ?? []).map((c: any) => [c.fund_id, Number(c.twh_ownership_pct ?? 0)]));
+
+      let estimated = false;
+      const derived = f.map((s: any) => {
+        const d = deriveTwhWithFallback(s, pctMap.get(s.fund_id) ?? 0);
+        if (d.estimated) estimated = true;
+        return d;
+      });
+
       const t: Totals = {
-        twh_contributions: f.reduce((s, x) => s + Number(x.twh_contributions_usd), 0),
-        twh_distributions: f.reduce((s, x) => s + Number(x.twh_distributions_usd), 0),
-        twh_nav: f.reduce((s, x) => s + Number(x.twh_nav_usd), 0),
+        twh_contributions: derived.reduce((s, x) => s + x.contributions, 0),
+        twh_distributions: derived.reduce((s, x) => s + x.distributions, 0),
+        twh_nav: derived.reduce((s, x) => s + x.nav, 0),
         twh_directs_fmv: ds.reduce((s, x) => s + Number(x.twh_fmv_usd), 0),
         twh_directs_proceeds: ds.reduce((s, x) => s + Number(x.twh_proceeds_usd), 0),
         twh_directs_cost: Array.from(directIds).reduce((s, id) => s + (dCost.get(id) ?? 0), 0),
         fund_count: funds.count ?? 0,
         direct_count: directIds.size,
+        estimated,
       };
       setTotals(t);
       setLoading(false);
