@@ -359,6 +359,31 @@ export default function ReportDetailPage() {
               {busy === "archive" ? <Loader2 className="h-3 w-3 animate-spin" /> : report.archived ? <RotateCcw className="h-3 w-3" /> : <Archive className="h-3 w-3" />}
               {report.archived ? "Unarchive" : "Archive"}
             </Button>
+            <Button
+              onClick={async () => {
+                if (!report) return;
+                const msg = report.committed_to_db
+                  ? "Delete this report? Live data rows it produced will be kept but unlinked from this report. This cannot be undone."
+                  : "Delete this report and its file? This cannot be undone.";
+                if (!confirm(msg)) return;
+                setBusy("delete");
+                try {
+                  await deleteReport(report.id);
+                  toast.success("Report deleted");
+                  navigate("/reports");
+                } catch (e: any) {
+                  toast.error(e?.message ?? "Delete failed");
+                  setBusy(null);
+                }
+              }}
+              disabled={busy !== null}
+              variant="outline"
+              size="sm"
+              className="gap-2 h-9 text-xs text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
+            >
+              {busy === "delete" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+              Delete report
+            </Button>
           </div>
           {report.committed_to_db && report.committed_at && (
             <p className="text-[11px] text-muted-foreground mt-3">
