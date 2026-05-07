@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { fmtUSD, fmtMultiple, calcTvpi, calcDpi } from "@/lib/format";
 import { Briefcase, TrendingUp, Wallet } from "lucide-react";
 import DashboardPortfolioCharts from "@/components/DashboardPortfolioCharts";
+import EstimatedBadge from "@/components/EstimatedBadge";
+import { deriveTwhWithFallback } from "@/lib/twhDerivation";
 
 type Totals = {
   twh_contributions: number;
@@ -15,16 +17,18 @@ type Totals = {
   twh_directs_proceeds: number;
   fund_count: number;
   direct_count: number;
+  estimated: boolean;
 };
 
 const empty: Totals = {
   twh_contributions: 0, twh_distributions: 0, twh_nav: 0,
   twh_directs_fmv: 0, twh_directs_cost: 0, twh_directs_proceeds: 0,
-  fund_count: 0, direct_count: 0,
+  fund_count: 0, direct_count: 0, estimated: false,
 };
 
-const KpiCard = ({ label, value, sub, icon: Icon }: {
+const KpiCard = ({ label, value, sub, icon: Icon, estimated }: {
   label: string; value: string; sub?: string; icon: React.ComponentType<{ className?: string }>;
+  estimated?: boolean;
 }) => (
   <Card className="p-5 bg-card border-border">
     <div className="flex items-start justify-between">
@@ -33,6 +37,7 @@ const KpiCard = ({ label, value, sub, icon: Icon }: {
     </div>
     <div className="mt-2 text-2xl font-semibold font-mono">{value}</div>
     {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
+    {estimated && <div className="mt-2"><EstimatedBadge /></div>}
   </Card>
 );
 
