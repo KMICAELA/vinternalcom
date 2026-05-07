@@ -144,6 +144,13 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
   const isUsd = !payload.currency || payload.currency.toUpperCase() === "USD";
   const currency = isUsd ? "USD" : payload.currency!.toUpperCase();
 
+  // Backward-compat helpers: payloads from older extractions only have *_usd fields,
+  // newer non-USD payloads only have *_native. Accept either shape silently.
+  const pickNative = (nativeVal: number | null | undefined, usdVal: number | null | undefined) =>
+    nativeVal != null ? nativeVal : usdVal != null ? usdVal : null;
+  const pickUsd = (usdVal: number | null | undefined, nativeVal: number | null | undefined) =>
+    usdVal != null ? usdVal : nativeVal != null ? nativeVal : null;
+
   // 1. Fund-level metrics → fund_quarter_snapshots (if a fund_id is set)
   // For non-USD funds we write *_native + currency and leave *_usd null;
   // the DB trigger derives *_usd from fund_fx_rates at write time.
@@ -158,17 +165,17 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
       confirmed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
     };
     if (isUsd) {
-      fundSnap.twh_contributions_usd = payload.twh_contributions_usd ?? 0;
-      fundSnap.twh_distributions_usd = payload.twh_distributions_usd ?? 0;
-      fundSnap.twh_nav_usd = payload.twh_nav_usd ?? 0;
-      fundSnap.fund_total_contributions_usd = payload.fund_total_contributions_usd ?? 0;
-      fundSnap.fund_total_nav_usd = payload.fund_total_nav_usd ?? 0;
+      fundSnap.twh_contributions_usd = pickUsd(payload.twh_contributions_usd, payload.twh_contributions_native) ?? 0;
+      fundSnap.twh_distributions_usd = pickUsd(payload.twh_distributions_usd, payload.twh_distributions_native) ?? 0;
+      fundSnap.twh_nav_usd = pickUsd(payload.twh_nav_usd, payload.twh_nav_native) ?? 0;
+      fundSnap.fund_total_contributions_usd = pickUsd(payload.fund_total_contributions_usd, payload.fund_total_contributions_native) ?? 0;
+      fundSnap.fund_total_nav_usd = pickUsd(payload.fund_total_nav_usd, payload.fund_total_nav_native) ?? 0;
     } else {
-      fundSnap.twh_contributions_native = payload.twh_contributions_native ?? null;
-      fundSnap.twh_distributions_native = payload.twh_distributions_native ?? null;
-      fundSnap.twh_nav_native = payload.twh_nav_native ?? null;
-      fundSnap.fund_total_contributions_native = payload.fund_total_contributions_native ?? null;
-      fundSnap.fund_total_nav_native = payload.fund_total_nav_native ?? null;
+      fundSnap.twh_contributions_native = pickNative(payload.twh_contributions_native, payload.twh_contributions_usd);
+      fundSnap.twh_distributions_native = pickNative(payload.twh_distributions_native, payload.twh_distributions_usd);
+      fundSnap.twh_nav_native = pickNative(payload.twh_nav_native, payload.twh_nav_usd);
+      fundSnap.fund_total_contributions_native = pickNative(payload.fund_total_contributions_native, payload.fund_total_contributions_usd);
+      fundSnap.fund_total_nav_native = pickNative(payload.fund_total_nav_native, payload.fund_total_nav_usd);
       // Required NOT NULL columns get 0 placeholders; trigger will overwrite if rate exists.
       fundSnap.twh_contributions_usd = 0;
       fundSnap.twh_distributions_usd = 0;
@@ -222,13 +229,13 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
         source_report_id: report.id,
       };
       if (isUsd) {
-        holdingRow.fund_cost_usd = h.fund_cost_usd;
-        holdingRow.fund_fmv_usd = h.fund_fmv_usd;
-        holdingRow.fund_proceeds_usd = h.fund_proceeds_usd;
+        holdingRow.fund_cost_usd = pickUsd(h.fund_cost_usd, h.fund_cost_native);
+        holdingRow.fund_fmv_usd = pickUsd(h.fund_fmv_usd, h.fund_fmv_native);
+        holdingRow.fund_proceeds_usd = pickUsd(h.fund_proceeds_usd, h.fund_proceeds_native);
       } else {
-        holdingRow.fund_cost_native = h.fund_cost_native ?? null;
-        holdingRow.fund_fmv_native = h.fund_fmv_native ?? null;
-        holdingRow.fund_proceeds_native = h.fund_proceeds_native ?? null;
+        holdingRow.fund_cost_native = pickNative(h.fund_cost_native, h.fund_cost_usd);
+        holdingRow.fund_fmv_native = pickNative(h.fund_fmv_native, h.fund_fmv_usd);
+        holdingRow.fund_proceeds_native = pickNative(h.fund_proceeds_native, h.fund_proceeds_usd);
         // *_usd left null; trigger will fill via fund_fx_rates (or leave null if no rate).
       }
       const { error: uhErr } = await supabase.from("underlying_holdings").insert(holdingRow as any);
