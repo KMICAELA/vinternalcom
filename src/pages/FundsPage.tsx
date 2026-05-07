@@ -10,6 +10,8 @@ import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
+import EstimatedBadge from "@/components/EstimatedBadge";
+import { deriveTwhWithFallback } from "@/lib/twhDerivation";
 import { computeXirr } from "@/lib/irr";
 
 type ReportStatus = "confirmed" | "in_review" | "missing";
@@ -32,6 +34,7 @@ type FundRow = {
   cf_count: number;
   report_status: ReportStatus;
   report_files: ReportFile[];
+  estimated: boolean;
 };
 
 export default function FundsPage() {
@@ -49,7 +52,7 @@ export default function FundsPage() {
       const [{ data: funds }, { data: docs }, { data: reports }, { data: flows }] = await Promise.all([
         supabase
           .from("funds")
-          .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_nav_usd, confirmed_at)")
+          .select("id, name, short_name, start_date, fund_commitments(total_fund_commitment_usd, twh_commitment_usd, twh_ownership_pct), fund_quarter_snapshots(quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd, confirmed_at)")
           .eq("archived", false)
           .order("name"),
         supabase
@@ -105,8 +108,9 @@ export default function FundsPage() {
           ? "in_review"
           : "missing";
         const fundFlows = flowsByFund.get(f.id) ?? [];
-        const nav = Number(snap.twh_nav_usd ?? 0);
-        const irr = computeXirr(fundFlows, nav, selected.quarter_end_date);
+        const ownership = Number(c.twh_ownership_pct ?? 0);
+        const derived = deriveTwhWithFallback(snap, ownership);
+        const irr = computeXirr(fundFlows, derived.nav, selected.quarter_end_date);
         return {
           id: f.id,
           name: f.name,
@@ -114,16 +118,17 @@ export default function FundsPage() {
           start_date: f.start_date,
           total_fund_commitment_usd: Number(c.total_fund_commitment_usd ?? 0),
           twh_commitment_usd: Number(c.twh_commitment_usd ?? 0),
-          twh_ownership_pct: Number(c.twh_ownership_pct ?? 0),
-          twh_contributions_usd: Number(snap.twh_contributions_usd ?? 0),
-          twh_distributions_usd: Number(snap.twh_distributions_usd ?? 0),
-          twh_nav_usd: nav,
+          twh_ownership_pct: ownership,
+          twh_contributions_usd: derived.contributions,
+          twh_distributions_usd: derived.distributions,
+          twh_nav_usd: derived.nav,
           fund_total_contributions_usd: Number(snap.fund_total_contributions_usd ?? 0),
           fund_total_nav_usd: Number(snap.fund_total_nav_usd ?? 0),
           irr,
           cf_count: fundFlows.length,
           report_status,
           report_files: reportsByFund.get(f.id) ?? [],
+          estimated: derived.estimated,
         };
       });
       out.sort((a, b) => b.twh_nav_usd - a.twh_nav_usd);
@@ -206,6 +211,7 @@ export default function FundsPage() {
                             ) : (
                               <Badge variant="outline" className="border-border text-muted-foreground text-[10px] font-medium w-fit">Missing</Badge>
                             )}
+                            {r.estimated && <EstimatedBadge className="w-fit" />}
           </div>
         </TableCell>
                         <TableCell className="text-muted-foreground">{fmtDate(r.start_date)}</TableCell>

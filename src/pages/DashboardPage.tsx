@@ -5,6 +5,8 @@ import { Card } from "@/components/ui/card";
 import { fmtUSD, fmtMultiple, calcTvpi, calcDpi } from "@/lib/format";
 import { Briefcase, TrendingUp, Wallet } from "lucide-react";
 import DashboardPortfolioCharts from "@/components/DashboardPortfolioCharts";
+import EstimatedBadge from "@/components/EstimatedBadge";
+import { deriveTwhWithFallback } from "@/lib/twhDerivation";
 
 type Totals = {
   twh_contributions: number;
@@ -15,16 +17,18 @@ type Totals = {
   twh_directs_proceeds: number;
   fund_count: number;
   direct_count: number;
+  estimated: boolean;
 };
 
 const empty: Totals = {
   twh_contributions: 0, twh_distributions: 0, twh_nav: 0,
   twh_directs_fmv: 0, twh_directs_cost: 0, twh_directs_proceeds: 0,
-  fund_count: 0, direct_count: 0,
+  fund_count: 0, direct_count: 0, estimated: false,
 };
 
-const KpiCard = ({ label, value, sub, icon: Icon }: {
+const KpiCard = ({ label, value, sub, icon: Icon, estimated }: {
   label: string; value: string; sub?: string; icon: React.ComponentType<{ className?: string }>;
+  estimated?: boolean;
 }) => (
   <Card className="p-5 bg-card border-border">
     <div className="flex items-start justify-between">
@@ -33,6 +37,7 @@ const KpiCard = ({ label, value, sub, icon: Icon }: {
     </div>
     <div className="mt-2 text-2xl font-semibold font-mono">{value}</div>
     {sub && <div className="mt-1 text-xs text-muted-foreground">{sub}</div>}
+    {estimated && <div className="mt-2"><EstimatedBadge /></div>}
   </Card>
 );
 
@@ -45,25 +50,36 @@ export default function DashboardPage() {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [fundSnaps, directSnaps, directs, funds] = await Promise.all([
-        supabase.from("fund_quarter_snapshots").select("twh_contributions_usd, twh_distributions_usd, twh_nav_usd").eq("quarter_id", selected.id),
+      const [fundSnaps, directSnaps, directs, funds, commits] = await Promise.all([
+        supabase.from("fund_quarter_snapshots").select("fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd").eq("quarter_id", selected.id),
         supabase.from("direct_quarter_snapshots").select("twh_fmv_usd, twh_proceeds_usd, direct_id").eq("quarter_id", selected.id),
         supabase.from("directs").select("id, twh_cost_usd"),
         supabase.from("funds").select("id", { count: "exact", head: true }).eq("archived", false),
+        supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
       const f = fundSnaps.data ?? [];
       const ds = directSnaps.data ?? [];
       const dCost = new Map((directs.data ?? []).map((d) => [d.id, Number(d.twh_cost_usd)]));
       const directIds = new Set(ds.map((d) => d.direct_id));
+      const pctMap = new Map((commits.data ?? []).map((c: any) => [c.fund_id, Number(c.twh_ownership_pct ?? 0)]));
+
+      let estimated = false;
+      const derived = f.map((s: any) => {
+        const d = deriveTwhWithFallback(s, pctMap.get(s.fund_id) ?? 0);
+        if (d.estimated) estimated = true;
+        return d;
+      });
+
       const t: Totals = {
-        twh_contributions: f.reduce((s, x) => s + Number(x.twh_contributions_usd), 0),
-        twh_distributions: f.reduce((s, x) => s + Number(x.twh_distributions_usd), 0),
-        twh_nav: f.reduce((s, x) => s + Number(x.twh_nav_usd), 0),
+        twh_contributions: derived.reduce((s, x) => s + x.contributions, 0),
+        twh_distributions: derived.reduce((s, x) => s + x.distributions, 0),
+        twh_nav: derived.reduce((s, x) => s + x.nav, 0),
         twh_directs_fmv: ds.reduce((s, x) => s + Number(x.twh_fmv_usd), 0),
         twh_directs_proceeds: ds.reduce((s, x) => s + Number(x.twh_proceeds_usd), 0),
         twh_directs_cost: Array.from(directIds).reduce((s, id) => s + (dCost.get(id) ?? 0), 0),
         fund_count: funds.count ?? 0,
         direct_count: directIds.size,
+        estimated,
       };
       setTotals(t);
       setLoading(false);
@@ -92,9 +108,9 @@ export default function DashboardPage() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <KpiCard label="TWH Total Value" value={fmtUSD(totalValue, { compact: true })} sub={`NAV ${fmtUSD(totals.twh_nav, { compact: true })} + Directs FMV ${fmtUSD(totals.twh_directs_fmv, { compact: true })}`} icon={Wallet} />
-            <KpiCard label="TWH Contributions" value={fmtUSD(totalContrib, { compact: true })} sub={`Funds ${fmtUSD(totals.twh_contributions, { compact: true })} + Directs ${fmtUSD(totals.twh_directs_cost, { compact: true })}`} icon={TrendingUp} />
-            <KpiCard label="TVPI" value={fmtMultiple(tvpi)} sub={`DPI ${fmtMultiple(dpi)}`} icon={TrendingUp} />
+            <KpiCard label="TWH Total Value" value={fmtUSD(totalValue, { compact: true })} sub={`NAV ${fmtUSD(totals.twh_nav, { compact: true })} + Directs FMV ${fmtUSD(totals.twh_directs_fmv, { compact: true })}`} icon={Wallet} estimated={totals.estimated} />
+            <KpiCard label="TWH Contributions" value={fmtUSD(totalContrib, { compact: true })} sub={`Funds ${fmtUSD(totals.twh_contributions, { compact: true })} + Directs ${fmtUSD(totals.twh_directs_cost, { compact: true })}`} icon={TrendingUp} estimated={totals.estimated} />
+            <KpiCard label="TVPI" value={fmtMultiple(tvpi)} sub={`DPI ${fmtMultiple(dpi)}`} icon={TrendingUp} estimated={totals.estimated} />
             <KpiCard label="Portfolio" value={`${totals.fund_count} funds · ${totals.direct_count} directs`} icon={Briefcase} />
           </div>
 
