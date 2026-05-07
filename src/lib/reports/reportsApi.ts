@@ -96,6 +96,29 @@ export async function signedReportUrl(storagePath: string, ttlSeconds = 3600): P
   return data?.signedUrl ?? null;
 }
 
+export async function deleteReport(reportId: string) {
+  // 1. Look up storage path
+  const { data: rep } = await supabase
+    .from("reports")
+    .select("storage_path")
+    .eq("id", reportId)
+    .maybeSingle();
+
+  // 2. Unlink provenance on any rows pointing at this report (keeps live data intact)
+  await supabase.from("fund_quarter_snapshots").update({ source_report_id: null }).eq("source_report_id", reportId);
+  await supabase.from("underlying_holdings").update({ source_report_id: null }).eq("source_report_id", reportId);
+  await supabase.from("direct_quarter_snapshots").update({ source_report_id: null }).eq("source_report_id", reportId);
+
+  // 3. Delete the report row
+  const { error } = await supabase.from("reports").delete().eq("id", reportId);
+  if (error) throw error;
+
+  // 4. Best-effort remove the stored file
+  if (rep?.storage_path) {
+    await supabase.storage.from(BUCKET).remove([rep.storage_path]);
+  }
+}
+
 export async function archiveReport(reportId: string, archived: boolean) {
   const { error } = await supabase
     .from("reports")
