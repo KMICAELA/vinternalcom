@@ -336,6 +336,26 @@ If the table uses Quantonation-style headers, map them as follows:
 For example, Ticket (€) 600,000 and Investment Value (€) 600,000 for Resolve
 Stroke must produce fund_cost_native = 600000 and fund_fmv_native = 600000.
 
+CANONICAL-SOURCE PRIORITY (CRITICAL — prevents duplicate rows):
+When a Schedule of Investments table is present (columns like Company /
+Initial Date / Invested Capital / Carrying Value / Ownership %), THAT TABLE
+IS THE COMPLETE HOLDINGS LIST. The number of rows in holdings[] must equal
+the number of data rows in that table (excluding subtotals/totals).
+
+Narrative paragraphs that re-discuss the same companies elsewhere in the
+document are CONTEXT, not separate investments:
+  ✗ Do NOT emit a second row for a company already in the table.
+  ✗ Do NOT emit a row from narrative if its name fuzzy-matches any table row
+    (e.g. "Andean" in narrative + "Andean Systems" in table → ONE row, from
+    the table). Apply case-insensitive substring + token-overlap matching.
+  ✗ Do NOT overwrite a table value with a narrative blank or zero. If the
+    table shows $750K and narrative says nothing about cost, keep $750K.
+  ✓ You MAY enrich a table row with narrative info (round, fmv_change_reason,
+    needs_review flag) but financial fields stay sourced from the table.
+
+If the same company appears in multiple narrative paragraphs (no table),
+emit ONE consolidated row — never one per paragraph.
+
 MODE B — Narrative-only report (no per-holding table).
 LP letter, portfolio update, commentary without a structured holdings table.
 → Do NOT fabricate per-holding cost or FMV. Follow the strict narrative
