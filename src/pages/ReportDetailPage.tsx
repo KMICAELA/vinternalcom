@@ -11,13 +11,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Download, ArrowLeft, RefreshCw, CheckCircle2, AlertCircle, AlertTriangle,
-  Archive, RotateCcw, FileText, Loader2, ExternalLink,
+  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
 import type { ExtractedPayload } from "@/lib/extraction/runExtractFile";
 import {
-  archiveReport, promoteReportToLive, signedReportUrl,
+  archiveReport, deleteReport, promoteReportToLive, signedReportUrl,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
 
