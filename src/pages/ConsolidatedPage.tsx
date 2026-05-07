@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2 } from "lucide-react";
 import { fmtUSD, fmtPct, fmtMultiple, fmtDate, calcDpi, calcTvpi, signClass } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtMultFull, fmtPctFull, type MetricTooltipProps } from "@/components/MetricTooltip";
+import EstimatedBadge from "@/components/EstimatedBadge";
+import { deriveTwhWithFallback } from "@/lib/twhDerivation";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import InvestorsTab from "@/components/investors/InvestorsTab";
@@ -46,12 +48,13 @@ type AggregateMetrics = {
   distributions: number;
   nav: number;
   commitment: number;
+  estimated: boolean;
 };
 
 export default function ConsolidatedPage() {
   const { selected, loading: qLoading } = useSelectedQuarter();
   const [entries, setEntries] = useState<LedgerEntry[]>([]);
-  const [agg, setAgg] = useState<AggregateMetrics>({ contributions: 0, distributions: 0, nav: 0, commitment: 0 });
+  const [agg, setAgg] = useState<AggregateMetrics>({ contributions: 0, distributions: 0, nav: 0, commitment: 0, estimated: false });
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
@@ -76,26 +79,34 @@ export default function ConsolidatedPage() {
           .order("date", { ascending: false }),
         supabase
           .from("fund_quarter_snapshots")
-          .select("twh_contributions_usd, twh_distributions_usd, twh_nav_usd")
+          .select("fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd")
           .eq("quarter_id", selected.id),
-        supabase.from("fund_commitments").select("twh_commitment_usd"),
+        supabase.from("fund_commitments").select("fund_id, twh_commitment_usd, twh_ownership_pct"),
       ]);
 
       setEntries((ledger ?? []) as LedgerEntry[]);
 
+      const pctMap = new Map((commits ?? []).map((c: any) => [c.fund_id, Number(c.twh_ownership_pct ?? 0)]));
+      let estimated = false;
       const aggregate = (snaps ?? []).reduce(
-        (a, s: any) => ({
-          contributions: a.contributions + Number(s.twh_contributions_usd ?? 0),
-          distributions: a.distributions + Number(s.twh_distributions_usd ?? 0),
-          nav: a.nav + Number(s.twh_nav_usd ?? 0),
-          commitment: a.commitment,
-        }),
-        { contributions: 0, distributions: 0, nav: 0, commitment: 0 },
+        (a, s: any) => {
+          const d = deriveTwhWithFallback(s, pctMap.get(s.fund_id) ?? 0);
+          if (d.estimated) estimated = true;
+          return {
+            contributions: a.contributions + d.contributions,
+            distributions: a.distributions + d.distributions,
+            nav: a.nav + d.nav,
+            commitment: a.commitment,
+            estimated: a.estimated,
+          };
+        },
+        { contributions: 0, distributions: 0, nav: 0, commitment: 0, estimated: false },
       );
       aggregate.commitment = (commits ?? []).reduce(
         (s: number, c: any) => s + Number(c.twh_commitment_usd ?? 0),
         0,
       );
+      aggregate.estimated = estimated;
       setAgg(aggregate);
       setLoading(false);
     })();
