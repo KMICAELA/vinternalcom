@@ -165,17 +165,17 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
       confirmed_by: (await supabase.auth.getUser()).data.user?.id ?? null,
     };
     if (isUsd) {
-      fundSnap.twh_contributions_usd = payload.twh_contributions_usd ?? 0;
-      fundSnap.twh_distributions_usd = payload.twh_distributions_usd ?? 0;
-      fundSnap.twh_nav_usd = payload.twh_nav_usd ?? 0;
-      fundSnap.fund_total_contributions_usd = payload.fund_total_contributions_usd ?? 0;
-      fundSnap.fund_total_nav_usd = payload.fund_total_nav_usd ?? 0;
+      fundSnap.twh_contributions_usd = pickUsd(payload.twh_contributions_usd, payload.twh_contributions_native) ?? 0;
+      fundSnap.twh_distributions_usd = pickUsd(payload.twh_distributions_usd, payload.twh_distributions_native) ?? 0;
+      fundSnap.twh_nav_usd = pickUsd(payload.twh_nav_usd, payload.twh_nav_native) ?? 0;
+      fundSnap.fund_total_contributions_usd = pickUsd(payload.fund_total_contributions_usd, payload.fund_total_contributions_native) ?? 0;
+      fundSnap.fund_total_nav_usd = pickUsd(payload.fund_total_nav_usd, payload.fund_total_nav_native) ?? 0;
     } else {
-      fundSnap.twh_contributions_native = payload.twh_contributions_native ?? null;
-      fundSnap.twh_distributions_native = payload.twh_distributions_native ?? null;
-      fundSnap.twh_nav_native = payload.twh_nav_native ?? null;
-      fundSnap.fund_total_contributions_native = payload.fund_total_contributions_native ?? null;
-      fundSnap.fund_total_nav_native = payload.fund_total_nav_native ?? null;
+      fundSnap.twh_contributions_native = pickNative(payload.twh_contributions_native, payload.twh_contributions_usd);
+      fundSnap.twh_distributions_native = pickNative(payload.twh_distributions_native, payload.twh_distributions_usd);
+      fundSnap.twh_nav_native = pickNative(payload.twh_nav_native, payload.twh_nav_usd);
+      fundSnap.fund_total_contributions_native = pickNative(payload.fund_total_contributions_native, payload.fund_total_contributions_usd);
+      fundSnap.fund_total_nav_native = pickNative(payload.fund_total_nav_native, payload.fund_total_nav_usd);
       // Required NOT NULL columns get 0 placeholders; trigger will overwrite if rate exists.
       fundSnap.twh_contributions_usd = 0;
       fundSnap.twh_distributions_usd = 0;
