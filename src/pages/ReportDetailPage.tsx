@@ -62,7 +62,7 @@ export default function ReportDetailPage() {
   const { role } = useAuth();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive">(null);
+  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete">(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
 
   const load = useCallback(async () => {
