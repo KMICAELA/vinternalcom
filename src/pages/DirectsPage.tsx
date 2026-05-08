@@ -238,6 +238,8 @@ export default function DirectsPage() {
         <TableCell className="text-right font-mono">{fmtUSD(g.fmv, { compact: true })}</TableCell>
         <TableCell className="text-right font-mono">{fmtUSD(g.proceeds, { compact: true })}</TableCell>
         <TableCell className={`text-right font-mono ${signClass(gain)}`}>{fmtMultiple(moic)}</TableCell>
+        <TableCell className="text-muted-foreground text-xs">{fmtHoldingPeriod(g.earliestDate)}</TableCell>
+        <TableCell><CoInvestorsCell list={Array.from(new Set((g.tranches.flatMap((t) => t.co_investors ?? []))))} /></TableCell>
         <TableCell></TableCell>
       </TableRow>
     );
