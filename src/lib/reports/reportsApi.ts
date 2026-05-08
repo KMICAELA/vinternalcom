@@ -127,6 +127,51 @@ export async function archiveReport(reportId: string, archived: boolean) {
   if (error) throw error;
 }
 
+// Re-run AI extraction against the original stored file. Updates the report's
+// extracted_payload + status. Resets committed_to_db so the user can re-promote.
+export async function reExtractReport(reportId: string): Promise<{ ok: boolean; error?: string }> {
+  const { data: rep, error } = await supabase
+    .from("reports")
+    .select("id, file_name, mime_type, storage_path, fund_id, quarter_id")
+    .eq("id", reportId)
+    .maybeSingle();
+  if (error || !rep) throw new Error(error?.message ?? "Report not found");
+
+  const dl = await supabase.storage.from(BUCKET).download(rep.storage_path);
+  if (dl.error || !dl.data) throw new Error(dl.error?.message ?? "Could not download stored file");
+
+  const file = new File([dl.data], rep.file_name, { type: rep.mime_type ?? dl.data.type });
+  const { runExtractFile } = await import("@/lib/extraction/runExtractFile");
+  const result = await runExtractFile({ file, fundId: rep.fund_id, quarterId: rep.quarter_id });
+
+  const status = classifyStatus(result.payload as any, result.error);
+  const summary = { ...buildSummary(result.payload as any), error: result.error ?? null, re_extracted_at: new Date().toISOString() };
+  const { error: updErr } = await supabase
+    .from("reports")
+    .update({
+      extracted_payload: result.payload as any,
+      extraction_status: status,
+      extraction_summary: summary,
+      committed_to_db: false,
+      committed_at: null,
+      committed_by: null,
+    })
+    .eq("id", reportId);
+  if (updErr) throw updErr;
+  return { ok: !result.error, error: result.error ?? undefined };
+}
+
+// Re-promote: clear committed_to_db then call promoteReportToLive again.
+// Useful for picking up new FX rates or schema changes after the initial promote.
+export async function rePromoteReport(reportId: string): Promise<PromoteResult> {
+  // Reset commit flag so promoteReportToLive doesn't refuse
+  await supabase
+    .from("reports")
+    .update({ committed_to_db: false, committed_at: null, committed_by: null })
+    .eq("id", reportId);
+  return promoteReportToLive(reportId);
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Promotion: write extracted_payload to live tables, stamp source_report_id
 // ─────────────────────────────────────────────────────────────────────────

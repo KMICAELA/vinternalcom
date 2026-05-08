@@ -52,6 +52,7 @@ export default function FundDetailPage() {
     selected?.id ?? null,
     fund?.native_currency ?? null,
   );
+  const [holdings, setHoldings] = useState<{ id: string; company_id: string; company: string; round: string | null; instrument: string | null; cost: number | null; fmv: number | null; status: string }[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -86,7 +87,6 @@ export default function FundDetailPage() {
 
       const allFlows: CashFlow[] = (flows ?? []).map((cf: any) => ({ date: cf.date, amount_usd: Number(cf.amount_usd) }));
 
-      // Build a row per quarter that has snapshot data, in chronological order
       const rows: HistoryRow[] = (quarters ?? [])
         .filter((q: any) => snapByQ.has(q.id))
         .map((q: any) => {
@@ -101,6 +101,31 @@ export default function FundDetailPage() {
       setLoading(false);
     })();
   }, [id]);
+
+  // Load holdings for the currently-selected quarter (separate effect so the
+  // section refreshes when the user changes the global quarter).
+  useEffect(() => {
+    if (!id || !selected?.id) { setHoldings([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("underlying_holdings")
+        .select("id, company_id, fund_cost_usd, fund_fmv_usd, round, instrument, companies(legal_name, commercial_name, status)")
+        .eq("fund_id", id)
+        .eq("quarter_id", selected.id);
+      setHoldings(
+        (data ?? []).map((h: any) => ({
+          id: h.id,
+          company_id: h.company_id,
+          company: h.companies?.commercial_name ?? h.companies?.legal_name ?? "—",
+          round: h.round ?? null,
+          instrument: h.instrument ?? null,
+          cost: h.fund_cost_usd == null ? null : Number(h.fund_cost_usd),
+          fmv: h.fund_fmv_usd == null ? null : Number(h.fund_fmv_usd),
+          status: (h.companies?.status?.trim()) || "Active",
+        })),
+      );
+    })();
+  }, [id, selected?.id]);
 
   if (loading) return <div className="p-8 text-muted-foreground">Loading…</div>;
   if (!fund) return <div className="p-8 text-muted-foreground">Fund not found.</div>;
@@ -228,6 +253,56 @@ export default function FundDetailPage() {
                     <TableCell className="text-right font-mono">{r.irr != null ? fmtPct(r.irr, 1) : "—"}</TableCell>
                   </TableRow>
                 ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      {/* Underlying holdings for the selected quarter */}
+      <Card className="bg-card border-border overflow-hidden">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-semibold">Underlying holdings</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">Portfolio companies held by this fund as of {selected?.label ?? "the selected quarter"}.</p>
+          </div>
+          <span className="text-xs text-muted-foreground">{holdings.length} {holdings.length === 1 ? "company" : "companies"}</span>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Company</TableHead>
+                <TableHead>Round</TableHead>
+                <TableHead>Instrument</TableHead>
+                <TableHead className="text-right">Cost</TableHead>
+                <TableHead className="text-right">FMV</TableHead>
+                <TableHead className="text-right">MOIC</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {holdings.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-muted-foreground py-12 text-center">No holdings recorded for this quarter.</TableCell></TableRow>
+              ) : (
+                [...holdings]
+                  .sort((a, b) => (b.fmv ?? 0) - (a.fmv ?? 0))
+                  .map((h) => {
+                    const moic = h.cost && h.cost > 0 && h.fmv != null ? h.fmv / h.cost : null;
+                    return (
+                      <TableRow key={h.id} className="table-row-hover">
+                        <TableCell className="font-medium">
+                          <Link to={`/portfolio?company=${h.company_id}`} className="hover:underline">{h.company}</Link>
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{h.round ?? "—"}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{h.instrument ?? "—"}</TableCell>
+                        <TableCell className="text-right font-mono text-muted-foreground">{h.cost == null ? "—" : fmtUSD(h.cost, { compact: true })}</TableCell>
+                        <TableCell className="text-right font-mono">{h.fmv == null ? "—" : fmtUSD(h.fmv, { compact: true })}</TableCell>
+                        <TableCell className="text-right font-mono">{fmtMultiple(moic)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{h.status}</TableCell>
+                      </TableRow>
+                    );
+                  })
               )}
             </TableBody>
           </Table>

@@ -3,10 +3,12 @@ import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CheckCircle2, CornerDownRight, AlertTriangle } from "lucide-react";
-import { fmtUSD, fmtMultiple, calcMoic, signClass } from "@/lib/format";
+import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { fmtUSD, fmtMultiple, fmtPct, calcMoic, signClass } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 import { FxBadge } from "@/components/FxBadge";
 import { useFundFxRate } from "@/lib/fx/useFundFxRate";
@@ -24,30 +26,25 @@ type Row = {
   fmv: number | null;
   proceeds: number | null;
   twh_pct: number;
+  status: string;
 };
+
+const ROUND_OPTIONS = ["Pre-Seed", "Seed", "Series A", "Series B", "Series C", "Series D", "Series E", "SAFE"];
 
 function FxCell({ fundId, quarterId, currency }: { fundId: string; quarterId: string; currency: string }) {
   const { rate, updaterName } = useFundFxRate(fundId, quarterId, currency);
   return <FxBadge rate={rate} fromCurrency={currency} updaterName={updaterName} />;
 }
 
-// Render NULL → "—" (TBD), not $0. $0 is meaningful (write-off) and stays formatted.
 const fmtUsdOrTbd = (v: number | null, opts?: { compact?: boolean }) =>
   v === null ? "—" : fmtUSD(v, opts);
-
-// Multiply respects null (TBD) — null * anything = null
 const mulOrNull = (v: number | null, m: number): number | null => (v === null ? null : v * m);
 
 function ConfidenceIcon({ row }: { row: Row }) {
-  // Confidence derived on read since it's not persisted in DB.
-  // - needs_review: any TBD field → manual confirmation required
-  // - confirmed:    all required fields populated
   const hasTbd = row.cost === null || row.fmv === null;
   const Icon = hasTbd ? AlertTriangle : CheckCircle2;
   const tone = hasTbd ? "text-amber-400" : "text-emerald-500/80";
-  const label = hasTbd
-    ? "Needs review — cost or FMV not yet recorded"
-    : "Confirmed value";
+  const label = hasTbd ? "Needs review — cost or FMV not yet recorded" : "Confirmed value";
   return (
     <TooltipProvider delayDuration={150}>
       <Tooltip>
@@ -60,11 +57,23 @@ function ConfidenceIcon({ row }: { row: Row }) {
   );
 }
 
+function StatusBadge({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  const cls =
+    s.includes("exit") || s.includes("realiz") ? "text-blue-400 border-blue-400/30"
+    : s.includes("written") || s.includes("write") ? "text-destructive border-destructive/30"
+    : "text-emerald-400 border-emerald-400/30";
+  return <Badge variant="outline" className={`text-[10px] ${cls}`}>{status}</Badge>;
+}
+
 export default function UnderlyingPortfolioPage() {
   const { selected, loading: qLoading } = useSelectedQuarter();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [fundFilter, setFundFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [roundFilter, setRoundFilter] = useState("all");
 
   useEffect(() => {
     if (!selected) return;
@@ -73,7 +82,7 @@ export default function UnderlyingPortfolioPage() {
       const [{ data: holdings }, { data: commits }] = await Promise.all([
         supabase
           .from("underlying_holdings")
-          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, funds(name, short_name), companies(legal_name, commercial_name)")
+          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, funds(name, short_name), companies(legal_name, commercial_name, status)")
           .eq("quarter_id", selected.id),
         supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
@@ -91,22 +100,39 @@ export default function UnderlyingPortfolioPage() {
         fmv: h.fund_fmv_usd == null ? null : Number(h.fund_fmv_usd),
         proceeds: h.fund_proceeds_usd == null ? null : Number(h.fund_proceeds_usd),
         twh_pct: pctMap.get(h.fund_id) ?? 0,
+        status: h.companies?.status?.trim() || "Active",
       }));
       setRows(out);
       setLoading(false);
     })();
   }, [selected]);
 
+  const fundOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    rows.forEach((r) => m.set(r.fund_id, r.fund));
+    return Array.from(m.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
+
+  const statusOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.status))).sort(),
+    [rows]
+  );
+
   const filtered = useMemo(() => {
     const f = filter.trim().toLowerCase();
-    const list = !f ? rows : rows.filter((r) => r.company.toLowerCase().includes(f) || r.fund.toLowerCase().includes(f));
-    // Sort by FMV desc; nulls last
+    const list = rows.filter((r) => {
+      if (fundFilter !== "all" && r.fund_id !== fundFilter) return false;
+      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (roundFilter !== "all" && (r.round ?? "") !== roundFilter) return false;
+      if (f && !r.company.toLowerCase().includes(f) && !r.fund.toLowerCase().includes(f)) return false;
+      return true;
+    });
     return [...list].sort((a, b) => {
       const av = a.fmv === null ? -Infinity : a.fmv * a.twh_pct;
       const bv = b.fmv === null ? -Infinity : b.fmv * b.twh_pct;
       return bv - av;
     });
-  }, [rows, filter]);
+  }, [rows, filter, fundFilter, statusFilter, roundFilter]);
 
   const totals = filtered.reduce(
     (a, r) => ({
@@ -128,12 +154,35 @@ export default function UnderlyingPortfolioPage() {
             {filtered.length} holdings · {selected.label} · TWH-attributed values shown
           </p>
         </div>
-        <Input
-          placeholder="Filter by company or fund…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          className="max-w-xs"
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          <Input
+            placeholder="Search…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="max-w-[200px] h-9"
+          />
+          <Select value={fundFilter} onValueChange={setFundFilter}>
+            <SelectTrigger className="w-40 h-9 text-xs"><SelectValue placeholder="Fund" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All funds</SelectItem>
+              {fundOptions.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-36 h-9 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              {statusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={roundFilter} onValueChange={setRoundFilter}>
+            <SelectTrigger className="w-36 h-9 text-xs"><SelectValue placeholder="Round" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All rounds</SelectItem>
+              {ROUND_OPTIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <Card className="bg-card border-border overflow-hidden">
@@ -144,8 +193,10 @@ export default function UnderlyingPortfolioPage() {
                 <TableHead className="w-8"></TableHead>
                 <TableHead>Company</TableHead>
                 <TableHead>Fund</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead>Round</TableHead>
                 <TableHead>Instrument</TableHead>
+                <TableHead className="text-right">TWH %</TableHead>
                 <TableHead className="text-right">Fund Cost</TableHead>
                 <TableHead className="text-right">Fund FMV</TableHead>
                 <TableHead className="text-right">TWH Cost</TableHead>
@@ -155,9 +206,9 @@ export default function UnderlyingPortfolioPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">No holdings</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">No holdings</TableCell></TableRow>
               ) : (
                 <>
                   {filtered.map((r) => {
@@ -173,6 +224,7 @@ export default function UnderlyingPortfolioPage() {
                             <FxCell fundId={r.fund_id} quarterId={selected.id} currency={r.currency} />
                           )}
                         </TableCell>
+                        <TableCell><StatusBadge status={r.status} /></TableCell>
                         <TableCell className="text-xs">
                           <span className="text-muted-foreground">{r.round ?? "—"}</span>
                           {r.round_detail && (
@@ -180,21 +232,14 @@ export default function UnderlyingPortfolioPage() {
                           )}
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">{r.instrument ?? "—"}</TableCell>
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground">{fmtPct(r.twh_pct, 2)}</TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">
-                          <MetricTooltip
-                            kind="input"
-                            title="Fund Cost"
-                            source={`GP financial statement for ${r.fund}`}
-                          >
+                          <MetricTooltip kind="input" title="Fund Cost" source={`GP financial statement for ${r.fund}`}>
                             {fmtUsdOrTbd(r.cost, { compact: true })}
                           </MetricTooltip>
                         </TableCell>
                         <TableCell className="text-right font-mono text-muted-foreground">
-                          <MetricTooltip
-                            kind="input"
-                            title="Fund FMV"
-                            source={`GP financial statement for ${r.fund}`}
-                          >
+                          <MetricTooltip kind="input" title="Fund FMV" source={`GP financial statement for ${r.fund}`}>
                             {fmtUsdOrTbd(r.fmv, { compact: true })}
                           </MetricTooltip>
                         </TableCell>
@@ -255,7 +300,7 @@ export default function UnderlyingPortfolioPage() {
                   })}
                   <TableRow className="border-t-2 border-border font-semibold">
                     <TableCell></TableCell>
-                    <TableCell colSpan={6}>TWH Total</TableCell>
+                    <TableCell colSpan={8}>TWH Total</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.twh_cost, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.twh_fmv, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtMultiple(calcMoic(totals.twh_cost, totals.twh_fmv, totals.twh_proceeds))}</TableCell>

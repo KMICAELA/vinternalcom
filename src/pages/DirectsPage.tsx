@@ -6,7 +6,35 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, signClass } from "@/lib/format";
+
+// Format a holding period given the earliest investment date.
+function fmtHoldingPeriod(earliest: string | null): string {
+  if (!earliest) return "—";
+  const start = new Date(earliest);
+  if (isNaN(start.getTime())) return "—";
+  const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86_400_000));
+  if (days < 90) return `${days} days`;
+  if (days < 365) return `${Math.round(days / 30)} months`;
+  return `${(days / 365).toFixed(1)} years`;
+}
+
+function CoInvestorsCell({ list }: { list: string[] | null }) {
+  const items = (list ?? []).filter(Boolean);
+  if (items.length === 0) return <span className="text-muted-foreground">—</span>;
+  const text = items.join(", ");
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="block max-w-[200px] truncate text-xs text-muted-foreground cursor-default">{text}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs max-w-[320px] whitespace-normal">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 import MetricTooltip, { fmtUsdFull, fmtMultFull } from "@/components/MetricTooltip";
 import DirectFormDialog, { type DirectEditRow } from "@/components/DirectFormDialog";
 import { cn } from "@/lib/utils";
@@ -176,6 +204,10 @@ export default function DirectsPage() {
             {fmtMultiple(moic)}
           </MetricTooltip>
         </TableCell>
+        <TableCell className="text-muted-foreground text-xs">
+          {isSub ? "" : fmtHoldingPeriod(r.investment_date)}
+        </TableCell>
+        <TableCell><CoInvestorsCell list={r.co_investors} /></TableCell>
         <TableCell className="text-right">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(r); }}>
             <Pencil className="h-3.5 w-3.5" />
@@ -206,6 +238,8 @@ export default function DirectsPage() {
         <TableCell className="text-right font-mono">{fmtUSD(g.fmv, { compact: true })}</TableCell>
         <TableCell className="text-right font-mono">{fmtUSD(g.proceeds, { compact: true })}</TableCell>
         <TableCell className={`text-right font-mono ${signClass(gain)}`}>{fmtMultiple(moic)}</TableCell>
+        <TableCell className="text-muted-foreground text-xs">{fmtHoldingPeriod(g.earliestDate)}</TableCell>
+        <TableCell><CoInvestorsCell list={Array.from(new Set((g.tranches.flatMap((t) => t.co_investors ?? []))))} /></TableCell>
         <TableCell></TableCell>
       </TableRow>
     );
@@ -237,14 +271,16 @@ export default function DirectsPage() {
                 <TableHead className="text-right">FMV</TableHead>
                 <TableHead className="text-right">Proceeds</TableHead>
                 <TableHead className="text-right">MOIC</TableHead>
+                <TableHead>Holding period</TableHead>
+                <TableHead>Co-investors</TableHead>
                 <TableHead className="text-right w-16"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : groups.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">No directs in this quarter</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">No directs in this quarter</TableCell></TableRow>
               ) : (
                 <>
                   {groups.flatMap((g) => {
@@ -260,7 +296,7 @@ export default function DirectsPage() {
                     <TableCell className="text-right font-mono">{fmtUSD(totals.fmv, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.proceeds, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtMultiple(totalMoic)}</TableCell>
-                    <TableCell></TableCell>
+                    <TableCell colSpan={3}></TableCell>
                   </TableRow>
                 </>
               )}
