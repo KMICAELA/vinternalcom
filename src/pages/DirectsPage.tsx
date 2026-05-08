@@ -6,7 +6,35 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, signClass } from "@/lib/format";
+
+// Format a holding period given the earliest investment date.
+function fmtHoldingPeriod(earliest: string | null): string {
+  if (!earliest) return "—";
+  const start = new Date(earliest);
+  if (isNaN(start.getTime())) return "—";
+  const days = Math.max(0, Math.floor((Date.now() - start.getTime()) / 86_400_000));
+  if (days < 90) return `${days} days`;
+  if (days < 365) return `${Math.round(days / 30)} months`;
+  return `${(days / 365).toFixed(1)} years`;
+}
+
+function CoInvestorsCell({ list }: { list: string[] | null }) {
+  const items = (list ?? []).filter(Boolean);
+  if (items.length === 0) return <span className="text-muted-foreground">—</span>;
+  const text = items.join(", ");
+  return (
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="block max-w-[200px] truncate text-xs text-muted-foreground cursor-default">{text}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs max-w-[320px] whitespace-normal">{text}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
 import MetricTooltip, { fmtUsdFull, fmtMultFull } from "@/components/MetricTooltip";
 import DirectFormDialog, { type DirectEditRow } from "@/components/DirectFormDialog";
 import { cn } from "@/lib/utils";
