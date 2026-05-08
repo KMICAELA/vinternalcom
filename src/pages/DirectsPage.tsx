@@ -204,6 +204,10 @@ export default function DirectsPage() {
             {fmtMultiple(moic)}
           </MetricTooltip>
         </TableCell>
+        <TableCell className="text-muted-foreground text-xs">
+          {isSub ? "" : fmtHoldingPeriod(r.investment_date)}
+        </TableCell>
+        <TableCell><CoInvestorsCell list={r.co_investors} /></TableCell>
         <TableCell className="text-right">
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); openEdit(r); }}>
             <Pencil className="h-3.5 w-3.5" />
