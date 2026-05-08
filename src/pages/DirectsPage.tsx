@@ -278,9 +278,9 @@ export default function DirectsPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : groups.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-muted-foreground py-12 text-center">No directs in this quarter</TableCell></TableRow>
+                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">No directs in this quarter</TableCell></TableRow>
               ) : (
                 <>
                   {groups.flatMap((g) => {
@@ -296,7 +296,7 @@ export default function DirectsPage() {
                     <TableCell className="text-right font-mono">{fmtUSD(totals.fmv, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.proceeds, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtMultiple(totalMoic)}</TableCell>
-                    <TableCell></TableCell>
+                    <TableCell colSpan={3}></TableCell>
                   </TableRow>
                 </>
               )}
