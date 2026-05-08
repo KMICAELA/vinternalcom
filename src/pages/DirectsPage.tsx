@@ -271,6 +271,8 @@ export default function DirectsPage() {
                 <TableHead className="text-right">FMV</TableHead>
                 <TableHead className="text-right">Proceeds</TableHead>
                 <TableHead className="text-right">MOIC</TableHead>
+                <TableHead>Holding period</TableHead>
+                <TableHead>Co-investors</TableHead>
                 <TableHead className="text-right w-16"></TableHead>
               </TableRow>
             </TableHeader>
