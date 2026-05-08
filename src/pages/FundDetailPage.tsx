@@ -52,6 +52,7 @@ export default function FundDetailPage() {
     selected?.id ?? null,
     fund?.native_currency ?? null,
   );
+  const [holdings, setHoldings] = useState<{ id: string; company_id: string; company: string; round: string | null; instrument: string | null; cost: number | null; fmv: number | null; status: string }[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -86,7 +87,6 @@ export default function FundDetailPage() {
 
       const allFlows: CashFlow[] = (flows ?? []).map((cf: any) => ({ date: cf.date, amount_usd: Number(cf.amount_usd) }));
 
-      // Build a row per quarter that has snapshot data, in chronological order
       const rows: HistoryRow[] = (quarters ?? [])
         .filter((q: any) => snapByQ.has(q.id))
         .map((q: any) => {
@@ -101,6 +101,31 @@ export default function FundDetailPage() {
       setLoading(false);
     })();
   }, [id]);
+
+  // Load holdings for the currently-selected quarter (separate effect so the
+  // section refreshes when the user changes the global quarter).
+  useEffect(() => {
+    if (!id || !selected?.id) { setHoldings([]); return; }
+    (async () => {
+      const { data } = await supabase
+        .from("underlying_holdings")
+        .select("id, company_id, fund_cost_usd, fund_fmv_usd, round, instrument, companies(legal_name, commercial_name, status)")
+        .eq("fund_id", id)
+        .eq("quarter_id", selected.id);
+      setHoldings(
+        (data ?? []).map((h: any) => ({
+          id: h.id,
+          company_id: h.company_id,
+          company: h.companies?.commercial_name ?? h.companies?.legal_name ?? "—",
+          round: h.round ?? null,
+          instrument: h.instrument ?? null,
+          cost: h.fund_cost_usd == null ? null : Number(h.fund_cost_usd),
+          fmv: h.fund_fmv_usd == null ? null : Number(h.fund_fmv_usd),
+          status: (h.companies?.status?.trim()) || "Active",
+        })),
+      );
+    })();
+  }, [id, selected?.id]);
 
   if (loading) return <div className="p-8 text-muted-foreground">Loading…</div>;
   if (!fund) return <div className="p-8 text-muted-foreground">Fund not found.</div>;
