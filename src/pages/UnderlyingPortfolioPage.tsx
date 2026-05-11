@@ -313,6 +313,25 @@ export default function UnderlyingPortfolioPage() {
     />
   );
 
+  const colFilterSelect = (
+    value: string,
+    setValue: (v: string) => void,
+    options: string[],
+    allLabel: string,
+  ) => (
+    <Select value={value} onValueChange={setValue}>
+      <SelectTrigger className="h-7 text-xs font-normal mt-1">
+        <SelectValue placeholder={allLabel} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">{allLabel}</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>{o}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-end justify-between gap-4 flex-wrap">
