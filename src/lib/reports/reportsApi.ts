@@ -620,3 +620,332 @@ export async function computeReportDiffs(reportId: string): Promise<ComputeDiffs
 
   return result;
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// PR #3b: Apply approved diffs to live tables.
+//
+// Decisions shape: { [diffId]: { approved: bool, resolution?: string, mergeTargetDiffId?: string } }
+//   - For change_type='missing', resolution must be one of:
+//       'exit' | 'divest' | 'extraction_error' | 'gp_omission'  → soft-delete
+//       'keep'                                                  → no-op
+//       'renamed' | 'merged'                                    → rewrite company_id
+//         (mergeTargetDiffId points at the corresponding 'add' diff row)
+//   - For 'add' diffs that get consumed by a renamed/merged decision, mark them
+//     as 'edited' (not inserted as new holding).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const RESOLUTION_REASONS = [
+  "keep",
+  "renamed",
+  "merged",
+  "exit",
+  "divest",
+  "extraction_error",
+  "gp_omission",
+] as const;
+export type ResolutionReason = (typeof RESOLUTION_REASONS)[number];
+const SOFT_DELETE_REASONS: ResolutionReason[] = ["exit", "divest", "extraction_error", "gp_omission"];
+
+export type DiffDecision = {
+  approved: boolean;
+  resolution?: ResolutionReason;
+  mergeTargetDiffId?: string; // points at the 'add' diff row to merge into
+};
+
+export type ApplyDiffsResult = {
+  fund_level_applied: number;
+  updates_applied: number;
+  adds_applied: number;
+  missing_soft_deleted: number;
+  missing_renamed: number;
+  missing_kept: number;
+  rejected: number;
+  errors: string[];
+};
+
+async function lookupOrCreateCompany(name: string): Promise<string | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const { data: existing } = await supabase
+    .from("companies")
+    .select("id")
+    .or(`commercial_name.ilike.${trimmed},legal_name.ilike.${trimmed}`)
+    .limit(1)
+    .maybeSingle();
+  if (existing?.id) return existing.id;
+  const { data: created, error } = await supabase
+    .from("companies")
+    .insert({ legal_name: trimmed, commercial_name: trimmed })
+    .select("id")
+    .single();
+  if (error || !created) return null;
+  return created.id;
+}
+
+export async function applyApprovedDiffs(
+  reportId: string,
+  decisions: Record<string, DiffDecision>,
+): Promise<ApplyDiffsResult> {
+  const result: ApplyDiffsResult = {
+    fund_level_applied: 0,
+    updates_applied: 0,
+    adds_applied: 0,
+    missing_soft_deleted: 0,
+    missing_renamed: 0,
+    missing_kept: 0,
+    rejected: 0,
+    errors: [],
+  };
+
+  const { data: report } = await supabase
+    .from("reports")
+    .select("id, fund_id, quarter_id, extracted_payload")
+    .eq("id", reportId)
+    .maybeSingle();
+  if (!report?.fund_id || !report?.quarter_id) throw new Error("Report missing fund/quarter");
+
+  const payload = report.extracted_payload as ExtractedPayload | null;
+  const isUsd = !payload?.currency || payload.currency.toUpperCase() === "USD";
+  const currency = isUsd ? "USD" : payload!.currency!.toUpperCase();
+
+  const { data: diffs } = await supabase
+    .from("report_diffs")
+    .select("*")
+    .eq("report_id", reportId)
+    .eq("status", "pending");
+  if (!diffs?.length) return result;
+
+  const byId = new Map(diffs.map((d: any) => [d.id, d]));
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id ?? null;
+
+  // Track which 'add' diffs are consumed by a rename/merge so we don't double-process.
+  const consumedAddIds = new Set<string>();
+  for (const [diffId, dec] of Object.entries(decisions)) {
+    if (dec.approved && dec.mergeTargetDiffId && (dec.resolution === "renamed" || dec.resolution === "merged")) {
+      consumedAddIds.add(dec.mergeTargetDiffId);
+    }
+  }
+
+  // Process in deterministic order: fund_level → update → missing(rename/merge first) → add → missing(soft-delete/keep)
+  const ordered = [...diffs].sort((a: any, b: any) => {
+    const order: Record<string, number> = { fund_level: 0, update: 1, missing: 2, add: 3 };
+    return (order[a.change_type] ?? 9) - (order[b.change_type] ?? 9);
+  });
+
+  // Build fund_snapshot patch from all approved fund_level diffs
+  const fundPatch: Record<string, any> = {};
+  let hasFundPatch = false;
+
+  for (const d of ordered) {
+    const dec = decisions[d.id];
+    if (!dec) continue;
+
+    if (!dec.approved) {
+      await supabase
+        .from("report_diffs")
+        .update({ status: "rejected", reviewed_at: new Date().toISOString(), reviewed_by: userId })
+        .eq("id", d.id);
+      result.rejected += 1;
+      continue;
+    }
+
+    try {
+      if (d.change_type === "fund_level") {
+        if (d.field_name) {
+          fundPatch[d.field_name] = d.new_value;
+          hasFundPatch = true;
+        }
+        await supabase
+          .from("report_diffs")
+          .update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: userId })
+          .eq("id", d.id);
+        result.fund_level_applied += 1;
+      } else if (d.change_type === "update") {
+        const patch: Record<string, any> = {
+          ...(d.new_value as Record<string, any>),
+          source_report_id: reportId,
+          updated_at: new Date().toISOString(),
+        };
+        const { error } = await supabase
+          .from("underlying_holdings")
+          .update(patch)
+          .eq("id", d.holding_id);
+        if (error) throw error;
+        await supabase
+          .from("report_diffs")
+          .update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: userId })
+          .eq("id", d.id);
+        result.updates_applied += 1;
+      } else if (d.change_type === "missing") {
+        const reason = dec.resolution;
+        if (!reason) throw new Error(`missing diff ${d.id} requires a resolution`);
+
+        if (reason === "keep") {
+          await supabase
+            .from("report_diffs")
+            .update({
+              status: "approved",
+              resolution_reason: "keep",
+              reviewed_at: new Date().toISOString(),
+              reviewed_by: userId,
+            })
+            .eq("id", d.id);
+          result.missing_kept += 1;
+        } else if (reason === "renamed" || reason === "merged") {
+          const target = dec.mergeTargetDiffId ? byId.get(dec.mergeTargetDiffId) : null;
+          if (!target || target.change_type !== "add") {
+            throw new Error(`renamed/merged needs a target 'add' diff`);
+          }
+          // Resolve company for the target name
+          const newCompanyId = await lookupOrCreateCompany(target.proposed_company_name ?? "");
+          if (!newCompanyId) throw new Error(`could not resolve company "${target.proposed_company_name}"`);
+
+          const targetVals = (target.new_value ?? {}) as Record<string, any>;
+          const patch: Record<string, any> = {
+            company_id: newCompanyId,
+            ...targetVals,
+            source_report_id: reportId,
+            updated_at: new Date().toISOString(),
+          };
+          const { error } = await supabase
+            .from("underlying_holdings")
+            .update(patch)
+            .eq("id", d.holding_id);
+          if (error) throw error;
+
+          await supabase
+            .from("report_diffs")
+            .update({
+              status: "approved",
+              resolution_reason: reason,
+              reviewed_at: new Date().toISOString(),
+              reviewed_by: userId,
+            })
+            .eq("id", d.id);
+          // Mark the consumed add diff as edited (not inserted as a new holding)
+          await supabase
+            .from("report_diffs")
+            .update({
+              status: "approved",
+              resolution_reason: `consumed_by_${reason}`,
+              reviewed_at: new Date().toISOString(),
+              reviewed_by: userId,
+            })
+            .eq("id", target.id);
+          result.missing_renamed += 1;
+        } else if (SOFT_DELETE_REASONS.includes(reason)) {
+          // Snapshot before for audit
+          const { data: before } = await supabase
+            .from("underlying_holdings")
+            .select("*")
+            .eq("id", d.holding_id)
+            .maybeSingle();
+
+          const { error } = await supabase
+            .from("underlying_holdings")
+            .update({
+              removed_at: new Date().toISOString(),
+              removed_reason: reason,
+              removed_by: userId,
+            })
+            .eq("id", d.holding_id);
+          if (error) throw error;
+
+          await supabase.from("audit_log").insert({
+            action: "soft_delete_holding",
+            entity: "underlying_holdings",
+            entity_id: d.holding_id,
+            actor_id: userId,
+            before: before as any,
+            after: { removed_reason: reason, source_report_id: reportId } as any,
+          });
+
+          await supabase
+            .from("report_diffs")
+            .update({
+              status: "approved",
+              resolution_reason: reason,
+              reviewed_at: new Date().toISOString(),
+              reviewed_by: userId,
+            })
+            .eq("id", d.id);
+          result.missing_soft_deleted += 1;
+        } else {
+          throw new Error(`unknown resolution "${reason}"`);
+        }
+      } else if (d.change_type === "add") {
+        if (consumedAddIds.has(d.id)) continue; // already processed via missing rename/merge
+        const companyId = await lookupOrCreateCompany(d.proposed_company_name ?? "");
+        if (!companyId) throw new Error(`could not resolve company "${d.proposed_company_name}"`);
+
+        const proposed = (d.new_value ?? {}) as Record<string, any>;
+        const insertRow: Record<string, any> = {
+          fund_id: report.fund_id,
+          quarter_id: report.quarter_id,
+          company_id: companyId,
+          currency,
+          source_report_id: reportId,
+          ...proposed,
+        };
+        const { error } = await supabase.from("underlying_holdings").insert(insertRow);
+        if (error) throw error;
+
+        await supabase
+          .from("report_diffs")
+          .update({ status: "approved", reviewed_at: new Date().toISOString(), reviewed_by: userId })
+          .eq("id", d.id);
+        result.adds_applied += 1;
+      }
+    } catch (e: any) {
+      result.errors.push(`${d.change_type} ${d.proposed_company_name ?? d.field_name ?? d.id}: ${e?.message ?? e}`);
+    }
+  }
+
+  // Apply consolidated fund-level patch
+  if (hasFundPatch) {
+    const upsertRow: Record<string, any> = {
+      fund_id: report.fund_id,
+      quarter_id: report.quarter_id,
+      currency,
+      source_report_id: reportId,
+      ...fundPatch,
+    };
+    const { error } = await supabase
+      .from("fund_quarter_snapshots")
+      .upsert(upsertRow, { onConflict: "fund_id,quarter_id" });
+    if (error) result.errors.push(`fund_snapshot upsert: ${error.message}`);
+  }
+
+  // Flip report status if all diffs resolved
+  const { data: remaining } = await supabase
+    .from("report_diffs")
+    .select("id")
+    .eq("report_id", reportId)
+    .eq("status", "pending");
+  if ((remaining?.length ?? 0) === 0) {
+    await supabase
+      .from("reports")
+      .update({
+        diff_status: "approved",
+        committed_to_db: true,
+        committed_at: new Date().toISOString(),
+        committed_by: userId,
+      })
+      .eq("id", reportId);
+  }
+
+  return result;
+}
+
+// Token-Jaccard similarity on normalized names. Used for "did you mean renamed?"
+// suggestions in the diff review UI when a missing row + an add row look related.
+export function nameSimilarity(a: string, b: string): number {
+  const ta = new Set(normalizeName(a).split(" ").filter(Boolean));
+  const tb = new Set(normalizeName(b).split(" ").filter(Boolean));
+  if (ta.size === 0 || tb.size === 0) return 0;
+  let inter = 0;
+  for (const t of ta) if (tb.has(t)) inter += 1;
+  const union = new Set([...ta, ...tb]).size;
+  return inter / union;
+}
