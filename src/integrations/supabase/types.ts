@@ -1239,6 +1239,9 @@ export type Database = {
           moic: number | null
           needs_review: boolean
           quarter_id: string
+          removed_at: string | null
+          removed_by: string | null
+          removed_reason: string | null
           review_reason: string | null
           round: string | null
           round_detail: string | null
@@ -1271,6 +1274,9 @@ export type Database = {
           moic?: number | null
           needs_review?: boolean
           quarter_id: string
+          removed_at?: string | null
+          removed_by?: string | null
+          removed_reason?: string | null
           review_reason?: string | null
           round?: string | null
           round_detail?: string | null
@@ -1303,6 +1309,9 @@ export type Database = {
           moic?: number | null
           needs_review?: boolean
           quarter_id?: string
+          removed_at?: string | null
+          removed_by?: string | null
+          removed_reason?: string | null
           review_reason?: string | null
           round?: string | null
           round_detail?: string | null
