@@ -498,6 +498,28 @@ If the source uses "SAFE" or "Common Stock" as a round label, put it in
 instrument and leave round null.
 
 ═══════════════════════════════════════════════════════════════════════
+FUND-LEVEL TOTAL MAPPINGS (CRITICAL — populate from SoI footer rows)
+═══════════════════════════════════════════════════════════════════════
+
+Many LP letters print fund-level totals as the LAST row of the Schedule of
+Investments table (a "Total" row summing the columns above). Map them as:
+
+  • fund_total_nav_native ← any of:
+      "Total Carrying Value", "Total Fair Value", "Total NAV",
+      "Net Asset Value", "Total Investment Value", "Total FMV",
+      "Total Market Value", "Aggregate Carrying Value"
+  • fund_total_contributions_native ← any of:
+      "Total Invested", "Total Cost", "Total Capital Deployed",
+      "Total Capital Called", "Total Contributions", "Aggregate Cost"
+
+If total contributions is NOT explicitly stated in the document, leave
+fund_total_contributions_native = null. Do NOT guess, do NOT sum holdings'
+costs to fabricate a contributions total.
+
+The "Total" footer row of an SoI table is NOT a holding — never include it
+in holdings[].
+
+═══════════════════════════════════════════════════════════════════════
 GENERAL RULES
 ═══════════════════════════════════════════════════════════════════════
 
