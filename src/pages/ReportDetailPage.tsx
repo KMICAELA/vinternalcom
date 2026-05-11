@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
 import type { ExtractedPayload } from "@/lib/extraction/runExtractFile";
 import {
-  archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs,
+  archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs, normalizeName,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -509,6 +509,9 @@ export default function ReportDetailPage() {
         )}
       </Card>
 
+      {/* (b.5) DEBUG: staged diff rows — temporary panel for matcher inspection */}
+      {isAdmin && <DiffDebugPanel reportId={report.id} payload={payload} fundId={report.fund_id} quarterId={report.quarter_id} />}
+
       {/* (c) Actions */}
       {isAdmin && (
         <Card className="bg-card border-border p-5">
@@ -577,6 +580,147 @@ export default function ReportDetailPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+// ─── DEBUG: temporary panel listing every staged diff row in plain text. ─────
+// Shows change_type, the company name pulled from old_value/new_value (or the
+// proposed_company_name fallback), field_name, and the normalized form used by
+// the matcher — so reviewers can see exactly which rows matched vs. fell into
+// "missing"/"add" buckets and why.
+function DiffDebugPanel({
+  reportId, payload, fundId, quarterId,
+}: {
+  reportId: string;
+  payload: ExtractedPayload | null;
+  fundId: string | null;
+  quarterId: string | null;
+}) {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<any[] | null>(null);
+  const [existingNames, setExistingNames] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const [{ data: diffs }, { data: holdings }] = await Promise.all([
+      supabase.from("report_diffs").select("*").eq("report_id", reportId).order("change_type"),
+      fundId && quarterId
+        ? supabase.from("underlying_holdings")
+            .select("companies:company_id(commercial_name, legal_name)")
+            .eq("fund_id", fundId).eq("quarter_id", quarterId)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    setRows(diffs ?? []);
+    setExistingNames(
+      (holdings ?? []).map((h: any) =>
+        h.companies?.commercial_name ?? h.companies?.legal_name ?? "(no name)",
+      ),
+    );
+    setLoading(false);
+  }, [reportId, fundId, quarterId]);
+
+  useEffect(() => { if (open) refresh(); }, [open, refresh]);
+
+  const incomingNames = (payload?.holdings ?? []).map((h: any) => h.company_name ?? "");
+
+  function nameFor(row: any): string {
+    return (
+      row.proposed_company_name ??
+      row.new_value?.company_name ??
+      row.old_value?.company_name ??
+      "—"
+    );
+  }
+
+  const counts = (rows ?? []).reduce<Record<string, number>>((acc, r) => {
+    acc[r.change_type] = (acc[r.change_type] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  return (
+    <Card className="bg-card border-amber-400/30 p-5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between text-left"
+      >
+        <h2 className="text-sm font-semibold flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-amber-400" />
+          Diff debug (matcher inspection)
+        </h2>
+        <span className="text-[11px] text-muted-foreground">
+          {open ? "Hide" : "Show"} · {rows?.length ?? "?"} staged rows
+        </span>
+      </button>
+      {open && (
+        <div className="mt-4 space-y-4 text-xs">
+          <div className="flex gap-2">
+            <Button onClick={refresh} variant="outline" size="sm" disabled={loading} className="h-7 text-[11px] gap-1">
+              {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+              Refresh
+            </Button>
+            <span className="text-muted-foreground self-center">
+              {Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(" · ") || "no rows yet"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="text-[10px] uppercase text-muted-foreground mb-1">
+                Incoming payload ({incomingNames.length})
+              </div>
+              <div className="bg-muted/30 p-2 rounded font-mono space-y-0.5 max-h-64 overflow-auto">
+                {incomingNames.map((n, i) => (
+                  <div key={i} className="leading-tight">
+                    <span className="text-foreground">{n || "(blank)"}</span>{" "}
+                    <span className="text-muted-foreground">→ {normalizeName(n) || "—"}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase text-muted-foreground mb-1">
+                Existing live holdings ({existingNames.length})
+              </div>
+              <div className="bg-muted/30 p-2 rounded font-mono space-y-0.5 max-h-64 overflow-auto">
+                {existingNames.map((n, i) => (
+                  <div key={i} className="leading-tight">
+                    <span className="text-foreground">{n}</span>{" "}
+                    <span className="text-muted-foreground">→ {normalizeName(n)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-[10px] uppercase text-muted-foreground mb-1">Staged diff rows</div>
+            <div className="bg-muted/30 p-2 rounded font-mono space-y-1 max-h-96 overflow-auto">
+              {(rows ?? []).length === 0 && (
+                <div className="text-muted-foreground">No staged diff rows. Click "Compute diffs" first.</div>
+              )}
+              {(rows ?? []).map((r) => {
+                const n = nameFor(r);
+                const color =
+                  r.change_type === "missing" ? "text-amber-400"
+                  : r.change_type === "add" ? "text-emerald-400"
+                  : r.change_type === "update" ? "text-sky-400"
+                  : "text-muted-foreground";
+                return (
+                  <div key={r.id} className="leading-tight">
+                    <span className={color}>[{r.change_type}]</span>{" "}
+                    <span className="text-foreground">{n}</span>
+                    {r.field_name && <span className="text-muted-foreground"> · {r.field_name}</span>}
+                    <span className="text-muted-foreground"> · norm="{normalizeName(n)}"</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
   );
 }
 

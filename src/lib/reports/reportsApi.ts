@@ -401,8 +401,22 @@ function scalarEqual(a: unknown, b: unknown): boolean {
   return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 }
 
-function normalizeName(s: string | null | undefined): string {
-  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+// Strips punctuation, corporate suffixes, and collapses whitespace so that
+// "Castelion Co.", "Castelion, Inc.", and "castelion" all collapse to "castelion".
+// Exported for the debug panel on ReportDetailPage so reviewers can see exactly
+// what the matcher is comparing.
+const CORP_SUFFIX_RE = /\b(?:inc(?:orporated)?|corp(?:oration)?|co|company|ltd|limited|llc|l\.l\.c|llp|lp|l\.p|plc|gmbh|ag|sa|s\.a|s\.r\.l|srl|bv|nv|pty|holdings?|group)\b/gi;
+
+export function normalizeName(s: string | null | undefined): string {
+  if (!s) return "";
+  let out = String(s).toLowerCase();
+  // Drop punctuation (commas, periods, parens, slashes, ampersands, quotes, dashes)
+  out = out.replace(/[.,()/&'"\-_]+/g, " ");
+  // Strip common corporate suffixes (after punctuation removal so "Inc." matches)
+  out = out.replace(CORP_SUFFIX_RE, " ");
+  // Collapse whitespace
+  out = out.replace(/\s+/g, " ").trim();
+  return out;
 }
 
 export async function computeReportDiffs(reportId: string): Promise<ComputeDiffsResult> {
@@ -485,10 +499,27 @@ export async function computeReportDiffs(reportId: string): Promise<ComputeDiffs
 
   const matchedExistingIds = new Set<string>();
 
+  // Truncated-name fallback: if exact normalized lookup misses, try a prefix
+  // match (either side a prefix of the other, min 4 chars) so "Castelion" and
+  // "Castelion Aerospace" still match. Only used when there's exactly one
+  // candidate to avoid ambiguity.
+  function findMatch(needle: string) {
+    const exact = existingByName.get(needle);
+    if (exact) return exact;
+    if (needle.length < 4) return null;
+    const candidates: any[] = [];
+    for (const [k, v] of existingByName) {
+      if (matchedExistingIds.has(v.id)) continue;
+      if (k.length < 4) continue;
+      if (k.startsWith(needle) || needle.startsWith(k)) candidates.push(v);
+    }
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+
   for (const h of payload.holdings ?? []) {
     const name = normalizeName(h.company_name);
     if (!name) continue;
-    const matched = existingByName.get(name);
+    const matched = findMatch(name);
 
     if (matched) {
       matchedExistingIds.add(matched.id);
