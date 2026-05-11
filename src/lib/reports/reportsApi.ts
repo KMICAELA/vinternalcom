@@ -401,8 +401,22 @@ function scalarEqual(a: unknown, b: unknown): boolean {
   return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 }
 
-function normalizeName(s: string | null | undefined): string {
-  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+// Strips punctuation, corporate suffixes, and collapses whitespace so that
+// "Castelion Co.", "Castelion, Inc.", and "castelion" all collapse to "castelion".
+// Exported for the debug panel on ReportDetailPage so reviewers can see exactly
+// what the matcher is comparing.
+const CORP_SUFFIX_RE = /\b(?:inc(?:orporated)?|corp(?:oration)?|co|company|ltd|limited|llc|l\.l\.c|llp|lp|l\.p|plc|gmbh|ag|sa|s\.a|s\.r\.l|srl|bv|nv|pty|holdings?|group)\b/gi;
+
+export function normalizeName(s: string | null | undefined): string {
+  if (!s) return "";
+  let out = String(s).toLowerCase();
+  // Drop punctuation (commas, periods, parens, slashes, ampersands, quotes, dashes)
+  out = out.replace(/[.,()/&'"\-_]+/g, " ");
+  // Strip common corporate suffixes (after punctuation removal so "Inc." matches)
+  out = out.replace(CORP_SUFFIX_RE, " ");
+  // Collapse whitespace
+  out = out.replace(/\s+/g, " ").trim();
+  return out;
 }
 
 export async function computeReportDiffs(reportId: string): Promise<ComputeDiffsResult> {
