@@ -129,9 +129,6 @@ function normalizeCompanyKey(raw: string | null | undefined): string {
   return key;
 }
 
-function titleCase(s: string): string {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 function canonicalCompanyName(raw: string | null | undefined): string {
   const key = normalizeCompanyKey(raw);
