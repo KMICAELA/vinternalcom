@@ -15,6 +15,7 @@ import { fmtUSD, fmtMultiple, fmtPct, calcMoic, signClass } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 import { FxBadge } from "@/components/FxBadge";
 import { useFundFxRate } from "@/lib/fx/useFundFxRate";
+import FundsViewSwitcher from "@/components/FundsViewSwitcher";
 
 type Row = {
   id: string;
