@@ -789,7 +789,7 @@ async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: u
   return blocks.map((b: any) => (b.type === "text" ? b.text : "")).join("\n").trim();
 }
 
-serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -1077,4 +1077,8 @@ Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_nati
       status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+};
+
+if (import.meta.main) {
+  serve(handler);
+}
