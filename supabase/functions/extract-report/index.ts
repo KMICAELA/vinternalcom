@@ -290,6 +290,9 @@ function postProcessPayload(
   opts?: { fxRate?: number | null; sourceCcy?: string | null; dedupe?: boolean },
 ): ExtractedPayload {
   if (!p || !Array.isArray(p.holdings)) return p;
+  if (p.extraction_mode === "A") {
+    p.holdings = filterHoldingsToScheduleCompanies(p.holdings, p.schedule_company_names);
+  }
   p.holdings = p.holdings.map((h) => {
     const norm = normalizeRound(h.round);
     if (norm.round !== h.round) h.round = norm.round;
@@ -302,6 +305,9 @@ function postProcessPayload(
   });
   if (opts?.dedupe !== false) {
     p.holdings = dedupeHoldings(p.holdings);
+    if (p.extraction_mode === "A") {
+      p.holdings = filterHoldingsToScheduleCompanies(p.holdings, p.schedule_company_names);
+    }
   }
   // For non-USD funds: the model returned values in native currency.
   // Move them to *_native and leave *_usd null so the DB trigger fills them
