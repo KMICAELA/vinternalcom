@@ -313,9 +313,16 @@ export default function UnderlyingPortfolioPage() {
                     const moic = r.cost === null ? null : calcMoic(r.cost, r.fmv ?? 0, r.proceeds ?? 0);
                     const gain = (r.fmv ?? 0) + (r.proceeds ?? 0) - (r.cost ?? 0);
                     return (
-                      <TableRow key={r.id} className="table-row-hover">
+                      <TableRow key={r.id} className={`table-row-hover ${r.removed_at ? "opacity-50 line-through" : ""}`}>
                         <TableCell><ConfidenceIcon row={r} /></TableCell>
-                        <TableCell className="font-medium">{r.company}</TableCell>
+                        <TableCell className="font-medium">
+                          {r.company}
+                          {r.removed_at && (
+                            <Badge variant="outline" className="ml-2 text-[9px] text-muted-foreground border-border">
+                              removed · {r.removed_reason}
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-muted-foreground max-w-[260px] truncate">
                           {r.fund}
                           {selected && r.currency !== "USD" && (
