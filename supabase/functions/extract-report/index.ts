@@ -811,6 +811,7 @@ export const handler = async (req: Request): Promise<Response> => {
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
       dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
+      include_raw_model_output, // boolean — dry-run debug only; returns raw model text before post-processing
     } = body ?? {};
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
@@ -1041,6 +1042,7 @@ Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_nati
           rate_missing: fxRateMissing,
         },
         diagnostic,
+        raw_model_output: include_raw_model_output ? { text: rawText } : undefined,
       };
       return new Response(
         JSON.stringify({ draft, source_document_id: null, dry_run: true }),
