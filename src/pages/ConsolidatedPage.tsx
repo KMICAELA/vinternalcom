@@ -244,11 +244,11 @@ export default function ConsolidatedPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+          <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="investors">Investors</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="portfolio" className="space-y-6 mt-6">
+        <TabsContent value="all" className="space-y-6 mt-6">
           {qLoading || !selected ? (
             <div className="text-muted-foreground py-12 text-center">Loading…</div>
           ) : (
