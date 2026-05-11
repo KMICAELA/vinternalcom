@@ -369,7 +369,7 @@ export default function UnderlyingPortfolioPage() {
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Fund" sortKey="fund" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(fundFilter, setFundFilter, "Filter…")}
+                  {colFilterSelect(fundFilter, setFundFilter, fundOptions, "All funds")}
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Status" sortKey="status" current={sortKey} dir={sortDir} onSort={onSort} />
