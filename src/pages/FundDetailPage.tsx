@@ -110,7 +110,7 @@ export default function FundDetailPage() {
     (async () => {
       const { data } = await supabase
         .from("underlying_holdings")
-        .select("id, company_id, fund_cost_usd, fund_fmv_usd, round, instrument, companies(legal_name, commercial_name, status)")
+        .select("id, company_id, fund_cost_usd, fund_fmv_usd, round, instrument, investment_date, companies(legal_name, commercial_name, status)")
         .eq("fund_id", id)
         .eq("quarter_id", selected.id)
         .is("removed_at", null);
@@ -121,6 +121,7 @@ export default function FundDetailPage() {
           company: h.companies?.commercial_name ?? h.companies?.legal_name ?? "—",
           round: h.round ?? null,
           instrument: h.instrument ?? null,
+          investment_date: h.investment_date ?? null,
           cost: h.fund_cost_usd == null ? null : Number(h.fund_cost_usd),
           fmv: h.fund_fmv_usd == null ? null : Number(h.fund_fmv_usd),
           status: (h.companies?.status?.trim()) || "Active",
