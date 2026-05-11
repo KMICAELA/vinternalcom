@@ -259,7 +259,7 @@ export default function ConsolidatedPage() {
         <Kpi
           label="Commitment"
           value={fmtUSD(agg.commitment, { compact: true })}
-          tip={{ kind: "input", title: "Total Commitment", source: "Sum of TWH commitments across all funds (subscription documents)" }}
+          tip={{ kind: "input", title: "Total Commitment", source: "Sum of investor commitments to TWH (subscription documents)" }}
         />
         <Kpi
           label="Called"
