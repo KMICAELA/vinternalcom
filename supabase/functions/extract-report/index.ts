@@ -705,7 +705,7 @@ function base64ToBytes(b64: string): Uint8Array {
 async function uploadPdfToAnthropicFiles(apiKey: string, base64: string, filename: string): Promise<string> {
   const bytes = base64ToBytes(base64);
   const form = new FormData();
-  form.append("file", new Blob([bytes], { type: "application/pdf" }), filename || "report.pdf");
+  form.append("file", new Blob([bytes as unknown as BlobPart], { type: "application/pdf" }), filename || "report.pdf");
   const resp = await fetch("https://api.anthropic.com/v1/files", {
     method: "POST",
     headers: {
