@@ -113,6 +113,7 @@ const COMPANY_ALIAS: Record<string, string> = {
   "andean systems": "Andean Systems",
   "the immune co": "The Immune Co.",
   "the immune co.": "The Immune Co.",
+  "the immune": "The Immune Co.",
   "immune co": "The Immune Co.",
   "vital lyfe": "Vital Lyfe",
   "inpho": "Inpho",
