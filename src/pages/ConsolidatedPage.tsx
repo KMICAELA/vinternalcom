@@ -20,16 +20,16 @@ import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import InvestorsTab from "@/components/investors/InvestorsTab";
 
-const LEDGER_CATEGORIES = [
+const CASH_FLOW_CATEGORIES = [
   "Capital Call",
   "Distribution",
   "Management Fee",
   "Expense",
   "Direct Investment",
   "Direct Proceeds",
-  "NAV",
   "Other",
 ] as const;
+const LEDGER_CATEGORIES = [...CASH_FLOW_CATEGORIES, "NAV"] as const;
 
 // Outflows from TWH (negative cash impact for TWH) — used to compute Contributions
 const OUTFLOW_CATS = new Set(["Capital Call", "Management Fee", "Expense", "Direct Investment"]);
