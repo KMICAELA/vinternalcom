@@ -7,11 +7,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Download, ArrowLeft, RefreshCw, CheckCircle2, AlertCircle, AlertTriangle,
-  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2,
+  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2, Pencil, X, Save, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
