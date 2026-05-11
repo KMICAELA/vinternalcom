@@ -322,6 +322,46 @@ function postProcessPayload(
       ? `Values stored in ${sourceCcy}; USD derived at DB write via fund_fx_rates (1 ${sourceCcy} = ${opts.fxRate} USD).`
       : `Values stored in ${sourceCcy}; USD will be derived once an FX rate is configured in fund_fx_rates for this fund/quarter.`;
     p.notes = p.notes ? `${p.notes}\n${note}` : note;
+  } else {
+    // USD passthrough: when the source currency is USD there is no FX trigger
+    // to fill *_usd later, so mirror native↔usd in both directions so callers
+    // (extracted_payload consumers, fund snapshot writers, UI) always see USD.
+    p.currency = "USD";
+    mirrorUsdNative(p);
+  }
+  return p;
+}
+
+// USD-only mirror: ensure both *_usd and *_native are populated whenever either side has a value.
+export function mirrorUsdNative(p: ExtractedPayload): ExtractedPayload {
+  const pairs: Array<[keyof ExtractedPayload, keyof ExtractedPayload]> = [
+    ["fund_total_contributions_usd", "fund_total_contributions_native"],
+    ["fund_total_nav_usd", "fund_total_nav_native"],
+    ["twh_contributions_usd", "twh_contributions_native"],
+    ["twh_distributions_usd", "twh_distributions_native"],
+    ["twh_nav_usd", "twh_nav_native"],
+  ];
+  for (const [usd, native] of pairs) {
+    const u = (p as any)[usd];
+    const n = (p as any)[native];
+    if ((u === null || u === undefined) && n !== null && n !== undefined) (p as any)[usd] = n;
+    else if ((n === null || n === undefined) && u !== null && u !== undefined) (p as any)[native] = u;
+  }
+  for (const h of p.holdings ?? []) {
+    const hpairs: Array<[string, string]> = [
+      ["fund_cost_usd", "fund_cost_native"],
+      ["fund_fmv_usd", "fund_fmv_native"],
+      ["fund_proceeds_usd", "fund_proceeds_native"],
+      ["twh_cost_usd", "twh_cost_native"],
+      ["twh_fmv_usd", "twh_fmv_native"],
+      ["twh_proceeds_usd", "twh_proceeds_native"],
+    ];
+    for (const [usd, native] of hpairs) {
+      const u = (h as any)[usd];
+      const n = (h as any)[native];
+      if ((u === null || u === undefined) && n !== null && n !== undefined) (h as any)[usd] = n;
+      else if ((n === null || n === undefined) && u !== null && u !== undefined) (h as any)[native] = u;
+    }
   }
   return p;
 }

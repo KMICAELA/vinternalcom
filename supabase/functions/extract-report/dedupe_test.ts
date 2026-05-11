@@ -61,3 +61,25 @@ Deno.test("Cantos Q4 real failure fixture filters narrative-only rows, dedupes t
   assertEquals(totalCost, 8_749_999);
   assertEquals(totalFmv, 11_124_963);
 });
+
+import { mirrorUsdNative } from "./index.ts";
+
+Deno.test("USD passthrough: native-only fields are mirrored into *_usd (regression: Cantos NAV null)", () => {
+  const p: any = {
+    currency: "USD",
+    fund_total_nav_native: 11_124_963,
+    fund_total_nav_usd: null,
+    fund_total_contributions_native: 8_749_999,
+    fund_total_contributions_usd: null,
+    twh_nav_native: null,
+    twh_nav_usd: null,
+    holdings: [
+      { company_name: "Vital Lyfe", fund_cost_native: 2_000_000, fund_fmv_native: 4_374_964, fund_cost_usd: null, fund_fmv_usd: null },
+    ],
+  };
+  mirrorUsdNative(p);
+  assertEquals(p.fund_total_nav_usd, 11_124_963);
+  assertEquals(p.fund_total_contributions_usd, 8_749_999);
+  assertEquals(p.holdings[0].fund_cost_usd, 2_000_000);
+  assertEquals(p.holdings[0].fund_fmv_usd, 4_374_964);
+});
