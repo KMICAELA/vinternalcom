@@ -325,14 +325,16 @@ export default function PortfolioPage() {
         <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">
           Loading…
         </Card>
-      ) : filtered.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">
           No companies match your filters.
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {filtered.map((c) => (
-            <CompanyCard key={c.id} company={c} />
+          {displayed.map((c) => (
+            <div key={c.id} ref={c.id === focusCompanyId ? focusedRef : undefined}>
+              <CompanyCard company={c} highlight={c.id === focusCompanyId} />
+            </div>
           ))}
         </div>
       )}
