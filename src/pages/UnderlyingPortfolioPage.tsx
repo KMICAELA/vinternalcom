@@ -182,11 +182,13 @@ export default function UnderlyingPortfolioPage() {
         status: h.companies?.status?.trim() || "Active",
         needs_review: h.needs_review === true,
         review_reason: h.review_reason ?? null,
+        removed_at: h.removed_at ?? null,
+        removed_reason: h.removed_reason ?? null,
       }));
       setRows(out);
       setLoading(false);
     })();
-  }, [selected]);
+  }, [selected, showRemoved]);
 
   const fundOptions = useMemo(() => {
     const m = new Map<string, string>();
