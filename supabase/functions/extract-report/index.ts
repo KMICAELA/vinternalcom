@@ -568,6 +568,15 @@ Use ONLY these canonical round values (parent series — sub-tranches collapse):
   Pre-Seed | Seed | Series A | Series B | Series C | Series D | Series E |
   Series F | Series G | Growth | Bridge
 
+NEVER GUESS THE ROUND. Set round = null and needs_review = true (with
+review_reason = "Round not stated in Schedule of Investments") UNLESS the
+round label appears explicitly in the document — either in a dedicated
+"Round" / "Round Invested" / "Stage" / "Security" column of the Schedule
+of Investments table, or stated unambiguously in narrative immediately
+adjacent to the holding (e.g. "we participated in [Co]'s Series A").
+Do NOT infer a round from valuation size, company stage, instrument, or
+the relative position of holdings in the table.
+
 Sub-tranche labels ("Series A-1", "Seed 2", "Seed Plus") are normalized
 to parents at post-processing — you may emit them either way.
 
@@ -575,6 +584,19 @@ Instruments belong in the "instrument" field, NOT in "round":
   SAFE, Common Stock, Convertible Note, Token, Warrant, Partnership Interest, …
 If the source uses "SAFE" or "Common Stock" as a round label, put it in
 instrument and leave round null.
+
+═══════════════════════════════════════════════════════════════════════
+OWNERSHIP % EXTRACTION
+═══════════════════════════════════════════════════════════════════════
+
+fund_ownership_pct = the FUND's percentage ownership of the COMPANY (NOT
+TWH's pro-rata share of the fund). Extract from columns labeled:
+  "% Ownership", "Ownership %", "Ownership", "Fund Ownership",
+  "Fully Diluted %", "FD Ownership", "Stake %"
+Express as a number 0–100 (e.g. 5.25 means 5.25%, NOT 0.0525). Never
+divide or multiply. If not stated, leave null — never infer from
+invested amount ÷ post-money valuation.
+
 
 ═══════════════════════════════════════════════════════════════════════
 FUND-LEVEL TOTAL MAPPINGS (CRITICAL — populate from SoI footer rows)
