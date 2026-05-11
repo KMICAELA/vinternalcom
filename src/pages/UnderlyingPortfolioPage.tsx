@@ -270,6 +270,15 @@ export default function UnderlyingPortfolioPage() {
               {ROUND_OPTIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
+          <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none px-2 h-9 rounded border border-border hover:text-foreground">
+            <input
+              type="checkbox"
+              checked={showRemoved}
+              onChange={(e) => setShowRemoved(e.target.checked)}
+              className="h-3 w-3 cursor-pointer"
+            />
+            Show removed
+          </label>
         </div>
       </div>
 
