@@ -308,7 +308,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-type Holding = { id: string; company_id: string; company: string; round: string | null; instrument: string | null; cost: number | null; fmv: number | null; status: string };
+type Holding = { id: string; company_id: string; company: string; round: string | null; instrument: string | null; investment_date: string | null; cost: number | null; fmv: number | null; status: string };
 
 function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
   const groups = useMemo(() => {
