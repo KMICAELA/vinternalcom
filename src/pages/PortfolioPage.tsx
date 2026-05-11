@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -12,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ExternalLink, Search, Globe } from "lucide-react";
+import { ExternalLink, Search, Globe, X } from "lucide-react";
 
 type Company = {
   id: string;
@@ -53,6 +55,15 @@ export default function PortfolioPage() {
   const [fundFilter, setFundFilter] = useState<string>(ALL);
   const [industryFilter, setIndustryFilter] = useState<string>(ALL);
   const [typeFilter, setTypeFilter] = useState<string>(ALL);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusCompanyId = searchParams.get("company");
+  const focusedRef = useRef<HTMLDivElement | null>(null);
+  const clearFocus = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("company");
+    setSearchParams(next, { replace: true });
+  };
 
   // Load companies + which are held in selected quarter + which funds touch them
   useEffect(() => {
@@ -221,6 +232,19 @@ export default function PortfolioPage() {
     });
   }, [activeCompanies, search, fundFilter, industryFilter, typeFilter, companyFunds, industrySet]);
 
+  // If a focus company is requested via ?company=, narrow to just that company.
+  const displayed = useMemo(() => {
+    if (!focusCompanyId) return filtered;
+    const match = companies.find((c) => c.id === focusCompanyId);
+    return match ? [match] : filtered;
+  }, [filtered, focusCompanyId, companies]);
+
+  useEffect(() => {
+    if (focusCompanyId && focusedRef.current) {
+      focusedRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [focusCompanyId, displayed.length]);
+
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-4">
       <div className="flex items-start justify-between gap-4">
@@ -232,10 +256,21 @@ export default function PortfolioPage() {
           </p>
         </div>
         <div className="text-xs text-muted-foreground text-right">
-          <div>{filtered.length} of {activeCompanies.length} active companies</div>
+          <div>{displayed.length} of {activeCompanies.length} active companies</div>
           {quarter && <div className="mt-0.5">{quarter.label}</div>}
         </div>
       </div>
+
+      {focusCompanyId && (
+        <Card className="p-3 bg-card border-border flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">
+            Showing a single company linked from another page.
+          </div>
+          <Button variant="ghost" size="sm" onClick={clearFocus} className="h-7 text-xs">
+            <X className="h-3 w-3 mr-1" /> Show all companies
+          </Button>
+        </Card>
+      )}
 
       <Card className="p-4 bg-card border-border">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -290,14 +325,16 @@ export default function PortfolioPage() {
         <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">
           Loading…
         </Card>
-      ) : filtered.length === 0 ? (
+      ) : displayed.length === 0 ? (
         <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">
           No companies match your filters.
         </Card>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {filtered.map((c) => (
-            <CompanyCard key={c.id} company={c} />
+          {displayed.map((c) => (
+            <div key={c.id} ref={c.id === focusCompanyId ? focusedRef : undefined}>
+              <CompanyCard company={c} highlight={c.id === focusCompanyId} />
+            </div>
           ))}
         </div>
       )}
@@ -305,7 +342,7 @@ export default function PortfolioPage() {
   );
 }
 
-function CompanyCard({ company: c }: { company: Company }) {
+function CompanyCard({ company: c, highlight = false }: { company: Company; highlight?: boolean }) {
   const fields: Array<{ label: string; value: string | null; accent?: "emerald" | "amber" }> = [
     { label: "What they do", value: c.what_they_do },
     { label: "Target market", value: c.target_market },
@@ -316,7 +353,7 @@ function CompanyCard({ company: c }: { company: Company }) {
   const hasAnyTag = (c.type?.length || c.region?.length || c.industry?.length);
 
   return (
-    <Card className="p-4 bg-card border-border space-y-3">
+    <Card className={`p-4 bg-card space-y-3 ${highlight ? "border-primary ring-1 ring-primary/40" : "border-border"}`}>
       {/* Tight header: name + commercial + status + url all in one row */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
