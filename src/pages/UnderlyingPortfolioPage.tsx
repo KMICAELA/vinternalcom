@@ -191,10 +191,10 @@ export default function UnderlyingPortfolioPage() {
 
   // Per-column filters (company → instrument)
   const [companyFilter, setCompanyFilter] = useState("");
-  const [fundFilter, setFundFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [roundFilter, setRoundFilter] = useState("");
-  const [instrumentFilter, setInstrumentFilter] = useState("");
+  const [fundFilter, setFundFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [roundFilter, setRoundFilter] = useState("all");
+  const [instrumentFilter, setInstrumentFilter] = useState("all");
 
   // Sorting
   const [sortKey, setSortKey] = useState<SortKey>("twh_fmv");
@@ -244,15 +244,22 @@ export default function UnderlyingPortfolioPage() {
     })();
   }, [selected, showRemoved]);
 
+  const fundOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.fund))).sort(), [rows]);
+  const statusOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.status))).sort(), [rows]);
+  const roundOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.round ?? "—"))).sort(), [rows]);
+  const instrumentOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.instrument ?? "—"))).sort(), [rows]);
+
   const filtered = useMemo(() => {
-    const incl = (val: string | null | undefined, q: string) =>
+    const inclText = (val: string | null | undefined, q: string) =>
       !q.trim() || (val ?? "").toLowerCase().includes(q.trim().toLowerCase());
+    const inclEq = (val: string | null | undefined, q: string) =>
+      q === "all" || (val ?? "—") === q;
     const list = rows.filter((r) =>
-      incl(r.company, companyFilter) &&
-      incl(r.fund, fundFilter) &&
-      incl(r.status, statusFilter) &&
-      incl(r.round, roundFilter) &&
-      incl(r.instrument, instrumentFilter)
+      inclText(r.company, companyFilter) &&
+      inclEq(r.fund, fundFilter) &&
+      inclEq(r.status, statusFilter) &&
+      inclEq(r.round, roundFilter) &&
+      inclEq(r.instrument, instrumentFilter)
     );
     const valFor = (r: Row, k: SortKey): number | string => {
       switch (k) {
@@ -306,6 +313,25 @@ export default function UnderlyingPortfolioPage() {
     />
   );
 
+  const colFilterSelect = (
+    value: string,
+    setValue: (v: string) => void,
+    options: string[],
+    allLabel: string,
+  ) => (
+    <Select value={value} onValueChange={setValue}>
+      <SelectTrigger className="h-7 text-xs font-normal mt-1">
+        <SelectValue placeholder={allLabel} />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">{allLabel}</SelectItem>
+        {options.map((o) => (
+          <SelectItem key={o} value={o}>{o}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -343,19 +369,19 @@ export default function UnderlyingPortfolioPage() {
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Fund" sortKey="fund" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(fundFilter, setFundFilter, "Filter…")}
+                  {colFilterSelect(fundFilter, setFundFilter, fundOptions, "All funds")}
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Status" sortKey="status" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(statusFilter, setStatusFilter, "Filter…")}
+                  {colFilterSelect(statusFilter, setStatusFilter, statusOptions, "All statuses")}
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Round" sortKey="round" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(roundFilter, setRoundFilter, "Filter…")}
+                  {colFilterSelect(roundFilter, setRoundFilter, roundOptions, "All rounds")}
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Instrument" sortKey="instrument" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(instrumentFilter, setInstrumentFilter, "Filter…")}
+                  {colFilterSelect(instrumentFilter, setInstrumentFilter, instrumentOptions, "All instruments")}
                 </TableHead>
                 <TableHead className="text-right">
                   <div className="flex justify-end"><SortHeader label="TWH %" sortKey="twh_pct" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
