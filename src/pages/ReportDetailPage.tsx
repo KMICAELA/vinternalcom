@@ -563,3 +563,40 @@ function KvRow({ label, value, mono }: { label: string; value: string; mono?: bo
     </TableRow>
   );
 }
+
+function parseNum(v: string): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function EditableKvRow({
+  label, value, editing, onChange, numeric, mono, display, type,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  editing: boolean;
+  onChange: (v: string) => void;
+  numeric?: boolean;
+  mono?: boolean;
+  display?: string;
+  type?: string;
+}) {
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell className="text-muted-foreground text-xs">{label}</TableCell>
+      <TableCell className={`text-right text-xs ${mono ? "font-mono" : ""}`}>
+        {editing ? (
+          <Input
+            type={type ?? (numeric ? "number" : "text")}
+            value={value == null ? "" : String(value)}
+            onChange={(e) => onChange(e.target.value)}
+            className={`h-8 text-xs ml-auto max-w-[240px] ${mono ? "font-mono text-right" : ""}`}
+          />
+        ) : (
+          display ?? (value == null || value === "" ? "—" : String(value))
+        )}
+      </TableCell>
+    </TableRow>
+  );
+}
