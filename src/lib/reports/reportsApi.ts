@@ -463,12 +463,14 @@ export async function computeReportDiffs(reportId: string): Promise<ComputeDiffs
     .eq("quarter_id", report.quarter_id)
     .maybeSingle();
 
-  // 5. Load existing holdings (for update/missing/add diffs)
+  // 5. Load existing holdings (for update/missing/add diffs).
+  // Exclude soft-deleted rows — they're not part of the live baseline.
   const { data: existingHoldings } = await supabase
     .from("underlying_holdings")
     .select("id, company_id, round, instrument, investment_date, fund_ownership_pct, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, fund_cost_native, fund_fmv_native, fund_proceeds_native, companies:company_id(legal_name, commercial_name)")
     .eq("fund_id", report.fund_id)
-    .eq("quarter_id", report.quarter_id);
+    .eq("quarter_id", report.quarter_id)
+    .is("removed_at", null);
 
   const diffRows: Record<string, any>[] = [];
 
