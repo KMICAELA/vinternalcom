@@ -316,9 +316,33 @@ export default function ReportDetailPage() {
 
       {/* (b) Extraction results */}
       <Card className="bg-card border-border p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <h2 className="text-sm font-semibold">Extraction results</h2>
-          <span className="text-[11px] text-muted-foreground">Read-only · captured at upload time</span>
+          <div className="flex items-center gap-2">
+            {!editing ? (
+              <>
+                <span className="text-[11px] text-muted-foreground">
+                  {isAdmin ? "Click Edit to correct extracted values" : "Read-only · captured at upload time"}
+                </span>
+                {isAdmin && livePayload && (
+                  <Button onClick={startEdit} variant="outline" size="sm" className="gap-2 h-8 text-xs">
+                    <Pencil className="h-3 w-3" /> Edit
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-[11px] text-amber-400">Editing — unsaved changes</span>
+                <Button onClick={cancelEdit} variant="outline" size="sm" disabled={busy === "save"} className="gap-2 h-8 text-xs">
+                  <X className="h-3 w-3" /> Cancel
+                </Button>
+                <Button onClick={onSaveEdit} size="sm" disabled={busy === "save"} className="gap-2 h-8 text-xs">
+                  {busy === "save" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  Save
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         {!payload ? (
           <div className="text-sm text-muted-foreground py-8 text-center">No extraction payload available.</div>
@@ -340,24 +364,29 @@ export default function ReportDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <KvRow label="Fund name (extracted)" value={payload.fund_name ?? "—"} />
-                    <KvRow label="Report date" value={payload.report_date ?? "—"} />
-                    <KvRow label="Currency" value={payload.currency ?? "—"} />
-                    <KvRow label="TWH Contributions" value={fmtUSD(payload.twh_contributions_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="TWH Distributions" value={fmtUSD(payload.twh_distributions_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="TWH NAV" value={fmtUSD(payload.twh_nav_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="Fund Total Contributions" value={fmtUSD(payload.fund_total_contributions_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="Fund Total NAV" value={fmtUSD(payload.fund_total_nav_usd ?? 0, { compact: true })} mono />
-                    <KvRow
-                      label="DPI"
-                      mono
-                      value={fmtMultiple(calcDpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0))}
-                    />
-                    <KvRow
-                      label="TVPI"
-                      mono
-                      value={fmtMultiple(calcTvpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0, payload.twh_nav_usd ?? 0))}
-                    />
+                    <EditableKvRow label="Fund name (extracted)" editing={editing} value={payload.fund_name}
+                      onChange={(v) => patchDraft({ fund_name: v || null })} />
+                    <EditableKvRow label="Report date" editing={editing} value={payload.report_date} type="date"
+                      onChange={(v) => patchDraft({ report_date: v || null })} />
+                    <EditableKvRow label="Currency" editing={editing} value={payload.currency}
+                      onChange={(v) => patchDraft({ currency: v ? v.toUpperCase() : null })} />
+                    <EditableKvRow label="TWH Contributions" editing={editing} value={payload.twh_contributions_usd} numeric mono
+                      display={fmtUSD(payload.twh_contributions_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ twh_contributions_usd: parseNum(v) })} />
+                    <EditableKvRow label="TWH Distributions" editing={editing} value={payload.twh_distributions_usd} numeric mono
+                      display={fmtUSD(payload.twh_distributions_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ twh_distributions_usd: parseNum(v) })} />
+                    <EditableKvRow label="TWH NAV" editing={editing} value={payload.twh_nav_usd} numeric mono
+                      display={fmtUSD(payload.twh_nav_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ twh_nav_usd: parseNum(v) })} />
+                    <EditableKvRow label="Fund Total Contributions" editing={editing} value={payload.fund_total_contributions_usd} numeric mono
+                      display={fmtUSD(payload.fund_total_contributions_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ fund_total_contributions_usd: parseNum(v) })} />
+                    <EditableKvRow label="Fund Total NAV" editing={editing} value={payload.fund_total_nav_usd} numeric mono
+                      display={fmtUSD(payload.fund_total_nav_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ fund_total_nav_usd: parseNum(v) })} />
+                    <KvRow label="DPI" mono value={fmtMultiple(calcDpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0))} />
+                    <KvRow label="TVPI" mono value={fmtMultiple(calcTvpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0, payload.twh_nav_usd ?? 0))} />
                   </TableBody>
                 </Table>
               </div>
@@ -376,27 +405,72 @@ export default function ReportDetailPage() {
                       <TableHead className="text-right">FMV</TableHead>
                       <TableHead className="text-right">Proceeds</TableHead>
                       <TableHead className="text-right">MOIC</TableHead>
+                      {editing && <TableHead className="w-8"></TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {directRows.length === 0 ? (
+                    {directRows.length === 0 && !editing ? (
                       <TableRow><TableCell colSpan={8} className="text-muted-foreground py-8 text-center">No holdings extracted</TableCell></TableRow>
                     ) : (
                       directRows.map((h, i) => {
                         const moic = h.fund_cost_usd == null ? null : calcMoic(h.fund_cost_usd, h.fund_fmv_usd ?? 0, h.fund_proceeds_usd ?? 0);
                         return (
-                          <TableRow key={`${h.company_name}-${i}`} className="table-row-hover">
-                            <TableCell className="font-medium">{h.company_name}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs">{fmtDate(h.investment_date)}</TableCell>
-                            <TableCell className="text-xs">{h.round ? <Badge variant="secondary" className="font-normal">{h.round}</Badge> : "—"}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs">{h.instrument ?? "—"}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{h.fund_cost_usd == null ? "—" : fmtUSD(h.fund_cost_usd, { compact: true })}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{h.fund_fmv_usd == null ? "—" : fmtUSD(h.fund_fmv_usd, { compact: true })}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{h.fund_proceeds_usd == null ? "—" : fmtUSD(h.fund_proceeds_usd, { compact: true })}</TableCell>
+                          <TableRow key={i} className="table-row-hover">
+                            <TableCell className="font-medium">
+                              {editing
+                                ? <Input value={h.company_name ?? ""} onChange={(e) => patchHolding(i, { company_name: e.target.value })} className="h-8 text-xs" />
+                                : (h.company_name || "—")}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {editing
+                                ? <Input type="date" value={h.investment_date ?? ""} onChange={(e) => patchHolding(i, { investment_date: e.target.value || null })} className="h-8 text-xs" />
+                                : fmtDate(h.investment_date)}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {editing
+                                ? <Input value={h.round ?? ""} onChange={(e) => patchHolding(i, { round: e.target.value || null })} className="h-8 text-xs" placeholder="—" />
+                                : (h.round ? <Badge variant="secondary" className="font-normal">{h.round}</Badge> : "—")}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {editing
+                                ? <Input value={h.instrument ?? ""} onChange={(e) => patchHolding(i, { instrument: e.target.value || null })} className="h-8 text-xs" placeholder="—" />
+                                : (h.instrument ?? "—")}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {editing
+                                ? <Input type="number" value={h.fund_cost_usd ?? ""} onChange={(e) => patchHolding(i, { fund_cost_usd: parseNum(e.target.value) })} className="h-8 text-xs text-right" />
+                                : (h.fund_cost_usd == null ? "—" : fmtUSD(h.fund_cost_usd, { compact: true }))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {editing
+                                ? <Input type="number" value={h.fund_fmv_usd ?? ""} onChange={(e) => patchHolding(i, { fund_fmv_usd: parseNum(e.target.value) })} className="h-8 text-xs text-right" />
+                                : (h.fund_fmv_usd == null ? "—" : fmtUSD(h.fund_fmv_usd, { compact: true }))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {editing
+                                ? <Input type="number" value={h.fund_proceeds_usd ?? ""} onChange={(e) => patchHolding(i, { fund_proceeds_usd: parseNum(e.target.value) })} className="h-8 text-xs text-right" />
+                                : (h.fund_proceeds_usd == null ? "—" : fmtUSD(h.fund_proceeds_usd, { compact: true }))}
+                            </TableCell>
                             <TableCell className="text-right font-mono text-xs">{fmtMultiple(moic)}</TableCell>
+                            {editing && (
+                              <TableCell>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeHolding(i)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })
+                    )}
+                    {editing && (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={9}>
+                          <Button variant="outline" size="sm" className="gap-2 h-8 text-xs" onClick={addHolding}>
+                            <Plus className="h-3 w-3" /> Add holding
+                          </Button>
+                        </TableCell>
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
