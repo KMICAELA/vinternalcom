@@ -519,6 +519,17 @@ export default function ReportDetailPage() {
               Re-run extraction
             </Button>
             <Button
+              onClick={onComputeDiffs}
+              disabled={busy !== null || !payload || !report.fund_id || !report.quarter_id}
+              variant="outline"
+              size="sm"
+              className="gap-2 h-9 text-xs"
+              title="Compare this report's payload against current live data and stage diffs for review"
+            >
+              {busy === "diff" ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitBranch className="h-3 w-3" />}
+              Compute diffs
+            </Button>
+            <Button
               onClick={onPromote}
               disabled={busy !== null || report.committed_to_db || report.extraction_status === "error" || !payload}
               size="sm"
