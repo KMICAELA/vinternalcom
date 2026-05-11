@@ -37,9 +37,11 @@ function classifyStatus(payload: ExtractedPayload | null, err?: string | null) {
 }
 
 function buildSummary(payload: ExtractedPayload | null) {
-  if (!payload) return { holdings: 0 };
+  if (!payload) return { holdings: 0, needs_review_count: 0 };
+  const needsReviewCount = (payload.holdings ?? []).filter((h: any) => h?.needs_review === true).length;
   return {
     holdings: payload.holdings?.length ?? 0,
+    needs_review_count: needsReviewCount,
     has_fund_metrics: payload.twh_nav_usd != null || payload.twh_contributions_usd != null,
     currency: payload.currency,
     report_date: payload.report_date,
@@ -295,6 +297,9 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
         investment_date: h.investment_date ?? null,
         currency,
         source_report_id: report.id,
+        fund_ownership_pct: (h as any).fund_ownership_pct ?? null,
+        needs_review: (h as any).needs_review === true,
+        review_reason: (h as any).review_reason ?? null,
       };
       if (isUsd) {
         holdingRow.fund_cost_usd = pickUsd(h.fund_cost_usd, h.fund_cost_native);

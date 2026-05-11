@@ -239,9 +239,17 @@ export default function ReportsPage() {
                         {new Date(r.uploaded_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={`text-[10px] gap-1 ${meta.cls}`}>
-                          <Icon className="h-3 w-3" />{meta.label}
-                        </Badge>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant="outline" className={`text-[10px] gap-1 ${meta.cls}`}>
+                            <Icon className="h-3 w-3" />{meta.label}
+                          </Badge>
+                          {(r.extraction_summary?.needs_review_count ?? 0) > 0 && (
+                            <Badge variant="outline" className="text-[10px] gap-1 text-amber-400 border-amber-400/30">
+                              <AlertTriangle className="h-3 w-3" />
+                              {r.extraction_summary.needs_review_count} need review
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="text-right font-mono text-sm">{holdings}</TableCell>
                       <TableCell>

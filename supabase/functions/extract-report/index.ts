@@ -190,6 +190,7 @@ export function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[]
     existing.fund_cost_native = preferTruthyMax(existing.fund_cost_native, h.fund_cost_native);
     existing.fund_fmv_native = preferTruthyMax(existing.fund_fmv_native, h.fund_fmv_native);
     existing.fund_proceeds_native = preferTruthyMax(existing.fund_proceeds_native, h.fund_proceeds_native);
+    existing.fund_ownership_pct = preferTruthyMax(existing.fund_ownership_pct, h.fund_ownership_pct);
     if (h.investment_date && (!existing.investment_date || h.investment_date < existing.investment_date)) {
       existing.investment_date = h.investment_date;
     }
@@ -231,6 +232,7 @@ export function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[]
       longE.fund_cost_usd = preferTruthyMax(longE.fund_cost_usd, shortE.fund_cost_usd);
       longE.fund_fmv_usd = preferTruthyMax(longE.fund_fmv_usd, shortE.fund_fmv_usd);
       longE.fund_proceeds_usd = preferTruthyMax(longE.fund_proceeds_usd, shortE.fund_proceeds_usd);
+      longE.fund_ownership_pct = preferTruthyMax(longE.fund_ownership_pct, shortE.fund_ownership_pct);
       if (shortE.investment_date && (!longE.investment_date || shortE.investment_date < longE.investment_date)) {
         longE.investment_date = shortE.investment_date;
       }
@@ -427,6 +429,7 @@ All numeric amounts MUST be in base units (no thousands separators, no currency 
       "investment_date": "YYYY-MM-DD" | null,
       "instrument": string | null,
       "round": string | null,
+      "fund_ownership_pct": number | null,
       "fund_cost_native": number | null,
       "fund_fmv_native": number | null,
       "fund_proceeds_native": number | null,
@@ -565,6 +568,15 @@ Use ONLY these canonical round values (parent series — sub-tranches collapse):
   Pre-Seed | Seed | Series A | Series B | Series C | Series D | Series E |
   Series F | Series G | Growth | Bridge
 
+NEVER GUESS THE ROUND. Set round = null and needs_review = true (with
+review_reason = "Round not stated in Schedule of Investments") UNLESS the
+round label appears explicitly in the document — either in a dedicated
+"Round" / "Round Invested" / "Stage" / "Security" column of the Schedule
+of Investments table, or stated unambiguously in narrative immediately
+adjacent to the holding (e.g. "we participated in [Co]'s Series A").
+Do NOT infer a round from valuation size, company stage, instrument, or
+the relative position of holdings in the table.
+
 Sub-tranche labels ("Series A-1", "Seed 2", "Seed Plus") are normalized
 to parents at post-processing — you may emit them either way.
 
@@ -572,6 +584,19 @@ Instruments belong in the "instrument" field, NOT in "round":
   SAFE, Common Stock, Convertible Note, Token, Warrant, Partnership Interest, …
 If the source uses "SAFE" or "Common Stock" as a round label, put it in
 instrument and leave round null.
+
+═══════════════════════════════════════════════════════════════════════
+OWNERSHIP % EXTRACTION
+═══════════════════════════════════════════════════════════════════════
+
+fund_ownership_pct = the FUND's percentage ownership of the COMPANY (NOT
+TWH's pro-rata share of the fund). Extract from columns labeled:
+  "% Ownership", "Ownership %", "Ownership", "Fund Ownership",
+  "Fully Diluted %", "FD Ownership", "Stake %"
+Express as a number 0–100 (e.g. 5.25 means 5.25%, NOT 0.0525). Never
+divide or multiply. If not stated, leave null — never infer from
+invested amount ÷ post-money valuation.
+
 
 ═══════════════════════════════════════════════════════════════════════
 FUND-LEVEL TOTAL MAPPINGS (CRITICAL — populate from SoI footer rows)
