@@ -66,10 +66,18 @@ export default function ConsolidatedPage() {
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     category: "Capital Call" as (typeof LEDGER_CATEGORIES)[number],
-    counterparty: "",
     description: "",
     amount_usd: "",
   });
+  const [history, setHistory] = useState<{
+    quarter: { id: string; label: string; quarter_end_date: string };
+    contrib: number;
+    distrib: number;
+    nav: number;
+    dpi: number | null;
+    tvpi: number | null;
+    irr: number | null;
+  }[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Load ledger + aggregate snapshot data
