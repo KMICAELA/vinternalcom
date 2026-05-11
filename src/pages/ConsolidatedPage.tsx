@@ -63,9 +63,15 @@ export default function ConsolidatedPage() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [navAddOpen, setNavAddOpen] = useState(false);
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     category: "Capital Call" as (typeof LEDGER_CATEGORIES)[number],
+    description: "",
+    amount_usd: "",
+  });
+  const [navForm, setNavForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
     description: "",
     amount_usd: "",
   });
