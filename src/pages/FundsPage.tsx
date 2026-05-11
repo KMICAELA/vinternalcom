@@ -9,6 +9,7 @@ import { Upload, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
 import AddFundDialog from "@/components/AddFundDialog";
+import FundsViewSwitcher from "@/components/FundsViewSwitcher";
 import { Plus } from "lucide-react";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
