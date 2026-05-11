@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -9,17 +10,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertTriangle, Pencil } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Pencil, ArrowUp, ArrowDown, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtPct, calcMoic, signClass } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 import { FxBadge } from "@/components/FxBadge";
 import { useFundFxRate } from "@/lib/fx/useFundFxRate";
 import FundsViewSwitcher from "@/components/FundsViewSwitcher";
+import { cn } from "@/lib/utils";
 
 type Row = {
   id: string;
   company: string;
+  company_id: string;
   fund: string;
   fund_id: string;
   round: string | null;
@@ -41,6 +44,11 @@ type Row = {
 const ROUND_OPTIONS = [
   "Pre-Seed", "Seed", "Series A", "Series B", "Series C", "Series D", "Series E", "Series F", "Series G", "Growth", "Bridge",
 ];
+
+type SortKey =
+  | "company" | "fund" | "status" | "round" | "instrument"
+  | "twh_pct" | "cost" | "fmv" | "fund_ownership_pct"
+  | "twh_cost" | "twh_fmv" | "moic";
 
 function FxCell({ fundId, quarterId, currency }: { fundId: string; quarterId: string; currency: string }) {
   const { rate, updaterName } = useFundFxRate(fundId, quarterId, currency);
@@ -142,25 +150,67 @@ function RoundCell({ row, onSaved }: { row: Row; onSaved: (next: Partial<Row>) =
   );
 }
 
+function SortHeader({
+  label,
+  sortKey,
+  current,
+  dir,
+  onSort,
+  align = "left",
+}: {
+  label: string;
+  sortKey: SortKey;
+  current: SortKey;
+  dir: "asc" | "desc";
+  onSort: (k: SortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = current === sortKey;
+  const Icon = !active ? ChevronsUpDown : dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={cn(
+        "inline-flex items-center gap-1 text-xs font-medium hover:text-foreground transition-colors",
+        active ? "text-foreground" : "text-muted-foreground",
+        align === "right" && "ml-auto"
+      )}
+    >
+      <span>{label}</span>
+      <Icon className="h-3 w-3 opacity-70" />
+    </button>
+  );
+}
+
 export default function UnderlyingPortfolioPage() {
   const { selected, loading: qLoading } = useSelectedQuarter();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("");
-  const [fundFilter, setFundFilter] = useState("all");
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [roundFilter, setRoundFilter] = useState("all");
-  // Show soft-deleted rows (admin audit/recovery toggle).
   const [showRemoved, setShowRemoved] = useState(false);
+
+  // Per-column filters (company → instrument)
+  const [companyFilter, setCompanyFilter] = useState("");
+  const [fundFilter, setFundFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [roundFilter, setRoundFilter] = useState("");
+  const [instrumentFilter, setInstrumentFilter] = useState("");
+
+  // Sorting
+  const [sortKey, setSortKey] = useState<SortKey>("twh_fmv");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const onSort = (k: SortKey) => {
+    if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(k); setSortDir(k === "company" || k === "fund" || k === "status" || k === "round" || k === "instrument" ? "asc" : "desc"); }
+  };
 
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      // Live rows only by default; toggle includes soft-deleted ones.
       let query = supabase
         .from("underlying_holdings")
-        .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, fund_ownership_pct, needs_review, review_reason, removed_at, removed_reason, funds(name, short_name), companies(legal_name, commercial_name, status)")
+        .select("id, company_id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, fund_ownership_pct, needs_review, review_reason, removed_at, removed_reason, funds(name, short_name), companies(legal_name, commercial_name, status)")
         .eq("quarter_id", selected.id);
       if (!showRemoved) query = query.is("removed_at", null);
       const [{ data: holdings }, { data: commits }] = await Promise.all([
@@ -171,6 +221,7 @@ export default function UnderlyingPortfolioPage() {
       const out: Row[] = (holdings ?? []).map((h: any) => ({
         id: h.id,
         company: h.companies?.commercial_name ?? h.companies?.legal_name ?? "—",
+        company_id: h.company_id,
         fund: h.funds?.short_name ?? h.funds?.name ?? "—",
         fund_id: h.fund_id,
         currency: h.currency ?? "USD",
@@ -193,32 +244,44 @@ export default function UnderlyingPortfolioPage() {
     })();
   }, [selected, showRemoved]);
 
-  const fundOptions = useMemo(() => {
-    const m = new Map<string, string>();
-    rows.forEach((r) => m.set(r.fund_id, r.fund));
-    return Array.from(m.entries()).map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows]);
-
-  const statusOptions = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.status))).sort(),
-    [rows]
-  );
-
   const filtered = useMemo(() => {
-    const f = filter.trim().toLowerCase();
-    const list = rows.filter((r) => {
-      if (fundFilter !== "all" && r.fund_id !== fundFilter) return false;
-      if (statusFilter !== "all" && r.status !== statusFilter) return false;
-      if (roundFilter !== "all" && (r.round ?? "") !== roundFilter) return false;
-      if (f && !r.company.toLowerCase().includes(f) && !r.fund.toLowerCase().includes(f)) return false;
-      return true;
-    });
+    const incl = (val: string | null | undefined, q: string) =>
+      !q.trim() || (val ?? "").toLowerCase().includes(q.trim().toLowerCase());
+    const list = rows.filter((r) =>
+      incl(r.company, companyFilter) &&
+      incl(r.fund, fundFilter) &&
+      incl(r.status, statusFilter) &&
+      incl(r.round, roundFilter) &&
+      incl(r.instrument, instrumentFilter)
+    );
+    const valFor = (r: Row, k: SortKey): number | string => {
+      switch (k) {
+        case "company": return r.company.toLowerCase();
+        case "fund": return r.fund.toLowerCase();
+        case "status": return r.status.toLowerCase();
+        case "round": return (r.round ?? "").toLowerCase();
+        case "instrument": return (r.instrument ?? "").toLowerCase();
+        case "twh_pct": return r.twh_pct;
+        case "cost": return r.cost ?? -Infinity;
+        case "fmv": return r.fmv ?? -Infinity;
+        case "fund_ownership_pct": return r.fund_ownership_pct ?? -Infinity;
+        case "twh_cost": return r.cost === null ? -Infinity : r.cost * r.twh_pct;
+        case "twh_fmv": return r.fmv === null ? -Infinity : r.fmv * r.twh_pct;
+        case "moic": {
+          if (r.cost === null || r.cost === 0) return -Infinity;
+          return ((r.fmv ?? 0) + (r.proceeds ?? 0)) / r.cost;
+        }
+      }
+    };
     return [...list].sort((a, b) => {
-      const av = a.fmv === null ? -Infinity : a.fmv * a.twh_pct;
-      const bv = b.fmv === null ? -Infinity : b.fmv * b.twh_pct;
-      return bv - av;
+      const av = valFor(a, sortKey);
+      const bv = valFor(b, sortKey);
+      let cmp = 0;
+      if (typeof av === "number" && typeof bv === "number") cmp = av - bv;
+      else cmp = String(av).localeCompare(String(bv));
+      return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [rows, filter, fundFilter, statusFilter, roundFilter]);
+  }, [rows, companyFilter, fundFilter, statusFilter, roundFilter, instrumentFilter, sortKey, sortDir]);
 
   const totals = filtered.reduce(
     (a, r) => ({
@@ -234,6 +297,15 @@ export default function UnderlyingPortfolioPage() {
 
   if (qLoading || !selected) return <div className="p-8 text-muted-foreground">Loading…</div>;
 
+  const colFilterInput = (value: string, setValue: (v: string) => void, placeholder: string) => (
+    <Input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      placeholder={placeholder}
+      className="h-7 text-xs font-normal mt-1"
+    />
+  );
+
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-end justify-between gap-4 flex-wrap">
@@ -247,33 +319,6 @@ export default function UnderlyingPortfolioPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Input
-            placeholder="Search…"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="max-w-[200px] h-9"
-          />
-          <Select value={fundFilter} onValueChange={setFundFilter}>
-            <SelectTrigger className="w-40 h-9 text-xs"><SelectValue placeholder="Fund" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All funds</SelectItem>
-              {fundOptions.map((f) => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-36 h-9 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All statuses</SelectItem>
-              {statusOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Select value={roundFilter} onValueChange={setRoundFilter}>
-            <SelectTrigger className="w-36 h-9 text-xs"><SelectValue placeholder="Round" /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All rounds</SelectItem>
-              {ROUND_OPTIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-            </SelectContent>
-          </Select>
           <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none px-2 h-9 rounded border border-border hover:text-foreground">
             <input
               type="checkbox"
@@ -290,20 +335,49 @@ export default function UnderlyingPortfolioPage() {
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="hover:bg-transparent">
+              <TableRow className="hover:bg-transparent align-top">
                 <TableHead className="w-8"></TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Fund</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Round</TableHead>
-                <TableHead>Instrument</TableHead>
-                <TableHead className="text-right">TWH %</TableHead>
-                <TableHead className="text-right">Fund Cost</TableHead>
-                <TableHead className="text-right">Fund FMV</TableHead>
-                <TableHead className="text-right">Ownership %</TableHead>
-                <TableHead className="text-right">TWH Cost</TableHead>
-                <TableHead className="text-right">TWH FMV</TableHead>
-                <TableHead className="text-right">MOIC</TableHead>
+                <TableHead>
+                  <SortHeader label="Company" sortKey="company" current={sortKey} dir={sortDir} onSort={onSort} />
+                  {colFilterInput(companyFilter, setCompanyFilter, "Filter…")}
+                </TableHead>
+                <TableHead>
+                  <SortHeader label="Fund" sortKey="fund" current={sortKey} dir={sortDir} onSort={onSort} />
+                  {colFilterInput(fundFilter, setFundFilter, "Filter…")}
+                </TableHead>
+                <TableHead>
+                  <SortHeader label="Status" sortKey="status" current={sortKey} dir={sortDir} onSort={onSort} />
+                  {colFilterInput(statusFilter, setStatusFilter, "Filter…")}
+                </TableHead>
+                <TableHead>
+                  <SortHeader label="Round" sortKey="round" current={sortKey} dir={sortDir} onSort={onSort} />
+                  {colFilterInput(roundFilter, setRoundFilter, "Filter…")}
+                </TableHead>
+                <TableHead>
+                  <SortHeader label="Instrument" sortKey="instrument" current={sortKey} dir={sortDir} onSort={onSort} />
+                  {colFilterInput(instrumentFilter, setInstrumentFilter, "Filter…")}
+                </TableHead>
+                <TableHead className="text-right">
+                  <div className="flex justify-end"><SortHeader label="TWH %" sortKey="twh_pct" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
+                </TableHead>
+                <TableHead className="text-right">
+                  <div className="flex justify-end"><SortHeader label="Fund Cost" sortKey="cost" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
+                </TableHead>
+                <TableHead className="text-right">
+                  <div className="flex justify-end"><SortHeader label="Fund FMV" sortKey="fmv" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
+                </TableHead>
+                <TableHead className="text-right">
+                  <div className="flex justify-end"><SortHeader label="Ownership %" sortKey="fund_ownership_pct" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
+                </TableHead>
+                <TableHead className="text-right">
+                  <div className="flex justify-end"><SortHeader label="TWH Cost" sortKey="twh_cost" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
+                </TableHead>
+                <TableHead className="text-right">
+                  <div className="flex justify-end"><SortHeader label="TWH FMV" sortKey="twh_fmv" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
+                </TableHead>
+                <TableHead className="text-right">
+                  <div className="flex justify-end"><SortHeader label="MOIC" sortKey="moic" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -320,7 +394,12 @@ export default function UnderlyingPortfolioPage() {
                       <TableRow key={r.id} className={`table-row-hover ${r.removed_at ? "opacity-50 line-through" : ""}`}>
                         <TableCell><ConfidenceIcon row={r} /></TableCell>
                         <TableCell className="font-medium">
-                          {r.company}
+                          <Link
+                            to={`/portfolio?company=${r.company_id}`}
+                            className="hover:text-primary hover:underline transition-colors"
+                          >
+                            {r.company}
+                          </Link>
                           {r.removed_at && (
                             <Badge variant="outline" className="ml-2 text-[9px] text-muted-foreground border-border">
                               removed · {r.removed_reason}
