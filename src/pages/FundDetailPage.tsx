@@ -287,24 +287,7 @@ export default function FundDetailPage() {
               {holdings.length === 0 ? (
                 <TableRow><TableCell colSpan={7} className="text-muted-foreground py-12 text-center">No holdings recorded for this quarter.</TableCell></TableRow>
               ) : (
-                [...holdings]
-                  .sort((a, b) => (b.fmv ?? 0) - (a.fmv ?? 0))
-                  .map((h) => {
-                    const moic = h.cost && h.cost > 0 && h.fmv != null ? h.fmv / h.cost : null;
-                    return (
-                      <TableRow key={h.id} className="table-row-hover">
-                        <TableCell className="font-medium">
-                          <Link to={`/portfolio?company=${h.company_id}`} className="hover:underline">{h.company}</Link>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{h.round ?? "—"}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{h.instrument ?? "—"}</TableCell>
-                        <TableCell className="text-right font-mono text-muted-foreground">{h.cost == null ? "—" : fmtUSD(h.cost, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{h.fmv == null ? "—" : fmtUSD(h.fmv, { compact: true })}</TableCell>
-                        <TableCell className="text-right font-mono">{fmtMultiple(moic)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{h.status}</TableCell>
-                      </TableRow>
-                    );
-                  })
+                <GroupedHoldings holdings={holdings} />
               )}
             </TableBody>
           </Table>
