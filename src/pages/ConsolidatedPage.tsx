@@ -396,7 +396,7 @@ export default function ConsolidatedPage() {
                     <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as any })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {LEDGER_CATEGORIES.map((c) => (
+                        {CASH_FLOW_CATEGORIES.map((c) => (
                           <SelectItem key={c} value={c}>{c}</SelectItem>
                         ))}
                       </SelectContent>
