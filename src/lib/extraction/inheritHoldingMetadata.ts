@@ -102,7 +102,8 @@ export async function inheritHoldingMetadata(opts: {
   const { data: priorRows } = await supabase
     .from("underlying_holdings")
     .select("company_id, round, instrument, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, quarters!inner(quarter_end_date)")
-    .eq("fund_id", fundId);
+    .eq("fund_id", fundId)
+    .is("removed_at", null);
 
   // Find each company's most recent prior quarter (strictly before current).
   const latestQuarterByCompany = new Map<string, string>();
