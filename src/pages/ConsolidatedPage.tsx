@@ -14,6 +14,8 @@ import { fmtUSD, fmtPct, fmtMultiple, fmtDate, calcDpi, calcTvpi, signClass } fr
 import MetricTooltip, { fmtUsdFull, fmtMultFull, fmtPctFull, type MetricTooltipProps } from "@/components/MetricTooltip";
 import EstimatedBadge from "@/components/EstimatedBadge";
 import { deriveTwhWithFallback } from "@/lib/twhDerivation";
+import { computeXirr } from "@/lib/irr";
+import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import InvestorsTab from "@/components/investors/InvestorsTab";
@@ -25,6 +27,7 @@ const LEDGER_CATEGORIES = [
   "Expense",
   "Direct Investment",
   "Direct Proceeds",
+  "NAV",
   "Other",
 ] as const;
 
@@ -32,6 +35,8 @@ const LEDGER_CATEGORIES = [
 const OUTFLOW_CATS = new Set(["Capital Call", "Management Fee", "Expense", "Direct Investment"]);
 // Inflows to TWH — Distributions
 const INFLOW_CATS = new Set(["Distribution", "Direct Proceeds"]);
+// NAV is a balance snapshot — never accumulated, replaced quarter-to-quarter
+const NAV_CAT = "NAV";
 
 type LedgerEntry = {
   id: string;
@@ -61,68 +66,110 @@ export default function ConsolidatedPage() {
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     category: "Capital Call" as (typeof LEDGER_CATEGORIES)[number],
-    counterparty: "",
     description: "",
     amount_usd: "",
   });
+  const [history, setHistory] = useState<{
+    quarter: { id: string; label: string; quarter_end_date: string };
+    contrib: number;
+    distrib: number;
+    nav: number;
+    dpi: number | null;
+    tvpi: number | null;
+    irr: number | null;
+  }[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Load ledger + aggregate snapshot data
+  // Load ledger + aggregate snapshot data + history across quarters
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [{ data: ledger }, { data: snaps }, { data: commits }] = await Promise.all([
+      const [
+        { data: ledger },
+        { data: allSnaps },
+        { data: commits },
+        { data: investors },
+        { data: quarters },
+        { data: flows },
+      ] = await Promise.all([
         supabase
           .from("twh_ledger_entries")
           .select("id, date, category, counterparty, description, amount_usd, reconciled")
           .order("date", { ascending: false }),
         supabase
           .from("fund_quarter_snapshots")
-          .select("fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd")
-          .eq("quarter_id", selected.id),
-        supabase.from("fund_commitments").select("fund_id, twh_commitment_usd, twh_ownership_pct"),
+          .select("fund_id, quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd"),
+        supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
+        supabase.from("investors").select("commitment_amount"),
+        supabase.from("quarters").select("id, label, quarter_end_date").order("quarter_end_date", { ascending: true }),
+        supabase.from("cash_flows").select("date, amount_usd").eq("scope", "twh_net"),
       ]);
 
       setEntries((ledger ?? []) as LedgerEntry[]);
 
       const pctMap = new Map((commits ?? []).map((c: any) => [c.fund_id, Number(c.twh_ownership_pct ?? 0)]));
-      let estimated = false;
-      const aggregate = (snaps ?? []).reduce(
-        (a, s: any) => {
-          const d = deriveTwhWithFallback(s, pctMap.get(s.fund_id) ?? 0);
-          if (d.estimated) estimated = true;
-          return {
-            contributions: a.contributions + d.contributions,
-            distributions: a.distributions + d.distributions,
-            nav: a.nav + d.nav,
-            commitment: a.commitment,
-            estimated: a.estimated,
-          };
-        },
-        { contributions: 0, distributions: 0, nav: 0, commitment: 0, estimated: false },
-      );
-      aggregate.commitment = (commits ?? []).reduce(
-        (s: number, c: any) => s + Number(c.twh_commitment_usd ?? 0),
+
+      // Total commitments from investors → TWH
+      const investorCommitment = (investors ?? []).reduce(
+        (s: number, i: any) => s + Number(i.commitment_amount ?? 0),
         0,
       );
-      aggregate.estimated = estimated;
-      setAgg(aggregate);
+
+      // Aggregate per quarter
+      type QAgg = { contributions: number; distributions: number; nav: number; estimated: boolean };
+      const byQuarter = new Map<string, QAgg>();
+      (allSnaps ?? []).forEach((s: any) => {
+        const d = deriveTwhWithFallback(s, pctMap.get(s.fund_id) ?? 0);
+        const cur = byQuarter.get(s.quarter_id) ?? { contributions: 0, distributions: 0, nav: 0, estimated: false };
+        cur.contributions += d.contributions;
+        cur.distributions += d.distributions;
+        cur.nav += d.nav;
+        if (d.estimated) cur.estimated = true;
+        byQuarter.set(s.quarter_id, cur);
+      });
+
+      const current = byQuarter.get(selected.id) ?? { contributions: 0, distributions: 0, nav: 0, estimated: false };
+      setAgg({
+        contributions: current.contributions,
+        distributions: current.distributions,
+        nav: current.nav,
+        commitment: investorCommitment,
+        estimated: current.estimated,
+      });
+
+      const allFlows = (flows ?? []).map((cf: any) => ({ date: cf.date, amount_usd: Number(cf.amount_usd) }));
+      const hist = (quarters ?? [])
+        .filter((q: any) => byQuarter.has(q.id))
+        .map((q: any) => {
+          const a = byQuarter.get(q.id)!;
+          const dpi = calcDpi(a.contributions, a.distributions);
+          const tvpi = calcTvpi(a.contributions, a.distributions, a.nav);
+          const flowsThruQ = allFlows.filter((cf) => cf.date <= q.quarter_end_date);
+          const irr = computeXirr(flowsThruQ, a.nav, q.quarter_end_date);
+          return { quarter: q, contrib: a.contributions, distrib: a.distributions, nav: a.nav, dpi, tvpi, irr };
+        });
+      setHistory(hist);
+
       setLoading(false);
     })();
   }, [selected, refreshKey]);
+
+  // Split entries: NAV (balance snapshots) vs cash flow
+  const navEntries = useMemo(() => entries.filter((e) => e.category === NAV_CAT), [entries]);
+  const cashFlowEntries = useMemo(() => entries.filter((e) => e.category !== NAV_CAT), [entries]);
 
   // Reconciliation: ledger-derived totals vs snapshot-derived totals
   const ledgerTotals = useMemo(() => {
     let contrib = 0;
     let distrib = 0;
-    for (const e of entries) {
+    for (const e of cashFlowEntries) {
       const amt = Math.abs(Number(e.amount_usd));
       if (OUTFLOW_CATS.has(e.category)) contrib += amt;
       else if (INFLOW_CATS.has(e.category)) distrib += amt;
     }
     return { contrib, distrib };
-  }, [entries]);
+  }, [cashFlowEntries]);
 
   const tvpi = calcTvpi(agg.contributions, agg.distributions, agg.nav);
   const dpi = calcDpi(agg.contributions, agg.distributions);
@@ -137,12 +184,14 @@ export default function ConsolidatedPage() {
       return;
     }
     setSaving(true);
-    // Sign by convention: outflows negative, inflows positive
-    const signedAmount = OUTFLOW_CATS.has(form.category) ? -Math.abs(amt) : Math.abs(amt);
+    // Sign convention: outflows negative, inflows positive, NAV stored as positive balance
+    const signedAmount = form.category === NAV_CAT
+      ? Math.abs(amt)
+      : OUTFLOW_CATS.has(form.category) ? -Math.abs(amt) : Math.abs(amt);
     const { error } = await supabase.from("twh_ledger_entries").insert({
       date: form.date,
       category: form.category,
-      counterparty: form.counterparty || null,
+      counterparty: null,
       description: form.description || null,
       amount_usd: signedAmount,
     });
@@ -156,7 +205,6 @@ export default function ConsolidatedPage() {
     setForm({
       date: new Date().toISOString().slice(0, 10),
       category: "Capital Call",
-      counterparty: "",
       description: "",
       amount_usd: "",
     });
@@ -175,10 +223,10 @@ export default function ConsolidatedPage() {
   };
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab") === "investors" ? "investors" : "portfolio";
+  const tab = searchParams.get("tab") === "investors" ? "investors" : "all";
   const setTab = (v: string) => {
     const next = new URLSearchParams(searchParams);
-    if (v === "portfolio") next.delete("tab"); else next.set("tab", v);
+    if (v === "all") next.delete("tab"); else next.set("tab", v);
     setSearchParams(next, { replace: true });
   };
 
@@ -196,11 +244,11 @@ export default function ConsolidatedPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
+          <TabsTrigger value="all">All</TabsTrigger>
           <TabsTrigger value="investors">Investors</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="portfolio" className="space-y-6 mt-6">
+        <TabsContent value="all" className="space-y-6 mt-6">
           {qLoading || !selected ? (
             <div className="text-muted-foreground py-12 text-center">Loading…</div>
           ) : (
@@ -211,7 +259,7 @@ export default function ConsolidatedPage() {
         <Kpi
           label="Commitment"
           value={fmtUSD(agg.commitment, { compact: true })}
-          tip={{ kind: "input", title: "Total Commitment", source: "Sum of TWH commitments across all funds (subscription documents)" }}
+          tip={{ kind: "input", title: "Total Commitment", source: "Sum of investor commitments to TWH (subscription documents)" }}
         />
         <Kpi
           label="Called"
@@ -318,13 +366,13 @@ export default function ConsolidatedPage() {
         </Card>
       )}
 
-      {/* Net Cash Flow Ledger */}
+      {/* Cash Flow */}
       <Card className="bg-card border-border overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
-            <h2 className="text-base font-semibold">Net Cash Flow Ledger</h2>
+            <h2 className="text-base font-semibold">Cash Flow</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              All TWH-level transactions. Terminal NAV reflects the current selected quarter.
+              All TWH-level cash transactions. Use the NAV category below for quarter-end balance snapshots.
             </p>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -356,10 +404,6 @@ export default function ConsolidatedPage() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Counterparty</Label>
-                  <Input placeholder="Fund or company" value={form.counterparty} onChange={(e) => setForm({ ...form, counterparty: e.target.value })} />
-                </div>
-                <div className="space-y-1.5">
                   <Label className="text-xs">Amount (USD)</Label>
                   <Input
                     type="number"
@@ -369,7 +413,7 @@ export default function ConsolidatedPage() {
                     onChange={(e) => setForm({ ...form, amount_usd: e.target.value })}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Outflows (Capital Call, Fees, Expense, Direct Investment) stored negative; inflows stored positive.
+                    Outflows (Capital Call, Fees, Expense, Direct Investment) stored negative; inflows positive. NAV is a balance — replaced quarter-to-quarter, never accumulated.
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -391,33 +435,21 @@ export default function ConsolidatedPage() {
               <TableRow className="hover:bg-transparent">
                 <TableHead>Date</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Counterparty</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* Terminal NAV — fixed top row */}
-              <TableRow className="bg-muted/30 hover:bg-muted/40 font-medium">
-                <TableCell>{fmtDate(selected.quarter_end_date)}</TableCell>
-                <TableCell>Terminal NAV</TableCell>
-                <TableCell className="text-muted-foreground">All funds + directs</TableCell>
-                <TableCell className="text-muted-foreground">Quarter-end portfolio valuation</TableCell>
-                <TableCell className="text-right font-mono">{fmtUSD(agg.nav, { compact: true })}</TableCell>
-                <TableCell></TableCell>
-              </TableRow>
-
               {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
-              ) : entries.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-muted-foreground py-12 text-center">No ledger entries yet — add the first capital call above.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+              ) : cashFlowEntries.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-muted-foreground py-12 text-center">No cash flow entries yet — add the first capital call above.</TableCell></TableRow>
               ) : (
-                entries.map((e) => (
+                cashFlowEntries.map((e) => (
                   <TableRow key={e.id} className="table-row-hover">
                     <TableCell>{fmtDate(e.date)}</TableCell>
                     <TableCell>{e.category}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.counterparty ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground max-w-[320px] truncate">{e.description ?? "—"}</TableCell>
                     <TableCell className={`text-right font-mono ${signClass(Number(e.amount_usd))}`}>
                       {fmtUSD(Number(e.amount_usd), { compact: true })}
@@ -434,6 +466,99 @@ export default function ConsolidatedPage() {
           </Table>
         </div>
       </Card>
+
+      {/* NAV */}
+      <Card className="bg-card border-border overflow-hidden">
+        <div className="p-4 border-b border-border">
+          <h2 className="text-base font-semibold">NAV</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Quarter-end balance. NAV is replaced from quarter to quarter — never accumulated. Terminal NAV reflects the current selected quarter.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Date</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">NAV</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Terminal NAV — fixed top row from snapshots */}
+              <TableRow className="bg-muted/30 hover:bg-muted/40 font-medium">
+                <TableCell>{fmtDate(selected.quarter_end_date)}</TableCell>
+                <TableCell>Terminal NAV</TableCell>
+                <TableCell className="text-muted-foreground">All funds + directs · {selected.label}</TableCell>
+                <TableCell className="text-right font-mono">{fmtUSD(agg.nav, { compact: true })}</TableCell>
+                <TableCell></TableCell>
+              </TableRow>
+              {navEntries.map((e) => (
+                <TableRow key={e.id} className="table-row-hover">
+                  <TableCell>{fmtDate(e.date)}</TableCell>
+                  <TableCell>Manual</TableCell>
+                  <TableCell className="text-muted-foreground max-w-[320px] truncate">{e.description ?? "—"}</TableCell>
+                  <TableCell className="text-right font-mono">{fmtUSD(Number(e.amount_usd), { compact: true })}</TableCell>
+                  <TableCell>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDelete(e.id)}>
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      {/* Charts */}
+      {history.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="bg-card border-border p-4">
+            <div className="text-sm font-medium mb-3">NAV trajectory</div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history.map((r) => ({ label: r.quarter.label, NAV: r.nav, Contributions: r.contrib, Distributions: r.distrib }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtUSD(v, { compact: true })} />
+                  <RTooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                    formatter={(v: any) => fmtUSD(Number(v), { compact: true })}
+                  />
+                  <Line type="monotone" dataKey="NAV" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Contributions" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={false} />
+                  <Line type="monotone" dataKey="Distributions" stroke="hsl(var(--chart-2, var(--accent)))" strokeWidth={1.5} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+          <Card className="bg-card border-border p-4">
+            <div className="text-sm font-medium mb-3">TVPI / DPI / IRR over time</div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history.map((r) => ({
+                  label: r.quarter.label,
+                  TVPI: r.tvpi != null ? Number(r.tvpi.toFixed(4)) : null,
+                  DPI: r.dpi != null ? Number(r.dpi.toFixed(4)) : null,
+                  IRR: r.irr != null ? Number((r.irr * 100).toFixed(2)) : null,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${v.toFixed(2)}x`} />
+                  <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${v}%`} />
+                  <RTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }} />
+                  <Line yAxisId="left" type="monotone" dataKey="TVPI" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line yAxisId="left" type="monotone" dataKey="DPI" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="IRR" stroke="hsl(var(--accent))" strokeWidth={1.5} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </div>
+      )}
             </>
           )}
         </TabsContent>
