@@ -244,15 +244,22 @@ export default function UnderlyingPortfolioPage() {
     })();
   }, [selected, showRemoved]);
 
+  const fundOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.fund))).sort(), [rows]);
+  const statusOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.status))).sort(), [rows]);
+  const roundOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.round ?? "—"))).sort(), [rows]);
+  const instrumentOptions = useMemo(() => Array.from(new Set(rows.map((r) => r.instrument ?? "—"))).sort(), [rows]);
+
   const filtered = useMemo(() => {
-    const incl = (val: string | null | undefined, q: string) =>
+    const inclText = (val: string | null | undefined, q: string) =>
       !q.trim() || (val ?? "").toLowerCase().includes(q.trim().toLowerCase());
+    const inclEq = (val: string | null | undefined, q: string) =>
+      q === "all" || (val ?? "—") === q;
     const list = rows.filter((r) =>
-      incl(r.company, companyFilter) &&
-      incl(r.fund, fundFilter) &&
-      incl(r.status, statusFilter) &&
-      incl(r.round, roundFilter) &&
-      incl(r.instrument, instrumentFilter)
+      inclText(r.company, companyFilter) &&
+      inclEq(r.fund, fundFilter) &&
+      inclEq(r.status, statusFilter) &&
+      inclEq(r.round, roundFilter) &&
+      inclEq(r.instrument, instrumentFilter)
     );
     const valFor = (r: Row, k: SortKey): number | string => {
       switch (k) {
