@@ -499,10 +499,27 @@ export async function computeReportDiffs(reportId: string): Promise<ComputeDiffs
 
   const matchedExistingIds = new Set<string>();
 
+  // Truncated-name fallback: if exact normalized lookup misses, try a prefix
+  // match (either side a prefix of the other, min 4 chars) so "Castelion" and
+  // "Castelion Aerospace" still match. Only used when there's exactly one
+  // candidate to avoid ambiguity.
+  function findMatch(needle: string) {
+    const exact = existingByName.get(needle);
+    if (exact) return exact;
+    if (needle.length < 4) return null;
+    const candidates: any[] = [];
+    for (const [k, v] of existingByName) {
+      if (matchedExistingIds.has(v.id)) continue;
+      if (k.length < 4) continue;
+      if (k.startsWith(needle) || needle.startsWith(k)) candidates.push(v);
+    }
+    return candidates.length === 1 ? candidates[0] : null;
+  }
+
   for (const h of payload.holdings ?? []) {
     const name = normalizeName(h.company_name);
     if (!name) continue;
-    const matched = existingByName.get(name);
+    const matched = findMatch(name);
 
     if (matched) {
       matchedExistingIds.add(matched.id);
