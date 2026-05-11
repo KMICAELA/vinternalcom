@@ -429,6 +429,7 @@ All numeric amounts MUST be in base units (no thousands separators, no currency 
       "investment_date": "YYYY-MM-DD" | null,
       "instrument": string | null,
       "round": string | null,
+      "fund_ownership_pct": number | null,
       "fund_cost_native": number | null,
       "fund_fmv_native": number | null,
       "fund_proceeds_native": number | null,
