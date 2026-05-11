@@ -500,11 +500,52 @@ export default function ConsolidatedPage() {
 
       {/* NAV */}
       <Card className="bg-card border-border overflow-hidden">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-base font-semibold">NAV</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Quarter-end balance. NAV is replaced from quarter to quarter — never accumulated. Terminal NAV reflects the current selected quarter.
-          </p>
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div>
+            <h2 className="text-base font-semibold">NAV</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Quarter-end balance. NAV is replaced from quarter to quarter — never accumulated. Terminal NAV reflects the current selected quarter.
+            </p>
+          </div>
+          <Dialog open={navAddOpen} onOpenChange={setNavAddOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-2">
+                <Plus className="h-4 w-4" /> Add entry
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add NAV entry</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Date (quarter-end)</Label>
+                  <Input type="date" value={navForm.date} onChange={(e) => setNavForm({ ...navForm, date: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">NAV (USD)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Total TWH NAV at this date"
+                    value={navForm.amount_usd}
+                    onChange={(e) => setNavForm({ ...navForm, amount_usd: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    NAV is a balance — replaced quarter-to-quarter, not accumulated.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Description</Label>
+                  <Input placeholder="Optional note" value={navForm.description} onChange={(e) => setNavForm({ ...navForm, description: e.target.value })} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setNavAddOpen(false)}>Cancel</Button>
+                <Button onClick={handleAddNav} disabled={saving}>{saving ? "Saving…" : "Add NAV"}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
         <div className="overflow-x-auto">
           <Table>
