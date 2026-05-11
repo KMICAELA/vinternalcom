@@ -21,6 +21,7 @@ import {
   archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs, normalizeName,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
+import DiffReviewPanel from "@/components/DiffReviewPanel";
 
 type ReportFull = {
   id: string;
@@ -509,7 +510,10 @@ export default function ReportDetailPage() {
         )}
       </Card>
 
-      {/* (b.5) DEBUG: staged diff rows — temporary panel for matcher inspection */}
+      {/* (b.5) Diff review — PR #3b */}
+      {isAdmin && <DiffReviewPanel reportId={report.id} />}
+
+      {/* (b.6) DEBUG: matcher inspection panel (kept for normalization debugging) */}
       {isAdmin && <DiffDebugPanel reportId={report.id} payload={payload} fundId={report.fund_id} quarterId={report.quarter_id} />}
 
       {/* (c) Actions */}
