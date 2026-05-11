@@ -19,6 +19,7 @@ type ExtractedHolding = {
   instrument: string | null;
   round: string | null;
   round_detail?: string | null;
+  fund_ownership_pct?: number | null;      // Fund's % ownership of the company (from "% Ownership" / "Ownership" column)
   fund_cost_usd: number | null;
   fund_fmv_usd: number | null;
   fund_proceeds_usd: number | null;
@@ -28,7 +29,7 @@ type ExtractedHolding = {
   fund_fmv_native?: number | null;
   fund_proceeds_native?: number | null;
   fmv_change_reason?: string | null;       // narrative phrase that triggered FMV update (Mode B)
-  needs_review?: boolean;                  // model-flagged (e.g. unquantified company event)
+  needs_review?: boolean;                  // model-flagged (e.g. unquantified company event, or round not in SoI)
   review_reason?: string | null;
 };
 
