@@ -297,6 +297,9 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
         investment_date: h.investment_date ?? null,
         currency,
         source_report_id: report.id,
+        fund_ownership_pct: (h as any).fund_ownership_pct ?? null,
+        needs_review: (h as any).needs_review === true,
+        review_reason: (h as any).review_reason ?? null,
       };
       if (isUsd) {
         holdingRow.fund_cost_usd = pickUsd(h.fund_cost_usd, h.fund_cost_native);
