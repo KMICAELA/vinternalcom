@@ -278,6 +278,7 @@ export default function FundDetailPage() {
                 <TableHead>Company</TableHead>
                 <TableHead>Round</TableHead>
                 <TableHead>Instrument</TableHead>
+                <TableHead>Investment date</TableHead>
                 <TableHead className="text-right">Cost</TableHead>
                 <TableHead className="text-right">FMV</TableHead>
                 <TableHead className="text-right">MOIC</TableHead>
@@ -286,7 +287,7 @@ export default function FundDetailPage() {
             </TableHeader>
             <TableBody>
               {holdings.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-muted-foreground py-12 text-center">No holdings recorded for this quarter.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-muted-foreground py-12 text-center">No holdings recorded for this quarter.</TableCell></TableRow>
               ) : (
                 <GroupedHoldings holdings={holdings} />
               )}
