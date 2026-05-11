@@ -147,16 +147,21 @@ export default function UnderlyingPortfolioPage() {
   const [fundFilter, setFundFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roundFilter, setRoundFilter] = useState("all");
+  // Show soft-deleted rows (admin audit/recovery toggle).
+  const [showRemoved, setShowRemoved] = useState(false);
 
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
     (async () => {
+      // Live rows only by default; toggle includes soft-deleted ones.
+      let query = supabase
+        .from("underlying_holdings")
+        .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, fund_ownership_pct, needs_review, review_reason, removed_at, removed_reason, funds(name, short_name), companies(legal_name, commercial_name, status)")
+        .eq("quarter_id", selected.id);
+      if (!showRemoved) query = query.is("removed_at", null);
       const [{ data: holdings }, { data: commits }] = await Promise.all([
-        supabase
-          .from("underlying_holdings")
-          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, fund_ownership_pct, needs_review, review_reason, funds(name, short_name), companies(legal_name, commercial_name, status)")
-          .eq("quarter_id", selected.id),
+        query,
         supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
       const pctMap = new Map((commits ?? []).map((c: any) => [c.fund_id, Number(c.twh_ownership_pct ?? 0)]));
