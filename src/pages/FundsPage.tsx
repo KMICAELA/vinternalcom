@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
+import AddFundDialog from "@/components/AddFundDialog";
+import { Plus } from "lucide-react";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 import EstimatedBadge from "@/components/EstimatedBadge";
