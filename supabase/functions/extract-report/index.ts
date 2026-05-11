@@ -239,6 +239,21 @@ export function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[]
   return entries.filter((e) => !used.has(e.company_name));
 }
 
+export function filterHoldingsToScheduleCompanies(
+  holdings: ExtractedHolding[],
+  scheduleCompanyNames: string[] | null | undefined,
+): ExtractedHolding[] {
+  const allowed = new Map<string, string>();
+  for (const name of scheduleCompanyNames ?? []) {
+    const canonical = canonicalCompanyName(name);
+    if (canonical) allowed.set(canonical, canonical);
+  }
+  if (allowed.size === 0) return holdings;
+  return holdings
+    .map((h) => ({ ...h, company_name: canonicalCompanyName(h.company_name) }))
+    .filter((h) => allowed.has(h.company_name));
+}
+
 // Move model output (which is in source currency) into the *_native fields.
 // We NO LONGER multiply by an FX rate at extraction time — the database
 // triggers (lookup_fund_fx_rate + *_derive_usd) will compute *_usd at write
