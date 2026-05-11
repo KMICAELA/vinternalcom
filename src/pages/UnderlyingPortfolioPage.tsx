@@ -191,10 +191,10 @@ export default function UnderlyingPortfolioPage() {
 
   // Per-column filters (company → instrument)
   const [companyFilter, setCompanyFilter] = useState("");
-  const [fundFilter, setFundFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [roundFilter, setRoundFilter] = useState("");
-  const [instrumentFilter, setInstrumentFilter] = useState("");
+  const [fundFilter, setFundFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [roundFilter, setRoundFilter] = useState("all");
+  const [instrumentFilter, setInstrumentFilter] = useState("all");
 
   // Sorting
   const [sortKey, setSortKey] = useState<SortKey>("twh_fmv");
