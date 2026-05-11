@@ -365,6 +365,12 @@ export default function FundsPage() {
         defaultQuarterId={selected.id}
         onConfirmed={() => setRefreshKey((k) => k + 1)}
       />
+
+      <AddFundDialog
+        open={addFundOpen}
+        onOpenChange={setAddFundOpen}
+        onCreated={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 }
