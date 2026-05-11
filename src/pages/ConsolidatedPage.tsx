@@ -217,6 +217,31 @@ export default function ConsolidatedPage() {
     setRefreshKey((k) => k + 1);
   };
 
+  const handleAddNav = async () => {
+    const amt = parseFloat(navForm.amount_usd);
+    if (!navForm.date || Number.isNaN(amt)) {
+      toast.error("Date and amount are required");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("twh_ledger_entries").insert({
+      date: navForm.date,
+      category: NAV_CAT,
+      counterparty: null,
+      description: navForm.description || null,
+      amount_usd: Math.abs(amt),
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("NAV entry added");
+    setNavAddOpen(false);
+    setNavForm({ date: new Date().toISOString().slice(0, 10), description: "", amount_usd: "" });
+    setRefreshKey((k) => k + 1);
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this ledger entry?")) return;
     const { error } = await supabase.from("twh_ledger_entries").delete().eq("id", id);
