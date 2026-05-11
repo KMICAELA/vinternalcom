@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, FileText } from "lucide-react";
 import { Link } from "react-router-dom";
 import AddReportWizard from "@/components/AddReportWizard";
+import AddFundDialog from "@/components/AddFundDialog";
+import { Plus } from "lucide-react";
 import { fmtUSD, fmtPct, fmtMultiple, calcTvpi, calcDpi, fmtDate } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 import EstimatedBadge from "@/components/EstimatedBadge";
@@ -43,6 +45,7 @@ export default function FundsPage() {
   const [loading, setLoading] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardFundId, setWizardFundId] = useState<string | null>(null);
+  const [addFundOpen, setAddFundOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -158,9 +161,14 @@ export default function FundsPage() {
             {rows.length} funds · {selected.label}
           </p>
         </div>
-        <Button onClick={() => { setWizardFundId(null); setWizardOpen(true); }} className="gap-2">
-          <Upload className="h-4 w-4" /> Add report
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" /> Add fund
+          </Button>
+          <Button onClick={() => { setWizardFundId(null); setWizardOpen(true); }} className="gap-2">
+            <Upload className="h-4 w-4" /> Add report
+          </Button>
+        </div>
       </div>
 
       <Card className="bg-card border-border overflow-hidden">
@@ -356,6 +364,12 @@ export default function FundsPage() {
         defaultFundId={wizardFundId}
         defaultQuarterId={selected.id}
         onConfirmed={() => setRefreshKey((k) => k + 1)}
+      />
+
+      <AddFundDialog
+        open={addFundOpen}
+        onOpenChange={setAddFundOpen}
+        onCreated={() => setRefreshKey((k) => k + 1)}
       />
     </div>
   );
