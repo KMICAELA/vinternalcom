@@ -37,6 +37,7 @@ type ExtractedPayload = {
   report_date: string | null;
   currency: string | null;
   extraction_mode?: "A" | "B" | null;      // A = structured schedule, B = narrative-only
+  schedule_company_names?: string[] | null; // Exact Company column values from the structured SoI table, when present
   fund_total_contributions_usd: number | null;
   fund_total_nav_usd: number | null;
   twh_contributions_usd: number | null;
@@ -112,6 +113,7 @@ const COMPANY_ALIAS: Record<string, string> = {
   "andean systems": "Andean Systems",
   "the immune co": "The Immune Co.",
   "the immune co.": "The Immune Co.",
+  "the immune": "The Immune Co.",
   "immune co": "The Immune Co.",
   "vital lyfe": "Vital Lyfe",
   "inpho": "Inpho",
@@ -130,7 +132,7 @@ function normalizeCompanyKey(raw: string | null | undefined): string {
 }
 
 
-function canonicalCompanyName(raw: string | null | undefined): string {
+export function canonicalCompanyName(raw: string | null | undefined): string {
   const key = normalizeCompanyKey(raw);
   if (!key) return "";
   if (COMPANY_ALIAS[key]) return COMPANY_ALIAS[key];
@@ -155,7 +157,7 @@ function sumNullable(a: number | null | undefined, b: number | null | undefined)
 // Pick the larger non-null/non-zero value. Used when deduping same-company rows
 // where one came from a structured table (with values) and another from narrative
 // (often zero/null). NEVER overwrite a real value with null or 0.
-function preferTruthyMax(a: number | null | undefined, b: number | null | undefined): number | null {
+export function preferTruthyMax(a: number | null | undefined, b: number | null | undefined): number | null {
   const aNum = a == null ? null : Number(a);
   const bNum = b == null ? null : Number(b);
   if (aNum == null && bNum == null) return null;
@@ -168,7 +170,7 @@ function preferTruthyMax(a: number | null | undefined, b: number | null | undefi
   return Math.max(aNum, bNum);
 }
 
-function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
+export function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
   const merged = new Map<string, ExtractedHolding>();
   for (const h of holdings) {
     const canonical = canonicalCompanyName(h.company_name);
@@ -238,6 +240,21 @@ function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
   return entries.filter((e) => !used.has(e.company_name));
 }
 
+export function filterHoldingsToScheduleCompanies(
+  holdings: ExtractedHolding[],
+  scheduleCompanyNames: string[] | null | undefined,
+): ExtractedHolding[] {
+  const allowed = new Map<string, string>();
+  for (const name of scheduleCompanyNames ?? []) {
+    const canonical = canonicalCompanyName(name);
+    if (canonical) allowed.set(canonical, canonical);
+  }
+  if (allowed.size === 0) return holdings;
+  return holdings
+    .map((h) => ({ ...h, company_name: canonicalCompanyName(h.company_name) }))
+    .filter((h) => allowed.has(h.company_name));
+}
+
 // Move model output (which is in source currency) into the *_native fields.
 // We NO LONGER multiply by an FX rate at extraction time — the database
 // triggers (lookup_fund_fx_rate + *_derive_usd) will compute *_usd at write
@@ -274,6 +291,9 @@ function postProcessPayload(
   opts?: { fxRate?: number | null; sourceCcy?: string | null; dedupe?: boolean },
 ): ExtractedPayload {
   if (!p || !Array.isArray(p.holdings)) return p;
+  if (p.extraction_mode === "A") {
+    p.holdings = filterHoldingsToScheduleCompanies(p.holdings, p.schedule_company_names);
+  }
   p.holdings = p.holdings.map((h) => {
     const norm = normalizeRound(h.round);
     if (norm.round !== h.round) h.round = norm.round;
@@ -286,6 +306,9 @@ function postProcessPayload(
   });
   if (opts?.dedupe !== false) {
     p.holdings = dedupeHoldings(p.holdings);
+    if (p.extraction_mode === "A") {
+      p.holdings = filterHoldingsToScheduleCompanies(p.holdings, p.schedule_company_names);
+    }
   }
   // For non-USD funds: the model returned values in native currency.
   // Move them to *_native and leave *_usd null so the DB trigger fills them
@@ -346,6 +369,7 @@ All numeric amounts MUST be in base units (no thousands separators, no currency 
   "report_date": "YYYY-MM-DD" | null,
   "currency": "USD" | "EUR" | "GBP" | string | null,
   "extraction_mode": "A" | "B",
+  "schedule_company_names": string[] | null,
   "fund_total_contributions_native": number | null,
   "fund_total_nav_native": number | null,
   "twh_contributions_native": number | null,
@@ -386,6 +410,9 @@ headers like "Cost", "Investment", "Basis", "Fair Value", "FMV", "Market
 Value", "Carrying Value", "Round", "Round Invested", "Security Type", or
 "Instrument". Common in audited FS, fund-admin schedules, formal PCAPs.
 → Extract values DIRECTLY from the table, row by row. No inference.
+→ Also fill schedule_company_names with the exact values from the table's
+  Company/Portfolio Company column, excluding subtotal/total rows. This list
+  is used as a hard post-processing allowlist.
 If the table uses Quantonation-style headers, map them as follows:
   • "Ticket (€)" / "Ticket" / "Cost" / "Invested" -> fund_cost_native
   • "Investment Value (€)" / "Fair Value" / "FMV" -> fund_fmv_native
@@ -398,6 +425,14 @@ When a Schedule of Investments table is present (columns like Company /
 Initial Date / Invested Capital / Carrying Value / Ownership %), THAT TABLE
 IS THE COMPLETE HOLDINGS LIST. The number of rows in holdings[] must equal
 the number of data rows in that table (excluding subtotals/totals).
+Every holdings[].company_name MUST fuzzy-match a value in schedule_company_names.
+If a company is mentioned only in narrative and not in the table's Company
+column, exclude it even if the narrative names a round, launch, financing,
+valuation, or operating update.
+
+For Cantos Q4 specifically, narrative-only mentions such as MoldCo, neros,
+Castelion, and Radiant are NOT holdings if absent from the Schedule of
+Investments table. Do not emit them.
 
 Narrative paragraphs that re-discuss the same companies elsewhere in the
 document are CONTEXT, not separate investments:
@@ -671,7 +706,7 @@ function base64ToBytes(b64: string): Uint8Array {
 async function uploadPdfToAnthropicFiles(apiKey: string, base64: string, filename: string): Promise<string> {
   const bytes = base64ToBytes(base64);
   const form = new FormData();
-  form.append("file", new Blob([bytes], { type: "application/pdf" }), filename || "report.pdf");
+  form.append("file", new Blob([bytes as unknown as BlobPart], { type: "application/pdf" }), filename || "report.pdf");
   const resp = await fetch("https://api.anthropic.com/v1/files", {
     method: "POST",
     headers: {
@@ -755,7 +790,7 @@ async function callAnthropic(apiKey: string, systemPrompt: string, userBlocks: u
   return blocks.map((b: any) => (b.type === "text" ? b.text : "")).join("\n").trim();
 }
 
-serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
@@ -777,6 +812,7 @@ serve(async (req) => {
       email_text,            // raw pasted body
       eml_base64,            // raw .eml file as base64
       dry_run,               // boolean — if true, skip ALL DB writes (sandbox mode)
+      include_raw_model_output, // boolean — dry-run debug only; returns raw model text before post-processing
     } = body ?? {};
 
     if (!["pdf", "excel", "email"].includes(source_type)) {
@@ -1007,6 +1043,7 @@ Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_nati
           rate_missing: fxRateMissing,
         },
         diagnostic,
+        raw_model_output: include_raw_model_output ? { text: rawText } : undefined,
       };
       return new Response(
         JSON.stringify({ draft, source_document_id: null, dry_run: true }),
@@ -1043,4 +1080,8 @@ Concrete examples for Quantonation 2: "Ticket (€) = 600,000" -> fund_cost_nati
       status, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-});
+};
+
+if (import.meta.main) {
+  serve(handler);
+}
