@@ -21,6 +21,7 @@ import {
   archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs, normalizeName,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
+import DiffReviewPanel from "@/components/DiffReviewPanel";
 
 type ReportFull = {
   id: string;
