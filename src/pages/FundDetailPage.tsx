@@ -53,7 +53,7 @@ export default function FundDetailPage() {
     selected?.id ?? null,
     fund?.native_currency ?? null,
   );
-  const [holdings, setHoldings] = useState<{ id: string; company_id: string; company: string; round: string | null; instrument: string | null; cost: number | null; fmv: number | null; status: string }[]>([]);
+  const [holdings, setHoldings] = useState<{ id: string; company_id: string; company: string; round: string | null; instrument: string | null; investment_date: string | null; cost: number | null; fmv: number | null; status: string }[]>([]);
 
   useEffect(() => {
     if (!id) return;
@@ -110,7 +110,7 @@ export default function FundDetailPage() {
     (async () => {
       const { data } = await supabase
         .from("underlying_holdings")
-        .select("id, company_id, fund_cost_usd, fund_fmv_usd, round, instrument, companies(legal_name, commercial_name, status)")
+        .select("id, company_id, fund_cost_usd, fund_fmv_usd, round, instrument, investment_date, companies(legal_name, commercial_name, status)")
         .eq("fund_id", id)
         .eq("quarter_id", selected.id)
         .is("removed_at", null);
@@ -121,6 +121,7 @@ export default function FundDetailPage() {
           company: h.companies?.commercial_name ?? h.companies?.legal_name ?? "—",
           round: h.round ?? null,
           instrument: h.instrument ?? null,
+          investment_date: h.investment_date ?? null,
           cost: h.fund_cost_usd == null ? null : Number(h.fund_cost_usd),
           fmv: h.fund_fmv_usd == null ? null : Number(h.fund_fmv_usd),
           status: (h.companies?.status?.trim()) || "Active",
@@ -277,6 +278,7 @@ export default function FundDetailPage() {
                 <TableHead>Company</TableHead>
                 <TableHead>Round</TableHead>
                 <TableHead>Instrument</TableHead>
+                <TableHead>Investment date</TableHead>
                 <TableHead className="text-right">Cost</TableHead>
                 <TableHead className="text-right">FMV</TableHead>
                 <TableHead className="text-right">MOIC</TableHead>
@@ -285,7 +287,7 @@ export default function FundDetailPage() {
             </TableHeader>
             <TableBody>
               {holdings.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-muted-foreground py-12 text-center">No holdings recorded for this quarter.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-muted-foreground py-12 text-center">No holdings recorded for this quarter.</TableCell></TableRow>
               ) : (
                 <GroupedHoldings holdings={holdings} />
               )}
@@ -306,7 +308,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-type Holding = { id: string; company_id: string; company: string; round: string | null; instrument: string | null; cost: number | null; fmv: number | null; status: string };
+type Holding = { id: string; company_id: string; company: string; round: string | null; instrument: string | null; investment_date: string | null; cost: number | null; fmv: number | null; status: string };
 
 function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
   const groups = useMemo(() => {
@@ -359,6 +361,7 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">{single?.round ?? ""}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{single?.instrument ?? ""}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{single?.investment_date ? fmtDate(single.investment_date) : ""}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.cost == null ? "—" : fmtUSD(g.cost, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.fmv == null ? "—" : fmtUSD(g.fmv, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{fmtMultiple(moic)}</TableCell>
@@ -371,6 +374,7 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
                   <TableCell className="pl-10" />
                   <TableCell className="text-xs text-muted-foreground">{h.round ?? "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{h.instrument ?? "—"}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{h.investment_date ? fmtDate(h.investment_date) : "—"}</TableCell>
                   <TableCell className="text-right font-mono text-xs text-muted-foreground">{h.cost == null ? "—" : fmtUSD(h.cost, { compact: true })}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{h.fmv == null ? "—" : fmtUSD(h.fmv, { compact: true })}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{fmtMultiple(m)}</TableCell>
