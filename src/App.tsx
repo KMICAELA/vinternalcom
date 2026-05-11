@@ -59,6 +59,7 @@ const App = () => (
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/admin/reconciliation" element={<ReconciliationPage />} />
               <Route path="/admin/extraction-sandbox" element={<ExtractionSandboxPage />} />
+              <Route path="/admin/cleanup" element={<CleanupPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
