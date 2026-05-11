@@ -381,7 +381,7 @@ export default function UnderlyingPortfolioPage() {
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Instrument" sortKey="instrument" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(instrumentFilter, setInstrumentFilter, "Filter…")}
+                  {colFilterSelect(instrumentFilter, setInstrumentFilter, instrumentOptions, "All instruments")}
                 </TableHead>
                 <TableHead className="text-right">
                   <div className="flex justify-end"><SortHeader label="TWH %" sortKey="twh_pct" current={sortKey} dir={sortDir} onSort={onSort} align="right" /></div>
