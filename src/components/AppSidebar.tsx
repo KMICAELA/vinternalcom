@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   FlaskConical,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
