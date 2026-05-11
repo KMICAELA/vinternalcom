@@ -161,9 +161,14 @@ export default function FundsPage() {
             {rows.length} funds · {selected.label}
           </p>
         </div>
-        <Button onClick={() => { setWizardFundId(null); setWizardOpen(true); }} className="gap-2">
-          <Upload className="h-4 w-4" /> Add report
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" /> Add fund
+          </Button>
+          <Button onClick={() => { setWizardFundId(null); setWizardOpen(true); }} className="gap-2">
+            <Upload className="h-4 w-4" /> Add report
+          </Button>
+        </div>
       </div>
 
       <Card className="bg-card border-border overflow-hidden">
