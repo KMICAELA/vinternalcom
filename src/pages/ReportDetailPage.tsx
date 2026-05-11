@@ -94,12 +94,84 @@ export default function ReportDetailPage() {
     })();
   }, [report?.storage_path]);
 
-  const payload = report?.extracted_payload ?? null;
+  const livePayload = report?.extracted_payload ?? null;
+  const payload = editing ? draft : livePayload;
   const meta = report ? STATUS_META[report.extraction_status] : null;
   const StatusIcon = meta?.icon ?? FileText;
 
   const holdings = payload?.holdings ?? [];
   const directRows = useMemo(() => holdings, [holdings]);
+
+  function startEdit() {
+    setDraft(livePayload ? JSON.parse(JSON.stringify(livePayload)) : null);
+    setEditing(true);
+  }
+  function cancelEdit() {
+    setDraft(null);
+    setEditing(false);
+  }
+  function patchDraft(patch: Partial<ExtractedPayload>) {
+    setDraft((d) => (d ? { ...d, ...patch } : d));
+  }
+  function patchHolding(idx: number, patch: Partial<NonNullable<ExtractedPayload["holdings"]>[number]>) {
+    setDraft((d) => {
+      if (!d) return d;
+      const next = [...(d.holdings ?? [])];
+      next[idx] = { ...next[idx], ...patch } as any;
+      return { ...d, holdings: next };
+    });
+  }
+  function addHolding() {
+    setDraft((d) => {
+      if (!d) return d;
+      const blank = {
+        company_name: "", investment_date: null, instrument: null, round: null,
+        fund_cost_usd: null, fund_fmv_usd: null, fund_proceeds_usd: null,
+      } as any;
+      return { ...d, holdings: [...(d.holdings ?? []), blank] };
+    });
+  }
+  function removeHolding(idx: number) {
+    setDraft((d) => {
+      if (!d) return d;
+      const next = [...(d.holdings ?? [])];
+      next.splice(idx, 1);
+      return { ...d, holdings: next };
+    });
+  }
+
+  async function onSaveEdit() {
+    if (!report || !draft) return;
+    setBusy("save");
+    try {
+      const needsReview = (draft.holdings ?? []).some(
+        (h: any) => h.fund_cost_usd == null || h.fund_fmv_usd == null || h?.needs_review === true,
+      );
+      const status = needsReview ? "needs_review" : "success";
+      const { error: uErr } = await supabase
+        .from("reports")
+        .update({
+          extracted_payload: draft as any,
+          extraction_status: status,
+          extraction_summary: {
+            holdings: draft.holdings?.length ?? 0,
+            edited_at: new Date().toISOString(),
+            currency: draft.currency,
+            report_date: draft.report_date,
+          },
+        })
+        .eq("id", report.id);
+      if (uErr) throw uErr;
+      toast.success("Extraction saved" + (report.committed_to_db ? " — re-promote to update live data" : ""));
+      setEditing(false);
+      setDraft(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Save failed");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function onPromote() {
     if (!report) return;
