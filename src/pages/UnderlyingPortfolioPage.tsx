@@ -373,7 +373,7 @@ export default function UnderlyingPortfolioPage() {
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Status" sortKey="status" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(statusFilter, setStatusFilter, "Filter…")}
+                  {colFilterSelect(statusFilter, setStatusFilter, statusOptions, "All statuses")}
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Round" sortKey="round" current={sortKey} dir={sortDir} onSort={onSort} />
