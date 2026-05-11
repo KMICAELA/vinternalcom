@@ -366,13 +366,13 @@ export default function ConsolidatedPage() {
         </Card>
       )}
 
-      {/* Net Cash Flow Ledger */}
+      {/* Cash Flow */}
       <Card className="bg-card border-border overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b border-border">
           <div>
-            <h2 className="text-base font-semibold">Net Cash Flow Ledger</h2>
+            <h2 className="text-base font-semibold">Cash Flow</h2>
             <p className="text-xs text-muted-foreground mt-0.5">
-              All TWH-level transactions. Terminal NAV reflects the current selected quarter.
+              All TWH-level cash transactions. Use the NAV category below for quarter-end balance snapshots.
             </p>
           </div>
           <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -404,10 +404,6 @@ export default function ConsolidatedPage() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-xs">Counterparty</Label>
-                  <Input placeholder="Fund or company" value={form.counterparty} onChange={(e) => setForm({ ...form, counterparty: e.target.value })} />
-                </div>
-                <div className="space-y-1.5">
                   <Label className="text-xs">Amount (USD)</Label>
                   <Input
                     type="number"
@@ -417,7 +413,7 @@ export default function ConsolidatedPage() {
                     onChange={(e) => setForm({ ...form, amount_usd: e.target.value })}
                   />
                   <p className="text-[10px] text-muted-foreground">
-                    Outflows (Capital Call, Fees, Expense, Direct Investment) stored negative; inflows stored positive.
+                    Outflows (Capital Call, Fees, Expense, Direct Investment) stored negative; inflows positive. NAV is a balance — replaced quarter-to-quarter, never accumulated.
                   </p>
                 </div>
                 <div className="space-y-1.5">
@@ -439,33 +435,21 @@ export default function ConsolidatedPage() {
               <TableRow className="hover:bg-transparent">
                 <TableHead>Date</TableHead>
                 <TableHead>Category</TableHead>
-                <TableHead>Counterparty</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {/* Terminal NAV — fixed top row */}
-              <TableRow className="bg-muted/30 hover:bg-muted/40 font-medium">
-                <TableCell>{fmtDate(selected.quarter_end_date)}</TableCell>
-                <TableCell>Terminal NAV</TableCell>
-                <TableCell className="text-muted-foreground">All funds + directs</TableCell>
-                <TableCell className="text-muted-foreground">Quarter-end portfolio valuation</TableCell>
-                <TableCell className="text-right font-mono">{fmtUSD(agg.nav, { compact: true })}</TableCell>
-                <TableCell></TableCell>
-              </TableRow>
-
               {loading ? (
-                <TableRow><TableCell colSpan={6} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
-              ) : entries.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-muted-foreground py-12 text-center">No ledger entries yet — add the first capital call above.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+              ) : cashFlowEntries.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-muted-foreground py-12 text-center">No cash flow entries yet — add the first capital call above.</TableCell></TableRow>
               ) : (
-                entries.map((e) => (
+                cashFlowEntries.map((e) => (
                   <TableRow key={e.id} className="table-row-hover">
                     <TableCell>{fmtDate(e.date)}</TableCell>
                     <TableCell>{e.category}</TableCell>
-                    <TableCell className="text-muted-foreground">{e.counterparty ?? "—"}</TableCell>
                     <TableCell className="text-muted-foreground max-w-[320px] truncate">{e.description ?? "—"}</TableCell>
                     <TableCell className={`text-right font-mono ${signClass(Number(e.amount_usd))}`}>
                       {fmtUSD(Number(e.amount_usd), { compact: true })}
@@ -482,6 +466,99 @@ export default function ConsolidatedPage() {
           </Table>
         </div>
       </Card>
+
+      {/* NAV */}
+      <Card className="bg-card border-border overflow-hidden">
+        <div className="p-4 border-b border-border">
+          <h2 className="text-base font-semibold">NAV</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Quarter-end balance. NAV is replaced from quarter to quarter — never accumulated. Terminal NAV reflects the current selected quarter.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead>Date</TableHead>
+                <TableHead>Source</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead className="text-right">NAV</TableHead>
+                <TableHead className="w-10"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Terminal NAV — fixed top row from snapshots */}
+              <TableRow className="bg-muted/30 hover:bg-muted/40 font-medium">
+                <TableCell>{fmtDate(selected.quarter_end_date)}</TableCell>
+                <TableCell>Terminal NAV</TableCell>
+                <TableCell className="text-muted-foreground">All funds + directs · {selected.label}</TableCell>
+                <TableCell className="text-right font-mono">{fmtUSD(agg.nav, { compact: true })}</TableCell>
+                <TableCell></TableCell>
+              </TableRow>
+              {navEntries.map((e) => (
+                <TableRow key={e.id} className="table-row-hover">
+                  <TableCell>{fmtDate(e.date)}</TableCell>
+                  <TableCell>Manual</TableCell>
+                  <TableCell className="text-muted-foreground max-w-[320px] truncate">{e.description ?? "—"}</TableCell>
+                  <TableCell className="text-right font-mono">{fmtUSD(Number(e.amount_usd), { compact: true })}</TableCell>
+                  <TableCell>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDelete(e.id)}>
+                      <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
+
+      {/* Charts */}
+      {history.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="bg-card border-border p-4">
+            <div className="text-sm font-medium mb-3">NAV trajectory</div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history.map((r) => ({ label: r.quarter.label, NAV: r.nav, Contributions: r.contrib, Distributions: r.distrib }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtUSD(v, { compact: true })} />
+                  <RTooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                    formatter={(v: any) => fmtUSD(Number(v), { compact: true })}
+                  />
+                  <Line type="monotone" dataKey="NAV" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="Contributions" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={false} />
+                  <Line type="monotone" dataKey="Distributions" stroke="hsl(var(--chart-2, var(--accent)))" strokeWidth={1.5} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+          <Card className="bg-card border-border p-4">
+            <div className="text-sm font-medium mb-3">TVPI / DPI / IRR over time</div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={history.map((r) => ({
+                  label: r.quarter.label,
+                  TVPI: r.tvpi != null ? Number(r.tvpi.toFixed(4)) : null,
+                  DPI: r.dpi != null ? Number(r.dpi.toFixed(4)) : null,
+                  IRR: r.irr != null ? Number((r.irr * 100).toFixed(2)) : null,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${v.toFixed(2)}x`} />
+                  <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${v}%`} />
+                  <RTooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }} />
+                  <Line yAxisId="left" type="monotone" dataKey="TVPI" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line yAxisId="left" type="monotone" dataKey="DPI" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="IRR" stroke="hsl(var(--accent))" strokeWidth={1.5} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+        </div>
+      )}
             </>
           )}
         </TabsContent>
