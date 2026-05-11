@@ -45,6 +45,7 @@ export default function FundsPage() {
   const [loading, setLoading] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardFundId, setWizardFundId] = useState<string | null>(null);
+  const [addFundOpen, setAddFundOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
