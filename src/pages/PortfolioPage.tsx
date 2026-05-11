@@ -232,6 +232,19 @@ export default function PortfolioPage() {
     });
   }, [activeCompanies, search, fundFilter, industryFilter, typeFilter, companyFunds, industrySet]);
 
+  // If a focus company is requested via ?company=, narrow to just that company.
+  const displayed = useMemo(() => {
+    if (!focusCompanyId) return filtered;
+    const match = companies.find((c) => c.id === focusCompanyId);
+    return match ? [match] : filtered;
+  }, [filtered, focusCompanyId, companies]);
+
+  useEffect(() => {
+    if (focusCompanyId && focusedRef.current) {
+      focusedRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [focusCompanyId, displayed.length]);
+
   return (
     <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-4">
       <div className="flex items-start justify-between gap-4">
