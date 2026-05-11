@@ -107,24 +107,46 @@ const COMPANY_ALIAS: Record<string, string> = {
   "quantonation canada": "Quantonation Canada",
   "quantonatio": "Quantonation Canada",
   "quantonation": "Quantonation Canada",
+  // Cantos Q4 LP letter aliases
+  "andean": "Andean Systems",
+  "andean systems": "Andean Systems",
+  "the immune co": "The Immune Co.",
+  "the immune co.": "The Immune Co.",
+  "immune co": "The Immune Co.",
+  "vital lyfe": "Vital Lyfe",
+  "inpho": "Inpho",
+  "rubicon": "Rubicon",
 };
 
-function canonicalCompanyName(raw: string | null | undefined): string {
+function normalizeCompanyKey(raw: string | null | undefined): string {
   const t = (raw ?? "").trim();
   if (!t) return "";
-  // Normalize: lowercase, collapse whitespace, strip trailing punctuation
   let key = t.toLowerCase().replace(/\s+/g, " ").replace(/[.,;:]+$/g, "");
+  // Strip parenthetical "(Zoo.dev)"
+  key = key.replace(/\s*\([^)]+\)\s*$/, "").trim();
+  // Strip common entity suffixes
+  key = key.replace(/\s+(inc\.?|llc|ltd\.?|corp\.?|co\.?|sa|sas|sarl|gmbh|plc|ag)$/i, "").trim();
+  return key;
+}
+
+function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function canonicalCompanyName(raw: string | null | undefined): string {
+  const key = normalizeCompanyKey(raw);
+  if (!key) return "";
   if (COMPANY_ALIAS[key]) return COMPANY_ALIAS[key];
-  // Strip common suffixes
-  const stripped = key.replace(/\s+(inc\.?|llc|ltd\.?|corp\.?|co\.?|sa|sas|sarl|gmbh)$/i, "").trim();
-  if (COMPANY_ALIAS[stripped]) return COMPANY_ALIAS[stripped];
-  // Strip parenthetical aliases e.g. "Zoo (Zoo.dev)" → check inner alias
-  const paren = key.match(/^([^(]+?)\s*\(([^)]+)\)\s*$/);
+  const paren = (raw ?? "").trim().toLowerCase().match(/^([^(]+?)\s*\(([^)]+)\)\s*$/);
   if (paren) {
-    if (COMPANY_ALIAS[paren[1].trim()]) return COMPANY_ALIAS[paren[1].trim()];
-    if (COMPANY_ALIAS[paren[2].trim()]) return COMPANY_ALIAS[paren[2].trim()];
+    const inner = normalizeCompanyKey(paren[2]);
+    const outer = normalizeCompanyKey(paren[1]);
+    if (COMPANY_ALIAS[inner]) return COMPANY_ALIAS[inner];
+    if (COMPANY_ALIAS[outer]) return COMPANY_ALIAS[outer];
   }
-  return t;
+  // Stable canonical: normalized key in Title Case so "Vital Lyfe Inc" and
+  // "VITAL LYFE" both collapse to "Vital Lyfe".
+  return titleCase(key);
 }
 
 // Sum two numbers treating null as 0; returns null only if BOTH are null.
