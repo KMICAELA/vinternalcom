@@ -7,11 +7,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Download, ArrowLeft, RefreshCw, CheckCircle2, AlertCircle, AlertTriangle,
-  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2,
+  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2, Pencil, X, Save, Plus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
@@ -62,8 +63,10 @@ export default function ReportDetailPage() {
   const { role } = useAuth();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete">(null);
+  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete" | "save">(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<ExtractedPayload | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -91,12 +94,84 @@ export default function ReportDetailPage() {
     })();
   }, [report?.storage_path]);
 
-  const payload = report?.extracted_payload ?? null;
+  const livePayload = report?.extracted_payload ?? null;
+  const payload = editing ? draft : livePayload;
   const meta = report ? STATUS_META[report.extraction_status] : null;
   const StatusIcon = meta?.icon ?? FileText;
 
   const holdings = payload?.holdings ?? [];
   const directRows = useMemo(() => holdings, [holdings]);
+
+  function startEdit() {
+    setDraft(livePayload ? JSON.parse(JSON.stringify(livePayload)) : null);
+    setEditing(true);
+  }
+  function cancelEdit() {
+    setDraft(null);
+    setEditing(false);
+  }
+  function patchDraft(patch: Partial<ExtractedPayload>) {
+    setDraft((d) => (d ? { ...d, ...patch } : d));
+  }
+  function patchHolding(idx: number, patch: Partial<NonNullable<ExtractedPayload["holdings"]>[number]>) {
+    setDraft((d) => {
+      if (!d) return d;
+      const next = [...(d.holdings ?? [])];
+      next[idx] = { ...next[idx], ...patch } as any;
+      return { ...d, holdings: next };
+    });
+  }
+  function addHolding() {
+    setDraft((d) => {
+      if (!d) return d;
+      const blank = {
+        company_name: "", investment_date: null, instrument: null, round: null,
+        fund_cost_usd: null, fund_fmv_usd: null, fund_proceeds_usd: null,
+      } as any;
+      return { ...d, holdings: [...(d.holdings ?? []), blank] };
+    });
+  }
+  function removeHolding(idx: number) {
+    setDraft((d) => {
+      if (!d) return d;
+      const next = [...(d.holdings ?? [])];
+      next.splice(idx, 1);
+      return { ...d, holdings: next };
+    });
+  }
+
+  async function onSaveEdit() {
+    if (!report || !draft) return;
+    setBusy("save");
+    try {
+      const needsReview = (draft.holdings ?? []).some(
+        (h: any) => h.fund_cost_usd == null || h.fund_fmv_usd == null || h?.needs_review === true,
+      );
+      const status = needsReview ? "needs_review" : "success";
+      const { error: uErr } = await supabase
+        .from("reports")
+        .update({
+          extracted_payload: draft as any,
+          extraction_status: status,
+          extraction_summary: {
+            holdings: draft.holdings?.length ?? 0,
+            edited_at: new Date().toISOString(),
+            currency: draft.currency,
+            report_date: draft.report_date,
+          },
+        })
+        .eq("id", report.id);
+      if (uErr) throw uErr;
+      toast.success("Extraction saved" + (report.committed_to_db ? " — re-promote to update live data" : ""));
+      setEditing(false);
+      setDraft(null);
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Save failed");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   async function onPromote() {
     if (!report) return;
@@ -241,9 +316,33 @@ export default function ReportDetailPage() {
 
       {/* (b) Extraction results */}
       <Card className="bg-card border-border p-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <h2 className="text-sm font-semibold">Extraction results</h2>
-          <span className="text-[11px] text-muted-foreground">Read-only · captured at upload time</span>
+          <div className="flex items-center gap-2">
+            {!editing ? (
+              <>
+                <span className="text-[11px] text-muted-foreground">
+                  {isAdmin ? "Click Edit to correct extracted values" : "Read-only · captured at upload time"}
+                </span>
+                {isAdmin && livePayload && (
+                  <Button onClick={startEdit} variant="outline" size="sm" className="gap-2 h-8 text-xs">
+                    <Pencil className="h-3 w-3" /> Edit
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <span className="text-[11px] text-amber-400">Editing — unsaved changes</span>
+                <Button onClick={cancelEdit} variant="outline" size="sm" disabled={busy === "save"} className="gap-2 h-8 text-xs">
+                  <X className="h-3 w-3" /> Cancel
+                </Button>
+                <Button onClick={onSaveEdit} size="sm" disabled={busy === "save"} className="gap-2 h-8 text-xs">
+                  {busy === "save" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                  Save
+                </Button>
+              </>
+            )}
+          </div>
         </div>
         {!payload ? (
           <div className="text-sm text-muted-foreground py-8 text-center">No extraction payload available.</div>
@@ -265,24 +364,29 @@ export default function ReportDetailPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    <KvRow label="Fund name (extracted)" value={payload.fund_name ?? "—"} />
-                    <KvRow label="Report date" value={payload.report_date ?? "—"} />
-                    <KvRow label="Currency" value={payload.currency ?? "—"} />
-                    <KvRow label="TWH Contributions" value={fmtUSD(payload.twh_contributions_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="TWH Distributions" value={fmtUSD(payload.twh_distributions_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="TWH NAV" value={fmtUSD(payload.twh_nav_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="Fund Total Contributions" value={fmtUSD(payload.fund_total_contributions_usd ?? 0, { compact: true })} mono />
-                    <KvRow label="Fund Total NAV" value={fmtUSD(payload.fund_total_nav_usd ?? 0, { compact: true })} mono />
-                    <KvRow
-                      label="DPI"
-                      mono
-                      value={fmtMultiple(calcDpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0))}
-                    />
-                    <KvRow
-                      label="TVPI"
-                      mono
-                      value={fmtMultiple(calcTvpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0, payload.twh_nav_usd ?? 0))}
-                    />
+                    <EditableKvRow label="Fund name (extracted)" editing={editing} value={payload.fund_name}
+                      onChange={(v) => patchDraft({ fund_name: v || null })} />
+                    <EditableKvRow label="Report date" editing={editing} value={payload.report_date} type="date"
+                      onChange={(v) => patchDraft({ report_date: v || null })} />
+                    <EditableKvRow label="Currency" editing={editing} value={payload.currency}
+                      onChange={(v) => patchDraft({ currency: v ? v.toUpperCase() : null })} />
+                    <EditableKvRow label="TWH Contributions" editing={editing} value={payload.twh_contributions_usd} numeric mono
+                      display={fmtUSD(payload.twh_contributions_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ twh_contributions_usd: parseNum(v) })} />
+                    <EditableKvRow label="TWH Distributions" editing={editing} value={payload.twh_distributions_usd} numeric mono
+                      display={fmtUSD(payload.twh_distributions_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ twh_distributions_usd: parseNum(v) })} />
+                    <EditableKvRow label="TWH NAV" editing={editing} value={payload.twh_nav_usd} numeric mono
+                      display={fmtUSD(payload.twh_nav_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ twh_nav_usd: parseNum(v) })} />
+                    <EditableKvRow label="Fund Total Contributions" editing={editing} value={payload.fund_total_contributions_usd} numeric mono
+                      display={fmtUSD(payload.fund_total_contributions_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ fund_total_contributions_usd: parseNum(v) })} />
+                    <EditableKvRow label="Fund Total NAV" editing={editing} value={payload.fund_total_nav_usd} numeric mono
+                      display={fmtUSD(payload.fund_total_nav_usd ?? 0, { compact: true })}
+                      onChange={(v) => patchDraft({ fund_total_nav_usd: parseNum(v) })} />
+                    <KvRow label="DPI" mono value={fmtMultiple(calcDpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0))} />
+                    <KvRow label="TVPI" mono value={fmtMultiple(calcTvpi(payload.twh_contributions_usd ?? 0, payload.twh_distributions_usd ?? 0, payload.twh_nav_usd ?? 0))} />
                   </TableBody>
                 </Table>
               </div>
@@ -301,27 +405,72 @@ export default function ReportDetailPage() {
                       <TableHead className="text-right">FMV</TableHead>
                       <TableHead className="text-right">Proceeds</TableHead>
                       <TableHead className="text-right">MOIC</TableHead>
+                      {editing && <TableHead className="w-8"></TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {directRows.length === 0 ? (
+                    {directRows.length === 0 && !editing ? (
                       <TableRow><TableCell colSpan={8} className="text-muted-foreground py-8 text-center">No holdings extracted</TableCell></TableRow>
                     ) : (
                       directRows.map((h, i) => {
                         const moic = h.fund_cost_usd == null ? null : calcMoic(h.fund_cost_usd, h.fund_fmv_usd ?? 0, h.fund_proceeds_usd ?? 0);
                         return (
-                          <TableRow key={`${h.company_name}-${i}`} className="table-row-hover">
-                            <TableCell className="font-medium">{h.company_name}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs">{fmtDate(h.investment_date)}</TableCell>
-                            <TableCell className="text-xs">{h.round ? <Badge variant="secondary" className="font-normal">{h.round}</Badge> : "—"}</TableCell>
-                            <TableCell className="text-muted-foreground text-xs">{h.instrument ?? "—"}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{h.fund_cost_usd == null ? "—" : fmtUSD(h.fund_cost_usd, { compact: true })}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{h.fund_fmv_usd == null ? "—" : fmtUSD(h.fund_fmv_usd, { compact: true })}</TableCell>
-                            <TableCell className="text-right font-mono text-xs">{h.fund_proceeds_usd == null ? "—" : fmtUSD(h.fund_proceeds_usd, { compact: true })}</TableCell>
+                          <TableRow key={i} className="table-row-hover">
+                            <TableCell className="font-medium">
+                              {editing
+                                ? <Input value={h.company_name ?? ""} onChange={(e) => patchHolding(i, { company_name: e.target.value })} className="h-8 text-xs" />
+                                : (h.company_name || "—")}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {editing
+                                ? <Input type="date" value={h.investment_date ?? ""} onChange={(e) => patchHolding(i, { investment_date: e.target.value || null })} className="h-8 text-xs" />
+                                : fmtDate(h.investment_date)}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {editing
+                                ? <Input value={h.round ?? ""} onChange={(e) => patchHolding(i, { round: e.target.value || null })} className="h-8 text-xs" placeholder="—" />
+                                : (h.round ? <Badge variant="secondary" className="font-normal">{h.round}</Badge> : "—")}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-xs">
+                              {editing
+                                ? <Input value={h.instrument ?? ""} onChange={(e) => patchHolding(i, { instrument: e.target.value || null })} className="h-8 text-xs" placeholder="—" />
+                                : (h.instrument ?? "—")}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {editing
+                                ? <Input type="number" value={h.fund_cost_usd ?? ""} onChange={(e) => patchHolding(i, { fund_cost_usd: parseNum(e.target.value) })} className="h-8 text-xs text-right" />
+                                : (h.fund_cost_usd == null ? "—" : fmtUSD(h.fund_cost_usd, { compact: true }))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {editing
+                                ? <Input type="number" value={h.fund_fmv_usd ?? ""} onChange={(e) => patchHolding(i, { fund_fmv_usd: parseNum(e.target.value) })} className="h-8 text-xs text-right" />
+                                : (h.fund_fmv_usd == null ? "—" : fmtUSD(h.fund_fmv_usd, { compact: true }))}
+                            </TableCell>
+                            <TableCell className="text-right font-mono text-xs">
+                              {editing
+                                ? <Input type="number" value={h.fund_proceeds_usd ?? ""} onChange={(e) => patchHolding(i, { fund_proceeds_usd: parseNum(e.target.value) })} className="h-8 text-xs text-right" />
+                                : (h.fund_proceeds_usd == null ? "—" : fmtUSD(h.fund_proceeds_usd, { compact: true }))}
+                            </TableCell>
                             <TableCell className="text-right font-mono text-xs">{fmtMultiple(moic)}</TableCell>
+                            {editing && (
+                              <TableCell>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeHolding(i)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </TableCell>
+                            )}
                           </TableRow>
                         );
                       })
+                    )}
+                    {editing && (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={9}>
+                          <Button variant="outline" size="sm" className="gap-2 h-8 text-xs" onClick={addHolding}>
+                            <Plus className="h-3 w-3" /> Add holding
+                          </Button>
+                        </TableCell>
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -411,6 +560,43 @@ function KvRow({ label, value, mono }: { label: string; value: string; mono?: bo
     <TableRow className="hover:bg-transparent">
       <TableCell className="text-muted-foreground text-xs">{label}</TableCell>
       <TableCell className={`text-right text-xs ${mono ? "font-mono" : ""}`}>{value}</TableCell>
+    </TableRow>
+  );
+}
+
+function parseNum(v: string): number | null {
+  if (v == null || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function EditableKvRow({
+  label, value, editing, onChange, numeric, mono, display, type,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  editing: boolean;
+  onChange: (v: string) => void;
+  numeric?: boolean;
+  mono?: boolean;
+  display?: string;
+  type?: string;
+}) {
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell className="text-muted-foreground text-xs">{label}</TableCell>
+      <TableCell className={`text-right text-xs ${mono ? "font-mono" : ""}`}>
+        {editing ? (
+          <Input
+            type={type ?? (numeric ? "number" : "text")}
+            value={value == null ? "" : String(value)}
+            onChange={(e) => onChange(e.target.value)}
+            className={`h-8 text-xs ml-auto max-w-[240px] ${mono ? "font-mono text-right" : ""}`}
+          />
+        ) : (
+          display ?? (value == null || value === "" ? "—" : String(value))
+        )}
+      </TableCell>
     </TableRow>
   );
 }
