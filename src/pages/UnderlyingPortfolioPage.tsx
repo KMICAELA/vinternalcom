@@ -33,6 +33,8 @@ type Row = {
   status: string;
   needs_review: boolean;
   review_reason: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
 };
 
 const ROUND_OPTIONS = [
@@ -147,16 +149,21 @@ export default function UnderlyingPortfolioPage() {
   const [fundFilter, setFundFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roundFilter, setRoundFilter] = useState("all");
+  // Show soft-deleted rows (admin audit/recovery toggle).
+  const [showRemoved, setShowRemoved] = useState(false);
 
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
     (async () => {
+      // Live rows only by default; toggle includes soft-deleted ones.
+      let query = supabase
+        .from("underlying_holdings")
+        .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, fund_ownership_pct, needs_review, review_reason, removed_at, removed_reason, funds(name, short_name), companies(legal_name, commercial_name, status)")
+        .eq("quarter_id", selected.id);
+      if (!showRemoved) query = query.is("removed_at", null);
       const [{ data: holdings }, { data: commits }] = await Promise.all([
-        supabase
-          .from("underlying_holdings")
-          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, fund_ownership_pct, needs_review, review_reason, funds(name, short_name), companies(legal_name, commercial_name, status)")
-          .eq("quarter_id", selected.id),
+        query,
         supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
       const pctMap = new Map((commits ?? []).map((c: any) => [c.fund_id, Number(c.twh_ownership_pct ?? 0)]));
@@ -177,11 +184,13 @@ export default function UnderlyingPortfolioPage() {
         status: h.companies?.status?.trim() || "Active",
         needs_review: h.needs_review === true,
         review_reason: h.review_reason ?? null,
+        removed_at: h.removed_at ?? null,
+        removed_reason: h.removed_reason ?? null,
       }));
       setRows(out);
       setLoading(false);
     })();
-  }, [selected]);
+  }, [selected, showRemoved]);
 
   const fundOptions = useMemo(() => {
     const m = new Map<string, string>();
@@ -261,6 +270,15 @@ export default function UnderlyingPortfolioPage() {
               {ROUND_OPTIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>
+          <label className="flex items-center gap-2 text-[11px] text-muted-foreground cursor-pointer select-none px-2 h-9 rounded border border-border hover:text-foreground">
+            <input
+              type="checkbox"
+              checked={showRemoved}
+              onChange={(e) => setShowRemoved(e.target.checked)}
+              className="h-3 w-3 cursor-pointer"
+            />
+            Show removed
+          </label>
         </div>
       </div>
 
@@ -295,9 +313,16 @@ export default function UnderlyingPortfolioPage() {
                     const moic = r.cost === null ? null : calcMoic(r.cost, r.fmv ?? 0, r.proceeds ?? 0);
                     const gain = (r.fmv ?? 0) + (r.proceeds ?? 0) - (r.cost ?? 0);
                     return (
-                      <TableRow key={r.id} className="table-row-hover">
+                      <TableRow key={r.id} className={`table-row-hover ${r.removed_at ? "opacity-50 line-through" : ""}`}>
                         <TableCell><ConfidenceIcon row={r} /></TableCell>
-                        <TableCell className="font-medium">{r.company}</TableCell>
+                        <TableCell className="font-medium">
+                          {r.company}
+                          {r.removed_at && (
+                            <Badge variant="outline" className="ml-2 text-[9px] text-muted-foreground border-border">
+                              removed · {r.removed_reason}
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-muted-foreground max-w-[260px] truncate">
                           {r.fund}
                           {selected && r.currency !== "USD" && (

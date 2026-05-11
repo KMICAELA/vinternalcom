@@ -143,7 +143,7 @@ export default function DashboardPortfolioCharts({ quarterId }: { quarterId: str
         supabase.from("companies").select("id, type, region, industry"),
         supabase.from("directs").select("id, company_id"),
         supabase.from("direct_quarter_snapshots").select("direct_id").eq("quarter_id", quarterId),
-        supabase.from("underlying_holdings").select("company_id").eq("quarter_id", quarterId),
+        supabase.from("underlying_holdings").select("company_id").eq("quarter_id", quarterId).is("removed_at", null),
       ]);
       if (cancelled) return;
       const directIdToCompany = new Map<string, string>();

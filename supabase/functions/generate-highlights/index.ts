@@ -80,7 +80,8 @@ serve(async (req) => {
         supabase
           .from("underlying_holdings")
           .select("fund_id, company_id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, investment_date, round")
-          .eq("quarter_id", qid),
+          .eq("quarter_id", qid)
+          .is("removed_at", null),
       ]);
       return {
         snapshots: snaps.data ?? [],

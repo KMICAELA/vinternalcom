@@ -75,6 +75,7 @@ export default function PortfolioPage() {
                 .from("underlying_holdings")
                 .select("company_id, fund_id")
                 .eq("quarter_id", quarter.id)
+                .is("removed_at", null)
             : Promise.resolve({ data: [], error: null }),
         ]);
       if (cancelled) return;

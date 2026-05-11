@@ -11,6 +11,7 @@ import {
   Settings,
   ShieldCheck,
   FlaskConical,
+  Trash2,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -49,6 +50,7 @@ export function AppSidebar() {
           ...items,
           { title: "Reconciliation", url: "/admin/reconciliation", icon: ShieldCheck },
           { title: "Extraction Sandbox", url: "/admin/extraction-sandbox", icon: FlaskConical },
+          { title: "Cleanup", url: "/admin/cleanup", icon: Trash2 },
         ]
       : items;
 

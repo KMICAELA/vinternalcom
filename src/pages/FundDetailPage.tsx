@@ -111,7 +111,8 @@ export default function FundDetailPage() {
         .from("underlying_holdings")
         .select("id, company_id, fund_cost_usd, fund_fmv_usd, round, instrument, companies(legal_name, commercial_name, status)")
         .eq("fund_id", id)
-        .eq("quarter_id", selected.id);
+        .eq("quarter_id", selected.id)
+        .is("removed_at", null);
       setHoldings(
         (data ?? []).map((h: any) => ({
           id: h.id,

@@ -609,6 +609,7 @@ function DiffDebugPanel({
         ? supabase.from("underlying_holdings")
             .select("companies:company_id(commercial_name, legal_name)")
             .eq("fund_id", fundId).eq("quarter_id", quarterId)
+            .is("removed_at", null)
         : Promise.resolve({ data: [] as any[] }),
     ]);
     setRows(diffs ?? []);

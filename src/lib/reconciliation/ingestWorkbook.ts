@@ -40,10 +40,13 @@ export interface IngestSummary {
 }
 
 async function getQuarterCount(table: "underlying_holdings" | "direct_quarter_snapshots", quarterId: string) {
-  const { count } = await supabase
+  let q = supabase
     .from(table)
     .select("id", { count: "exact", head: true })
     .eq("quarter_id", quarterId);
+  // Exclude soft-deleted holdings from the "before/after" reconciliation count.
+  if (table === "underlying_holdings") q = q.is("removed_at", null);
+  const { count } = await q;
   return count ?? 0;
 }
 

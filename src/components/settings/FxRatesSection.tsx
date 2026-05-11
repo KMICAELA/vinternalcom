@@ -182,7 +182,7 @@ export default function FxRatesSection() {
     if (fundId) {
       const [{ count: hCount }, { count: sCount }] = await Promise.all([
         supabase.from("underlying_holdings").select("id", { count: "exact", head: true })
-          .eq("fund_id", fundId).eq("quarter_id", form.quarter_id).eq("currency", fromCcy),
+          .eq("fund_id", fundId).eq("quarter_id", form.quarter_id).eq("currency", fromCcy).is("removed_at", null),
         supabase.from("fund_quarter_snapshots").select("id", { count: "exact", head: true })
           .eq("fund_id", fundId).eq("quarter_id", form.quarter_id).eq("currency", fromCcy),
       ]);
