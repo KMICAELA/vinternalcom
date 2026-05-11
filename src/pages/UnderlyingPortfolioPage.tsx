@@ -33,6 +33,8 @@ type Row = {
   status: string;
   needs_review: boolean;
   review_reason: string | null;
+  removed_at: string | null;
+  removed_reason: string | null;
 };
 
 const ROUND_OPTIONS = [
