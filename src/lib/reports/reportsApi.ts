@@ -331,3 +331,261 @@ export async function promoteReportToLive(reportId: string): Promise<PromoteResu
 
   return result;
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// PR #2: Stateful diff computation.
+//
+// Reads the existing DB state for (fund_id, quarter_id) and compares it
+// against reports.extracted_payload. Writes one row per detected change to
+// public.report_diffs. Sets reports.diff_status = 'pending_review' on
+// success. Does NOT mutate live tables — that happens after the user
+// approves the diffs (PR #3+).
+//
+// Diff row shape (per spec):
+//   • change_type='fund_level' → one row per metric, field_name set,
+//     old_value/new_value as jsonb scalars.
+//   • change_type='update'     → one row per matched holding,
+//     new_value = jsonb of changed fields, old_value = jsonb of prior values.
+//   • change_type='add'        → one row per field on a new (unmatched)
+//     holding, field_name set, new_value scalar.
+//   • change_type='missing'    → one row per DB holding absent from payload,
+//     requires_confirmation=true; resolution_reason picked by reviewer.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type ComputeDiffsResult = {
+  total: number;
+  fund_level: number;
+  updates: number;
+  adds: number;
+  missing: number;
+  errors: string[];
+};
+
+const FUND_METRIC_KEYS = [
+  "fund_total_contributions",
+  "fund_total_nav",
+  "fund_total_distributions",
+  "twh_contributions",
+  "twh_distributions",
+  "twh_nav",
+] as const;
+
+const HOLDING_VALUE_FIELDS = [
+  "fund_cost",
+  "fund_fmv",
+  "fund_proceeds",
+] as const;
+
+const HOLDING_META_FIELDS = [
+  "round",
+  "instrument",
+  "investment_date",
+  "fund_ownership_pct",
+] as const;
+
+// Numeric near-equality threshold ($1) to suppress float noise.
+const NUM_EPSILON = 1;
+
+function numericallyEqual(a: unknown, b: unknown): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  const an = Number(a);
+  const bn = Number(b);
+  if (Number.isNaN(an) || Number.isNaN(bn)) return a === b;
+  return Math.abs(an - bn) <= NUM_EPSILON;
+}
+
+function scalarEqual(a: unknown, b: unknown): boolean {
+  if (a == null && b == null) return true;
+  if (a == null || b == null) return false;
+  return String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+}
+
+function normalizeName(s: string | null | undefined): string {
+  return (s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+export async function computeReportDiffs(reportId: string): Promise<ComputeDiffsResult> {
+  const result: ComputeDiffsResult = {
+    total: 0,
+    fund_level: 0,
+    updates: 0,
+    adds: 0,
+    missing: 0,
+    errors: [],
+  };
+
+  // 1. Load report + payload
+  const { data: report, error: rErr } = await supabase
+    .from("reports")
+    .select("id, fund_id, quarter_id, extracted_payload")
+    .eq("id", reportId)
+    .maybeSingle();
+  if (rErr || !report) throw new Error(rErr?.message ?? "Report not found");
+  if (!report.fund_id || !report.quarter_id) {
+    throw new Error("Report must have fund_id and quarter_id assigned before computing diffs");
+  }
+  const payload = (report.extracted_payload ?? null) as ExtractedPayload | null;
+  if (!payload) throw new Error("No extracted payload to diff");
+
+  const isUsd = !payload.currency || payload.currency.toUpperCase() === "USD";
+  const valSuffix = isUsd ? "_usd" : "_native";
+
+  // 2. Mark report as extracting → will flip to pending_review on success
+  await supabase.from("reports").update({ diff_status: "extracting" }).eq("id", reportId);
+
+  // 3. Clear any prior pending diffs for this report (reviewed ones stay)
+  await supabase
+    .from("report_diffs")
+    .delete()
+    .eq("report_id", reportId)
+    .eq("status", "pending");
+
+  // 4. Load existing fund snapshot (for fund_level diffs)
+  const { data: existingFundSnap } = await supabase
+    .from("fund_quarter_snapshots")
+    .select("*")
+    .eq("fund_id", report.fund_id)
+    .eq("quarter_id", report.quarter_id)
+    .maybeSingle();
+
+  // 5. Load existing holdings (for update/missing/add diffs)
+  const { data: existingHoldings } = await supabase
+    .from("underlying_holdings")
+    .select("id, company_id, round, instrument, investment_date, fund_ownership_pct, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, fund_cost_native, fund_fmv_native, fund_proceeds_native, companies:company_id(legal_name, commercial_name)")
+    .eq("fund_id", report.fund_id)
+    .eq("quarter_id", report.quarter_id);
+
+  const diffRows: Record<string, any>[] = [];
+
+  // ─── A. Fund-level metric diffs (one row per metric) ───────────────────
+  for (const key of FUND_METRIC_KEYS) {
+    const newVal = (payload as any)[`${key}${valSuffix}`] ?? null;
+    const oldVal = existingFundSnap ? (existingFundSnap as any)[`${key}${valSuffix}`] ?? null : null;
+    if (numericallyEqual(oldVal, newVal)) continue;
+    diffRows.push({
+      report_id: reportId,
+      change_type: "fund_level",
+      field_name: `${key}${valSuffix}`,
+      old_value: oldVal,
+      new_value: newVal,
+      requires_confirmation: false,
+    });
+    result.fund_level += 1;
+  }
+
+  // ─── B. Holdings: build name → existing-row index ──────────────────────
+  const existingByName = new Map<string, any>();
+  for (const eh of existingHoldings ?? []) {
+    const n = normalizeName(
+      (eh.companies as any)?.commercial_name ?? (eh.companies as any)?.legal_name,
+    );
+    if (n) existingByName.set(n, eh);
+  }
+
+  const matchedExistingIds = new Set<string>();
+
+  for (const h of payload.holdings ?? []) {
+    const name = normalizeName(h.company_name);
+    if (!name) continue;
+    const matched = existingByName.get(name);
+
+    if (matched) {
+      matchedExistingIds.add(matched.id);
+      // ── Update: one row per holding, jsonb of changed fields ──
+      const changedNew: Record<string, unknown> = {};
+      const changedOld: Record<string, unknown> = {};
+
+      for (const f of HOLDING_VALUE_FIELDS) {
+        const newV = (h as any)[`${f}${valSuffix}`] ?? null;
+        const oldV = matched[`${f}${valSuffix}`] ?? null;
+        if (!numericallyEqual(oldV, newV)) {
+          changedNew[`${f}${valSuffix}`] = newV;
+          changedOld[`${f}${valSuffix}`] = oldV;
+        }
+      }
+      for (const f of HOLDING_META_FIELDS) {
+        const newV = (h as any)[f] ?? null;
+        const oldV = matched[f] ?? null;
+        const eq = f === "fund_ownership_pct" ? numericallyEqual(oldV, newV) : scalarEqual(oldV, newV);
+        if (!eq) {
+          changedNew[f] = newV;
+          changedOld[f] = oldV;
+        }
+      }
+
+      if (Object.keys(changedNew).length > 0) {
+        diffRows.push({
+          report_id: reportId,
+          change_type: "update",
+          holding_id: matched.id,
+          company_id: matched.company_id,
+          proposed_company_name: h.company_name,
+          old_value: changedOld,
+          new_value: changedNew,
+          requires_confirmation: false,
+        });
+        result.updates += 1;
+      }
+    } else {
+      // ── Add: one row per field on a new holding ──
+      const fields: Array<{ name: string; value: unknown }> = [];
+      for (const f of HOLDING_VALUE_FIELDS) {
+        fields.push({ name: `${f}${valSuffix}`, value: (h as any)[`${f}${valSuffix}`] ?? null });
+      }
+      for (const f of HOLDING_META_FIELDS) {
+        fields.push({ name: f, value: (h as any)[f] ?? null });
+      }
+      for (const { name: fname, value } of fields) {
+        if (value == null) continue;
+        diffRows.push({
+          report_id: reportId,
+          change_type: "add",
+          proposed_company_name: h.company_name,
+          field_name: fname,
+          old_value: null,
+          new_value: value,
+          requires_confirmation: false,
+        });
+        result.adds += 1;
+      }
+    }
+  }
+
+  // ─── C. Missing: existing holdings not present in this payload ─────────
+  for (const eh of existingHoldings ?? []) {
+    if (matchedExistingIds.has(eh.id)) continue;
+    const propName =
+      (eh.companies as any)?.commercial_name ??
+      (eh.companies as any)?.legal_name ??
+      null;
+    diffRows.push({
+      report_id: reportId,
+      change_type: "missing",
+      holding_id: eh.id,
+      company_id: eh.company_id,
+      proposed_company_name: propName,
+      requires_confirmation: true, // reviewer must pick a resolution_reason
+    });
+    result.missing += 1;
+  }
+
+  // 6. Persist diffs
+  if (diffRows.length > 0) {
+    const { error: insErr } = await supabase.from("report_diffs").insert(diffRows as any);
+    if (insErr) {
+      result.errors.push(`report_diffs insert: ${insErr.message}`);
+      await supabase.from("reports").update({ diff_status: null }).eq("id", reportId);
+      throw new Error(insErr.message);
+    }
+  }
+  result.total = diffRows.length;
+
+  // 7. Flip report status
+  await supabase
+    .from("reports")
+    .update({ diff_status: "pending_review" })
+    .eq("id", reportId);
+
+  return result;
+}

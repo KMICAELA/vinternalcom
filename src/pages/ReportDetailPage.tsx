@@ -12,13 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Download, ArrowLeft, RefreshCw, CheckCircle2, AlertCircle, AlertTriangle,
-  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2, Pencil, X, Save, Plus,
+  Archive, RotateCcw, FileText, Loader2, ExternalLink, Trash2, Pencil, X, Save, Plus, GitBranch,
 } from "lucide-react";
 import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
 import type { ExtractedPayload } from "@/lib/extraction/runExtractFile";
 import {
-  archiveReport, deleteReport, promoteReportToLive, signedReportUrl,
+  archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -63,7 +63,7 @@ export default function ReportDetailPage() {
   const { role } = useAuth();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete" | "save">(null);
+  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete" | "save" | "diff">(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ExtractedPayload | null>(null);
@@ -189,6 +189,29 @@ export default function ReportDetailPage() {
       await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Promotion failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onComputeDiffs() {
+    if (!report) return;
+    setBusy("diff");
+    try {
+      const r = await computeReportDiffs(report.id);
+      if (r.errors.length > 0) {
+        toast.warning(`Diff computed with ${r.errors.length} error(s)`);
+        console.warn("Diff errors:", r.errors);
+      } else if (r.total === 0) {
+        toast.success("No differences vs. live data");
+      } else {
+        toast.success(
+          `${r.total} diff(s): ${r.fund_level} fund-level, ${r.updates} updates, ${r.adds} adds, ${r.missing} missing`,
+        );
+      }
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Diff computation failed");
     } finally {
       setBusy(null);
     }
@@ -494,6 +517,17 @@ export default function ReportDetailPage() {
             <Button onClick={onRerun} disabled={busy !== null} variant="outline" size="sm" className="gap-2 h-9 text-xs">
               {busy === "rerun" ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
               Re-run extraction
+            </Button>
+            <Button
+              onClick={onComputeDiffs}
+              disabled={busy !== null || !payload || !report.fund_id || !report.quarter_id}
+              variant="outline"
+              size="sm"
+              className="gap-2 h-9 text-xs"
+              title="Compare this report's payload against current live data and stage diffs for review"
+            >
+              {busy === "diff" ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitBranch className="h-3 w-3" />}
+              Compute diffs
             </Button>
             <Button
               onClick={onPromote}
