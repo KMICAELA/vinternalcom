@@ -167,7 +167,11 @@ export default function DirectsPage() {
       <TableRow key={r.id} className={cn("table-row-hover", isSub && "bg-muted/20")}>
         <TableCell className={cn("w-8", isSub && "pl-10")}></TableCell>
         <TableCell className={cn("font-medium", isSub && "pl-2 text-sm text-muted-foreground")}>
-          {isSub ? "↳ tranche" : r.company}
+          {isSub ? "↳ tranche" : (
+            <Link to={`/portfolio?company=${r.company_id}`} className="hover:text-primary hover:underline transition-colors">
+              {r.company}
+            </Link>
+          )}
         </TableCell>
         <TableCell className="text-muted-foreground">{fmtDate(r.investment_date)}</TableCell>
         <TableCell>{r.round ? <Badge variant="secondary" className="font-normal">{r.round}</Badge> : "—"}</TableCell>
