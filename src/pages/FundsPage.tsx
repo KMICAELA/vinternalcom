@@ -155,11 +155,14 @@ export default function FundsPage() {
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Funds</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {rows.length} funds · {selected.label}
-          </p>
+        <div className="space-y-3">
+          <FundsViewSwitcher />
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Funds</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {rows.length} funds · {selected.label}
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setAddFundOpen(true)} className="gap-2">
