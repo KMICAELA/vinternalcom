@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
 import type { ExtractedPayload } from "@/lib/extraction/runExtractFile";
 import {
-  archiveReport, deleteReport, promoteReportToLive, signedReportUrl,
+  archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -63,7 +63,7 @@ export default function ReportDetailPage() {
   const { role } = useAuth();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete" | "save">(null);
+  const [busy, setBusy] = useState<null | "promote" | "rerun" | "archive" | "delete" | "save" | "diff">(null);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<ExtractedPayload | null>(null);
@@ -189,6 +189,29 @@ export default function ReportDetailPage() {
       await load();
     } catch (e: any) {
       toast.error(e?.message ?? "Promotion failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function onComputeDiffs() {
+    if (!report) return;
+    setBusy("diff");
+    try {
+      const r = await computeReportDiffs(report.id);
+      if (r.errors.length > 0) {
+        toast.warning(`Diff computed with ${r.errors.length} error(s)`);
+        console.warn("Diff errors:", r.errors);
+      } else if (r.total === 0) {
+        toast.success("No differences vs. live data");
+      } else {
+        toast.success(
+          `${r.total} diff(s): ${r.fund_level} fund-level, ${r.updates} updates, ${r.adds} adds, ${r.missing} missing`,
+        );
+      }
+      await load();
+    } catch (e: any) {
+      toast.error(e?.message ?? "Diff computation failed");
     } finally {
       setBusy(null);
     }
