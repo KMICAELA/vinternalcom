@@ -377,7 +377,7 @@ export default function UnderlyingPortfolioPage() {
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Round" sortKey="round" current={sortKey} dir={sortDir} onSort={onSort} />
-                  {colFilterInput(roundFilter, setRoundFilter, "Filter…")}
+                  {colFilterSelect(roundFilter, setRoundFilter, roundOptions, "All rounds")}
                 </TableHead>
                 <TableHead>
                   <SortHeader label="Instrument" sortKey="instrument" current={sortKey} dir={sortDir} onSort={onSort} />
