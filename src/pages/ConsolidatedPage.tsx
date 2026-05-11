@@ -223,10 +223,10 @@ export default function ConsolidatedPage() {
   };
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab") === "investors" ? "investors" : "portfolio";
+  const tab = searchParams.get("tab") === "investors" ? "investors" : "all";
   const setTab = (v: string) => {
     const next = new URLSearchParams(searchParams);
-    if (v === "portfolio") next.delete("tab"); else next.set("tab", v);
+    if (v === "all") next.delete("tab"); else next.set("tab", v);
     setSearchParams(next, { replace: true });
   };
 
