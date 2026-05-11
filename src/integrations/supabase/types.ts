@@ -1151,13 +1151,16 @@ export type Database = {
           fund_fmv_native: number | null
           fund_fmv_usd: number | null
           fund_id: string
+          fund_ownership_pct: number | null
           fund_proceeds_native: number | null
           fund_proceeds_usd: number | null
           id: string
           instrument: string | null
           investment_date: string | null
           moic: number | null
+          needs_review: boolean
           quarter_id: string
+          review_reason: string | null
           round: string | null
           round_detail: string | null
           source_report_id: string | null
@@ -1180,13 +1183,16 @@ export type Database = {
           fund_fmv_native?: number | null
           fund_fmv_usd?: number | null
           fund_id: string
+          fund_ownership_pct?: number | null
           fund_proceeds_native?: number | null
           fund_proceeds_usd?: number | null
           id?: string
           instrument?: string | null
           investment_date?: string | null
           moic?: number | null
+          needs_review?: boolean
           quarter_id: string
+          review_reason?: string | null
           round?: string | null
           round_detail?: string | null
           source_report_id?: string | null
@@ -1209,13 +1215,16 @@ export type Database = {
           fund_fmv_native?: number | null
           fund_fmv_usd?: number | null
           fund_id?: string
+          fund_ownership_pct?: number | null
           fund_proceeds_native?: number | null
           fund_proceeds_usd?: number | null
           id?: string
           instrument?: string | null
           investment_date?: string | null
           moic?: number | null
+          needs_review?: boolean
           quarter_id?: string
+          review_reason?: string | null
           round?: string | null
           round_detail?: string | null
           source_report_id?: string | null
