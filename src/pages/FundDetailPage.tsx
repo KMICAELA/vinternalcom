@@ -349,7 +349,7 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
               return (
                 <TableRow key={h.id} className="hover:bg-muted/20">
                   <TableCell className="pl-10 text-xs text-muted-foreground">{h.round ?? "Investment"}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{h.round ?? "—"}</TableCell>
+                  <TableCell />
                   <TableCell className="text-xs text-muted-foreground">{h.instrument ?? "—"}</TableCell>
                   <TableCell className="text-right font-mono text-xs text-muted-foreground">{h.cost == null ? "—" : fmtUSD(h.cost, { compact: true })}</TableCell>
                   <TableCell className="text-right font-mono text-xs">{h.fmv == null ? "—" : fmtUSD(h.fmv, { compact: true })}</TableCell>
