@@ -528,27 +528,25 @@ export async function computeReportDiffs(reportId: string): Promise<ComputeDiffs
         result.updates += 1;
       }
     } else {
-      // ── Add: one row per field on a new holding ──
-      const fields: Array<{ name: string; value: unknown }> = [];
+      // ── Add: ONE row per new holding, all proposed fields in new_value jsonb ──
+      // (Mirrors `update` shape so the review UI can render a single approve/reject row
+      // and expand to show the per-field breakdown.)
+      const proposed: Record<string, unknown> = {};
       for (const f of HOLDING_VALUE_FIELDS) {
-        fields.push({ name: `${f}${valSuffix}`, value: (h as any)[`${f}${valSuffix}`] ?? null });
+        proposed[`${f}${valSuffix}`] = (h as any)[`${f}${valSuffix}`] ?? null;
       }
       for (const f of HOLDING_META_FIELDS) {
-        fields.push({ name: f, value: (h as any)[f] ?? null });
+        proposed[f] = (h as any)[f] ?? null;
       }
-      for (const { name: fname, value } of fields) {
-        if (value == null) continue;
-        diffRows.push({
-          report_id: reportId,
-          change_type: "add",
-          proposed_company_name: h.company_name,
-          field_name: fname,
-          old_value: null,
-          new_value: value,
-          requires_confirmation: false,
-        });
-        result.adds += 1;
-      }
+      diffRows.push({
+        report_id: reportId,
+        change_type: "add",
+        proposed_company_name: h.company_name,
+        old_value: null,
+        new_value: proposed,
+        requires_confirmation: false,
+      });
+      result.adds += 1;
     }
   }
 
