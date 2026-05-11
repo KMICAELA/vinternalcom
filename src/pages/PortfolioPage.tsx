@@ -256,10 +256,21 @@ export default function PortfolioPage() {
           </p>
         </div>
         <div className="text-xs text-muted-foreground text-right">
-          <div>{filtered.length} of {activeCompanies.length} active companies</div>
+          <div>{displayed.length} of {activeCompanies.length} active companies</div>
           {quarter && <div className="mt-0.5">{quarter.label}</div>}
         </div>
       </div>
+
+      {focusCompanyId && (
+        <Card className="p-3 bg-card border-border flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">
+            Showing a single company linked from another page.
+          </div>
+          <Button variant="ghost" size="sm" onClick={clearFocus} className="h-7 text-xs">
+            <X className="h-3 w-3 mr-1" /> Show all companies
+          </Button>
+        </Card>
+      )}
 
       <Card className="p-4 bg-card border-border">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
