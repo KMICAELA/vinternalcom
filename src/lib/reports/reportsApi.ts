@@ -888,7 +888,7 @@ export async function applyApprovedDiffs(
           source_report_id: reportId,
           ...proposed,
         };
-        const { error } = await supabase.from("underlying_holdings").insert(insertRow);
+        const { error } = await supabase.from("underlying_holdings").insert(insertRow as any);
         if (error) throw error;
 
         await supabase
@@ -913,7 +913,7 @@ export async function applyApprovedDiffs(
     };
     const { error } = await supabase
       .from("fund_quarter_snapshots")
-      .upsert(upsertRow, { onConflict: "fund_id,quarter_id" });
+      .upsert(upsertRow as any, { onConflict: "fund_id,quarter_id" });
     if (error) result.errors.push(`fund_snapshot upsert: ${error.message}`);
   }
 
