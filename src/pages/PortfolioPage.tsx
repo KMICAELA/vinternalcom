@@ -56,6 +56,15 @@ export default function PortfolioPage() {
   const [industryFilter, setIndustryFilter] = useState<string>(ALL);
   const [typeFilter, setTypeFilter] = useState<string>(ALL);
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focusCompanyId = searchParams.get("company");
+  const focusedRef = useRef<HTMLDivElement | null>(null);
+  const clearFocus = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("company");
+    setSearchParams(next, { replace: true });
+  };
+
   // Load companies + which are held in selected quarter + which funds touch them
   useEffect(() => {
     let cancelled = false;
