@@ -18,7 +18,7 @@ import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtDate, calcMoic, calcTvpi, calcDpi } from "@/lib/format";
 import type { ExtractedPayload } from "@/lib/extraction/runExtractFile";
 import {
-  archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs,
+  archiveReport, deleteReport, promoteReportToLive, signedReportUrl, computeReportDiffs, normalizeName,
 } from "@/lib/reports/reportsApi";
 import { useAuth } from "@/contexts/AuthContext";
 
