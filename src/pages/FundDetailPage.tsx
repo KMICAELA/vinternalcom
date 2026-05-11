@@ -53,7 +53,7 @@ export default function FundDetailPage() {
     selected?.id ?? null,
     fund?.native_currency ?? null,
   );
-  const [holdings, setHoldings] = useState<{ id: string; company_id: string; company: string; round: string | null; instrument: string | null; cost: number | null; fmv: number | null; status: string }[]>([]);
+  const [holdings, setHoldings] = useState<{ id: string; company_id: string; company: string; round: string | null; instrument: string | null; investment_date: string | null; cost: number | null; fmv: number | null; status: string }[]>([]);
 
   useEffect(() => {
     if (!id) return;
