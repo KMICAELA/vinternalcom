@@ -190,6 +190,7 @@ export function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[]
     existing.fund_cost_native = preferTruthyMax(existing.fund_cost_native, h.fund_cost_native);
     existing.fund_fmv_native = preferTruthyMax(existing.fund_fmv_native, h.fund_fmv_native);
     existing.fund_proceeds_native = preferTruthyMax(existing.fund_proceeds_native, h.fund_proceeds_native);
+    existing.fund_ownership_pct = preferTruthyMax(existing.fund_ownership_pct, h.fund_ownership_pct);
     if (h.investment_date && (!existing.investment_date || h.investment_date < existing.investment_date)) {
       existing.investment_date = h.investment_date;
     }
