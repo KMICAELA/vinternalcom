@@ -37,6 +37,7 @@ type ExtractedPayload = {
   report_date: string | null;
   currency: string | null;
   extraction_mode?: "A" | "B" | null;      // A = structured schedule, B = narrative-only
+  schedule_company_names?: string[] | null; // Exact Company column values from the structured SoI table, when present
   fund_total_contributions_usd: number | null;
   fund_total_nav_usd: number | null;
   twh_contributions_usd: number | null;
@@ -130,7 +131,7 @@ function normalizeCompanyKey(raw: string | null | undefined): string {
 }
 
 
-function canonicalCompanyName(raw: string | null | undefined): string {
+export function canonicalCompanyName(raw: string | null | undefined): string {
   const key = normalizeCompanyKey(raw);
   if (!key) return "";
   if (COMPANY_ALIAS[key]) return COMPANY_ALIAS[key];
@@ -155,7 +156,7 @@ function sumNullable(a: number | null | undefined, b: number | null | undefined)
 // Pick the larger non-null/non-zero value. Used when deduping same-company rows
 // where one came from a structured table (with values) and another from narrative
 // (often zero/null). NEVER overwrite a real value with null or 0.
-function preferTruthyMax(a: number | null | undefined, b: number | null | undefined): number | null {
+export function preferTruthyMax(a: number | null | undefined, b: number | null | undefined): number | null {
   const aNum = a == null ? null : Number(a);
   const bNum = b == null ? null : Number(b);
   if (aNum == null && bNum == null) return null;
@@ -168,7 +169,7 @@ function preferTruthyMax(a: number | null | undefined, b: number | null | undefi
   return Math.max(aNum, bNum);
 }
 
-function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
+export function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[] {
   const merged = new Map<string, ExtractedHolding>();
   for (const h of holdings) {
     const canonical = canonicalCompanyName(h.company_name);
