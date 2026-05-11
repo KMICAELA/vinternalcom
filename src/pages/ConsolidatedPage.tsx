@@ -20,16 +20,16 @@ import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import InvestorsTab from "@/components/investors/InvestorsTab";
 
-const LEDGER_CATEGORIES = [
+const CASH_FLOW_CATEGORIES = [
   "Capital Call",
   "Distribution",
   "Management Fee",
   "Expense",
   "Direct Investment",
   "Direct Proceeds",
-  "NAV",
   "Other",
 ] as const;
+const LEDGER_CATEGORIES = [...CASH_FLOW_CATEGORIES, "NAV"] as const;
 
 // Outflows from TWH (negative cash impact for TWH) — used to compute Contributions
 const OUTFLOW_CATS = new Set(["Capital Call", "Management Fee", "Expense", "Direct Investment"]);
@@ -63,9 +63,15 @@ export default function ConsolidatedPage() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [addOpen, setAddOpen] = useState(false);
+  const [navAddOpen, setNavAddOpen] = useState(false);
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
     category: "Capital Call" as (typeof LEDGER_CATEGORIES)[number],
+    description: "",
+    amount_usd: "",
+  });
+  const [navForm, setNavForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
     description: "",
     amount_usd: "",
   });
@@ -208,6 +214,31 @@ export default function ConsolidatedPage() {
       description: "",
       amount_usd: "",
     });
+    setRefreshKey((k) => k + 1);
+  };
+
+  const handleAddNav = async () => {
+    const amt = parseFloat(navForm.amount_usd);
+    if (!navForm.date || Number.isNaN(amt)) {
+      toast.error("Date and amount are required");
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from("twh_ledger_entries").insert({
+      date: navForm.date,
+      category: NAV_CAT,
+      counterparty: null,
+      description: navForm.description || null,
+      amount_usd: Math.abs(amt),
+    });
+    setSaving(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("NAV entry added");
+    setNavAddOpen(false);
+    setNavForm({ date: new Date().toISOString().slice(0, 10), description: "", amount_usd: "" });
     setRefreshKey((k) => k + 1);
   };
 
@@ -396,7 +427,7 @@ export default function ConsolidatedPage() {
                     <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v as any })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {LEDGER_CATEGORIES.map((c) => (
+                        {CASH_FLOW_CATEGORIES.map((c) => (
                           <SelectItem key={c} value={c}>{c}</SelectItem>
                         ))}
                       </SelectContent>
@@ -469,11 +500,52 @@ export default function ConsolidatedPage() {
 
       {/* NAV */}
       <Card className="bg-card border-border overflow-hidden">
-        <div className="p-4 border-b border-border">
-          <h2 className="text-base font-semibold">NAV</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Quarter-end balance. NAV is replaced from quarter to quarter — never accumulated. Terminal NAV reflects the current selected quarter.
-          </p>
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <div>
+            <h2 className="text-base font-semibold">NAV</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Quarter-end balance. NAV is replaced from quarter to quarter — never accumulated. Terminal NAV reflects the current selected quarter.
+            </p>
+          </div>
+          <Dialog open={navAddOpen} onOpenChange={setNavAddOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-2">
+                <Plus className="h-4 w-4" /> Add entry
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add NAV entry</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Date (quarter-end)</Label>
+                  <Input type="date" value={navForm.date} onChange={(e) => setNavForm({ ...navForm, date: e.target.value })} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">NAV (USD)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder="Total TWH NAV at this date"
+                    value={navForm.amount_usd}
+                    onChange={(e) => setNavForm({ ...navForm, amount_usd: e.target.value })}
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    NAV is a balance — replaced quarter-to-quarter, not accumulated.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Description</Label>
+                  <Input placeholder="Optional note" value={navForm.description} onChange={(e) => setNavForm({ ...navForm, description: e.target.value })} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setNavAddOpen(false)}>Cancel</Button>
+                <Button onClick={handleAddNav} disabled={saving}>{saving ? "Saving…" : "Add NAV"}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
         <div className="overflow-x-auto">
           <Table>
