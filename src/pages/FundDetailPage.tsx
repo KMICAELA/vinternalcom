@@ -331,23 +331,43 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
     <>
       {groups.map((g) => {
         const moic = g.cost && g.cost > 0 && g.fmv != null ? g.fmv / g.cost : null;
+        const multi = g.items.length > 1;
+        const isOpen = !!open[g.company_id];
+        const single = !multi ? g.items[0] : null;
         return (
           <Fragment key={g.company_id}>
-            <TableRow className="border-t-2 border-border/60 hover:bg-muted/30">
+            <TableRow
+              className={`border-t-2 border-border/60 hover:bg-muted/30 ${multi ? "cursor-pointer" : ""}`}
+              onClick={multi ? () => setOpen((o) => ({ ...o, [g.company_id]: !o[g.company_id] })) : undefined}
+            >
               <TableCell className="font-semibold">
-                <Link to={`/portfolio?company=${g.company_id}`} className="hover:underline">{g.company}</Link>
+                <div className="flex items-center gap-1.5">
+                  {multi ? (
+                    <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                  ) : (
+                    <span className="inline-block w-3.5" />
+                  )}
+                  <Link
+                    to={`/portfolio?company=${g.company_id}`}
+                    className="hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {g.company}
+                  </Link>
+                  {multi && <span className="text-[10px] text-muted-foreground ml-1">({g.items.length})</span>}
+                </div>
               </TableCell>
-              <TableCell />
-              <TableCell />
+              <TableCell className="text-xs text-muted-foreground">{single?.round ?? ""}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{single?.instrument ?? ""}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.cost == null ? "—" : fmtUSD(g.cost, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.fmv == null ? "—" : fmtUSD(g.fmv, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{fmtMultiple(moic)}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{g.status}</TableCell>
             </TableRow>
-            {g.items.map((h) => {
+            {multi && isOpen && g.items.map((h) => {
               const m = h.cost && h.cost > 0 && h.fmv != null ? h.fmv / h.cost : null;
               return (
-                <TableRow key={h.id} className="hover:bg-muted/20">
+                <TableRow key={h.id} className="bg-muted/10 hover:bg-muted/20">
                   <TableCell className="pl-10" />
                   <TableCell className="text-xs text-muted-foreground">{h.round ?? "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{h.instrument ?? "—"}</TableCell>
