@@ -234,7 +234,14 @@ export default function DirectsPage() {
           {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </TableCell>
         <TableCell className="font-medium">
-          {g.company} <span className="text-xs text-muted-foreground ml-1">({g.tranches.length} tranches)</span>
+          <Link
+            to={`/portfolio?company=${g.company_id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="hover:text-primary hover:underline transition-colors"
+          >
+            {g.company}
+          </Link>{" "}
+          <span className="text-xs text-muted-foreground ml-1">({g.tranches.length} tranches)</span>
         </TableCell>
         <TableCell className="text-muted-foreground">{fmtDate(g.earliestDate)}</TableCell>
         <TableCell>{g.latestRound ? <Badge variant="secondary" className="font-normal">{g.latestRound}</Badge> : "—"}</TableCell>
