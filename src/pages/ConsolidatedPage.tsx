@@ -14,6 +14,8 @@ import { fmtUSD, fmtPct, fmtMultiple, fmtDate, calcDpi, calcTvpi, signClass } fr
 import MetricTooltip, { fmtUsdFull, fmtMultFull, fmtPctFull, type MetricTooltipProps } from "@/components/MetricTooltip";
 import EstimatedBadge from "@/components/EstimatedBadge";
 import { deriveTwhWithFallback } from "@/lib/twhDerivation";
+import { computeXirr } from "@/lib/irr";
+import { LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { toast } from "sonner";
 import { useSearchParams } from "react-router-dom";
 import InvestorsTab from "@/components/investors/InvestorsTab";
@@ -25,6 +27,7 @@ const LEDGER_CATEGORIES = [
   "Expense",
   "Direct Investment",
   "Direct Proceeds",
+  "NAV",
   "Other",
 ] as const;
 
@@ -32,6 +35,8 @@ const LEDGER_CATEGORIES = [
 const OUTFLOW_CATS = new Set(["Capital Call", "Management Fee", "Expense", "Direct Investment"]);
 // Inflows to TWH — Distributions
 const INFLOW_CATS = new Set(["Distribution", "Direct Proceeds"]);
+// NAV is a balance snapshot — never accumulated, replaced quarter-to-quarter
+const NAV_CAT = "NAV";
 
 type LedgerEntry = {
   id: string;
