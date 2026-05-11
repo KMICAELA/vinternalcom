@@ -509,6 +509,9 @@ export default function ReportDetailPage() {
         )}
       </Card>
 
+      {/* (b.5) DEBUG: staged diff rows — temporary panel for matcher inspection */}
+      {isAdmin && <DiffDebugPanel reportId={report.id} payload={payload} fundId={report.fund_id} quarterId={report.quarter_id} />}
+
       {/* (c) Actions */}
       {isAdmin && (
         <Card className="bg-card border-border p-5">
