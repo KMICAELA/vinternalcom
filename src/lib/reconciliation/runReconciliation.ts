@@ -367,7 +367,8 @@ export async function runReconciliation(
   const uhRes = await supabase
     .from("underlying_holdings")
     .select("*")
-    .eq("quarter_id", quarterId);
+    .eq("quarter_id", quarterId)
+    .is("removed_at", null);
   console.log("[recon] uhRes rows:", uhRes.data?.length, "error:", uhRes.error);
   const uh = (uhRes.data ?? []) as any[];
   const fundsById = new Map(funds.map((f) => [f.id, f]));
