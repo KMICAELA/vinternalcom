@@ -331,40 +331,24 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
     <>
       {groups.map((g) => {
         const moic = g.cost && g.cost > 0 && g.fmv != null ? g.fmv / g.cost : null;
-        const multi = g.items.length > 1;
-        const isOpen = !!open[g.company_id];
         return (
           <Fragment key={g.company_id}>
-            <TableRow className="table-row-hover">
-              <TableCell className="font-medium">
-                <div className="flex items-center gap-1">
-                  {multi ? (
-                    <button
-                      onClick={() => setOpen((o) => ({ ...o, [g.company_id]: !o[g.company_id] }))}
-                      className="text-muted-foreground hover:text-foreground"
-                      aria-label={isOpen ? "Collapse" : "Expand"}
-                    >
-                      <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                    </button>
-                  ) : (
-                    <span className="inline-block w-3.5" />
-                  )}
-                  <Link to={`/portfolio?company=${g.company_id}`} className="hover:underline">{g.company}</Link>
-                  {multi && <span className="text-[10px] text-muted-foreground ml-1">({g.items.length})</span>}
-                </div>
+            <TableRow className="border-t-2 border-border/60 hover:bg-muted/30">
+              <TableCell className="font-semibold">
+                <Link to={`/portfolio?company=${g.company_id}`} className="hover:underline">{g.company}</Link>
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">{multi ? "—" : (g.items[0].round ?? "—")}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">{multi ? "—" : (g.items[0].instrument ?? "—")}</TableCell>
-              <TableCell className="text-right font-mono text-muted-foreground">{g.cost == null ? "—" : fmtUSD(g.cost, { compact: true })}</TableCell>
-              <TableCell className="text-right font-mono">{g.fmv == null ? "—" : fmtUSD(g.fmv, { compact: true })}</TableCell>
-              <TableCell className="text-right font-mono">{fmtMultiple(moic)}</TableCell>
+              <TableCell />
+              <TableCell />
+              <TableCell className="text-right font-mono font-semibold">{g.cost == null ? "—" : fmtUSD(g.cost, { compact: true })}</TableCell>
+              <TableCell className="text-right font-mono font-semibold">{g.fmv == null ? "—" : fmtUSD(g.fmv, { compact: true })}</TableCell>
+              <TableCell className="text-right font-mono font-semibold">{fmtMultiple(moic)}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{g.status}</TableCell>
             </TableRow>
-            {multi && isOpen && g.items.map((h) => {
+            {g.items.map((h) => {
               const m = h.cost && h.cost > 0 && h.fmv != null ? h.fmv / h.cost : null;
               return (
-                <TableRow key={h.id} className="bg-muted/20 hover:bg-muted/30">
-                  <TableCell className="pl-10 text-xs text-muted-foreground">↳ investment</TableCell>
+                <TableRow key={h.id} className="hover:bg-muted/20">
+                  <TableCell className="pl-10 text-xs text-muted-foreground">{h.round ?? "Investment"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{h.round ?? "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{h.instrument ?? "—"}</TableCell>
                   <TableCell className="text-right font-mono text-xs text-muted-foreground">{h.cost == null ? "—" : fmtUSD(h.cost, { compact: true })}</TableCell>
