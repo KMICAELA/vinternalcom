@@ -7,7 +7,10 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { CheckCircle2, AlertTriangle } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2, AlertTriangle, Pencil } from "lucide-react";
+import { toast } from "sonner";
 import { fmtUSD, fmtMultiple, fmtPct, calcMoic, signClass } from "@/lib/format";
 import MetricTooltip, { fmtUsdFull, fmtPctFull, fmtMultFull } from "@/components/MetricTooltip";
 import { FxBadge } from "@/components/FxBadge";
@@ -26,10 +29,15 @@ type Row = {
   fmv: number | null;
   proceeds: number | null;
   twh_pct: number;
+  fund_ownership_pct: number | null;
   status: string;
+  needs_review: boolean;
+  review_reason: string | null;
 };
 
-const ROUND_OPTIONS = ["Pre-Seed", "Seed", "Series A", "Series B", "Series C", "Series D", "Series E", "SAFE"];
+const ROUND_OPTIONS = [
+  "Pre-Seed", "Seed", "Series A", "Series B", "Series C", "Series D", "Series E", "Series F", "Series G", "Growth", "Bridge",
+];
 
 function FxCell({ fundId, quarterId, currency }: { fundId: string; quarterId: string; currency: string }) {
   const { rate, updaterName } = useFundFxRate(fundId, quarterId, currency);
@@ -66,6 +74,71 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant="outline" className={`text-[10px] ${cls}`}>{status}</Badge>;
 }
 
+function RoundCell({ row, onSaved }: { row: Row; onSaved: (next: Partial<Row>) => void }) {
+  const [open, setOpen] = useState(false);
+  const [val, setVal] = useState<string>(row.round ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const newRound = val === "__null__" ? null : val || null;
+    const { error } = await supabase
+      .from("underlying_holdings")
+      .update({ round: newRound, needs_review: false, review_reason: null })
+      .eq("id", row.id);
+    setSaving(false);
+    if (error) { toast.error(`Failed to save: ${error.message}`); return; }
+    toast.success("Round updated");
+    onSaved({ round: newRound, needs_review: false, review_reason: null });
+    setOpen(false);
+  };
+
+  return (
+    <div className="flex items-center gap-1">
+      {row.needs_review ? (
+        <TooltipProvider delayDuration={150}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="text-[9px] gap-1 text-amber-400 border-amber-400/30 cursor-help">
+                <AlertTriangle className="h-2.5 w-2.5" />Needs review
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs max-w-[260px]">
+              {row.review_reason ?? "Round not stated in source"}
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <span className="text-muted-foreground text-xs">{row.round ?? "—"}</span>
+      )}
+      {row.round_detail && !row.needs_review && (
+        <span className="text-muted-foreground/50 text-xs">· {row.round_detail}</span>
+      )}
+      <Popover open={open} onOpenChange={(o) => { setOpen(o); if (o) setVal(row.round ?? ""); }}>
+        <PopoverTrigger asChild>
+          <Button size="icon" variant="ghost" className="h-5 w-5 opacity-50 hover:opacity-100">
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-3 space-y-2" align="start">
+          <div className="text-xs text-muted-foreground">Set round</div>
+          <Select value={val || "__null__"} onValueChange={setVal}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Round" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__null__">— (none)</SelectItem>
+              {ROUND_OPTIONS.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <div className="flex justify-end gap-1">
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button size="sm" className="h-7 text-xs" disabled={saving} onClick={save}>Save</Button>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export default function UnderlyingPortfolioPage() {
   const { selected, loading: qLoading } = useSelectedQuarter();
   const [rows, setRows] = useState<Row[]>([]);
@@ -82,7 +155,7 @@ export default function UnderlyingPortfolioPage() {
       const [{ data: holdings }, { data: commits }] = await Promise.all([
         supabase
           .from("underlying_holdings")
-          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, funds(name, short_name), companies(legal_name, commercial_name, status)")
+          .select("id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, currency, fund_id, round, round_detail, instrument, fund_ownership_pct, needs_review, review_reason, funds(name, short_name), companies(legal_name, commercial_name, status)")
           .eq("quarter_id", selected.id),
         supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
       ]);
@@ -100,7 +173,10 @@ export default function UnderlyingPortfolioPage() {
         fmv: h.fund_fmv_usd == null ? null : Number(h.fund_fmv_usd),
         proceeds: h.fund_proceeds_usd == null ? null : Number(h.fund_proceeds_usd),
         twh_pct: pctMap.get(h.fund_id) ?? 0,
+        fund_ownership_pct: h.fund_ownership_pct == null ? null : Number(h.fund_ownership_pct),
         status: h.companies?.status?.trim() || "Active",
+        needs_review: h.needs_review === true,
+        review_reason: h.review_reason ?? null,
       }));
       setRows(out);
       setLoading(false);
@@ -142,6 +218,9 @@ export default function UnderlyingPortfolioPage() {
     }),
     { twh_cost: 0, twh_fmv: 0, twh_proceeds: 0 }
   );
+
+  const updateRow = (id: string, patch: Partial<Row>) =>
+    setRows((curr) => curr.map((r) => (r.id === id ? { ...r, ...patch } : r)));
 
   if (qLoading || !selected) return <div className="p-8 text-muted-foreground">Loading…</div>;
 
@@ -199,6 +278,7 @@ export default function UnderlyingPortfolioPage() {
                 <TableHead className="text-right">TWH %</TableHead>
                 <TableHead className="text-right">Fund Cost</TableHead>
                 <TableHead className="text-right">Fund FMV</TableHead>
+                <TableHead className="text-right">Ownership %</TableHead>
                 <TableHead className="text-right">TWH Cost</TableHead>
                 <TableHead className="text-right">TWH FMV</TableHead>
                 <TableHead className="text-right">MOIC</TableHead>
@@ -206,9 +286,9 @@ export default function UnderlyingPortfolioPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-muted-foreground py-12 text-center">Loading…</TableCell></TableRow>
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={12} className="text-muted-foreground py-12 text-center">No holdings</TableCell></TableRow>
+                <TableRow><TableCell colSpan={13} className="text-muted-foreground py-12 text-center">No holdings</TableCell></TableRow>
               ) : (
                 <>
                   {filtered.map((r) => {
@@ -225,11 +305,8 @@ export default function UnderlyingPortfolioPage() {
                           )}
                         </TableCell>
                         <TableCell><StatusBadge status={r.status} /></TableCell>
-                        <TableCell className="text-xs">
-                          <span className="text-muted-foreground">{r.round ?? "—"}</span>
-                          {r.round_detail && (
-                            <span className="text-muted-foreground/50 ml-1">· {r.round_detail}</span>
-                          )}
+                        <TableCell>
+                          <RoundCell row={r} onSaved={(p) => updateRow(r.id, p)} />
                         </TableCell>
                         <TableCell className="text-muted-foreground text-xs">{r.instrument ?? "—"}</TableCell>
                         <TableCell className="text-right font-mono text-xs text-muted-foreground">{fmtPct(r.twh_pct, 2)}</TableCell>
@@ -242,6 +319,9 @@ export default function UnderlyingPortfolioPage() {
                           <MetricTooltip kind="input" title="Fund FMV" source={`GP financial statement for ${r.fund}`}>
                             {fmtUsdOrTbd(r.fmv, { compact: true })}
                           </MetricTooltip>
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                          {r.fund_ownership_pct == null ? "—" : `${r.fund_ownership_pct.toFixed(2)}%`}
                         </TableCell>
                         <TableCell className="text-right font-mono">
                           <MetricTooltip
@@ -301,6 +381,7 @@ export default function UnderlyingPortfolioPage() {
                   <TableRow className="border-t-2 border-border font-semibold">
                     <TableCell></TableCell>
                     <TableCell colSpan={8}>TWH Total</TableCell>
+                    <TableCell></TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.twh_cost, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtUSD(totals.twh_fmv, { compact: true })}</TableCell>
                     <TableCell className="text-right font-mono">{fmtMultiple(calcMoic(totals.twh_cost, totals.twh_fmv, totals.twh_proceeds))}</TableCell>
