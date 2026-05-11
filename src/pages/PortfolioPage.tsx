@@ -353,7 +353,7 @@ function CompanyCard({ company: c, highlight = false }: { company: Company; high
   const hasAnyTag = (c.type?.length || c.region?.length || c.industry?.length);
 
   return (
-    <Card className="p-4 bg-card border-border space-y-3">
+    <Card className={`p-4 bg-card space-y-3 ${highlight ? "border-primary ring-1 ring-primary/40" : "border-border"}`}>
       {/* Tight header: name + commercial + status + url all in one row */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
