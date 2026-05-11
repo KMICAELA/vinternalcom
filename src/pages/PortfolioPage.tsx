@@ -342,7 +342,7 @@ export default function PortfolioPage() {
   );
 }
 
-function CompanyCard({ company: c }: { company: Company }) {
+function CompanyCard({ company: c, highlight = false }: { company: Company; highlight?: boolean }) {
   const fields: Array<{ label: string; value: string | null; accent?: "emerald" | "amber" }> = [
     { label: "What they do", value: c.what_they_do },
     { label: "Target market", value: c.target_market },
