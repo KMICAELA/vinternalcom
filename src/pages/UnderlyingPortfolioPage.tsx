@@ -236,11 +236,14 @@ export default function UnderlyingPortfolioPage() {
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
       <div className="flex items-end justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Underlying Portfolio</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {filtered.length} holdings · {selected.label} · TWH-attributed values shown
-          </p>
+        <div className="space-y-3">
+          <FundsViewSwitcher />
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Underlying Portfolio</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {filtered.length} holdings · {selected.label} · TWH-attributed values shown
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Input
