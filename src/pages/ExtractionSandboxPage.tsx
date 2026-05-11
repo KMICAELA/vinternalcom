@@ -257,7 +257,8 @@ function ExtractionSandboxInner() {
         supabase
           .from("underlying_holdings")
           .select("fund_id, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd, companies(legal_name, commercial_name)")
-          .eq("quarter_id", quarterId),
+          .eq("quarter_id", quarterId)
+          .is("removed_at", null),
         supabase
           .from("direct_quarter_snapshots")
           .select("twh_fmv_usd, twh_proceeds_usd, directs(twh_cost_usd, companies(legal_name, commercial_name))")
