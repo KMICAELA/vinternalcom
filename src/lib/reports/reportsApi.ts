@@ -37,9 +37,11 @@ function classifyStatus(payload: ExtractedPayload | null, err?: string | null) {
 }
 
 function buildSummary(payload: ExtractedPayload | null) {
-  if (!payload) return { holdings: 0 };
+  if (!payload) return { holdings: 0, needs_review_count: 0 };
+  const needsReviewCount = (payload.holdings ?? []).filter((h: any) => h?.needs_review === true).length;
   return {
     holdings: payload.holdings?.length ?? 0,
+    needs_review_count: needsReviewCount,
     has_fund_metrics: payload.twh_nav_usd != null || payload.twh_contributions_usd != null,
     currency: payload.currency,
     report_date: payload.report_date,
