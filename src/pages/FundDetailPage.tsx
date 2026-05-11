@@ -361,6 +361,7 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">{single?.round ?? ""}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{single?.instrument ?? ""}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{single?.investment_date ? fmtDate(single.investment_date) : ""}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.cost == null ? "—" : fmtUSD(g.cost, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.fmv == null ? "—" : fmtUSD(g.fmv, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{fmtMultiple(moic)}</TableCell>
