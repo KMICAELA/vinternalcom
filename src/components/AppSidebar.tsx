@@ -50,6 +50,7 @@ export function AppSidebar() {
           ...items,
           { title: "Reconciliation", url: "/admin/reconciliation", icon: ShieldCheck },
           { title: "Extraction Sandbox", url: "/admin/extraction-sandbox", icon: FlaskConical },
+          { title: "Cleanup", url: "/admin/cleanup", icon: Trash2 },
         ]
       : items;
 
