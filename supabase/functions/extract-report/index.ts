@@ -368,6 +368,7 @@ All numeric amounts MUST be in base units (no thousands separators, no currency 
   "report_date": "YYYY-MM-DD" | null,
   "currency": "USD" | "EUR" | "GBP" | string | null,
   "extraction_mode": "A" | "B",
+  "schedule_company_names": string[] | null,
   "fund_total_contributions_native": number | null,
   "fund_total_nav_native": number | null,
   "twh_contributions_native": number | null,
@@ -408,6 +409,9 @@ headers like "Cost", "Investment", "Basis", "Fair Value", "FMV", "Market
 Value", "Carrying Value", "Round", "Round Invested", "Security Type", or
 "Instrument". Common in audited FS, fund-admin schedules, formal PCAPs.
 → Extract values DIRECTLY from the table, row by row. No inference.
+→ Also fill schedule_company_names with the exact values from the table's
+  Company/Portfolio Company column, excluding subtotal/total rows. This list
+  is used as a hard post-processing allowlist.
 If the table uses Quantonation-style headers, map them as follows:
   • "Ticket (€)" / "Ticket" / "Cost" / "Invested" -> fund_cost_native
   • "Investment Value (€)" / "Fair Value" / "FMV" -> fund_fmv_native
@@ -420,6 +424,14 @@ When a Schedule of Investments table is present (columns like Company /
 Initial Date / Invested Capital / Carrying Value / Ownership %), THAT TABLE
 IS THE COMPLETE HOLDINGS LIST. The number of rows in holdings[] must equal
 the number of data rows in that table (excluding subtotals/totals).
+Every holdings[].company_name MUST fuzzy-match a value in schedule_company_names.
+If a company is mentioned only in narrative and not in the table's Company
+column, exclude it even if the narrative names a round, launch, financing,
+valuation, or operating update.
+
+For Cantos Q4 specifically, narrative-only mentions such as MoldCo, neros,
+Castelion, and Radiant are NOT holdings if absent from the Schedule of
+Investments table. Do not emit them.
 
 Narrative paragraphs that re-discuss the same companies elsewhere in the
 document are CONTEXT, not separate investments:
