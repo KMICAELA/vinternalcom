@@ -916,6 +916,82 @@ export type Database = {
         }
         Relationships: []
       }
+      report_diffs: {
+        Row: {
+          change_type: Database["public"]["Enums"]["diff_change_type"]
+          company_id: string | null
+          created_at: string
+          field_name: string | null
+          holding_id: string | null
+          id: string
+          new_value: Json | null
+          old_value: Json | null
+          proposed_company_name: string | null
+          report_id: string
+          requires_confirmation: boolean
+          resolution_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["diff_status"]
+        }
+        Insert: {
+          change_type: Database["public"]["Enums"]["diff_change_type"]
+          company_id?: string | null
+          created_at?: string
+          field_name?: string | null
+          holding_id?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+          proposed_company_name?: string | null
+          report_id: string
+          requires_confirmation?: boolean
+          resolution_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["diff_status"]
+        }
+        Update: {
+          change_type?: Database["public"]["Enums"]["diff_change_type"]
+          company_id?: string | null
+          created_at?: string
+          field_name?: string | null
+          holding_id?: string | null
+          id?: string
+          new_value?: Json | null
+          old_value?: Json | null
+          proposed_company_name?: string | null
+          report_id?: string
+          requires_confirmation?: boolean
+          resolution_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["diff_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_diffs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_diffs_holding_id_fkey"
+            columns: ["holding_id"]
+            isOneToOne: false
+            referencedRelation: "underlying_holdings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "report_diffs_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       reports: {
         Row: {
           archived: boolean
@@ -924,6 +1000,7 @@ export type Database = {
           committed_by: string | null
           committed_to_db: boolean
           created_at: string
+          diff_status: Database["public"]["Enums"]["report_diff_status"] | null
           extracted_payload: Json | null
           extraction_status: Database["public"]["Enums"]["report_extraction_status"]
           extraction_summary: Json | null
@@ -946,6 +1023,7 @@ export type Database = {
           committed_by?: string | null
           committed_to_db?: boolean
           created_at?: string
+          diff_status?: Database["public"]["Enums"]["report_diff_status"] | null
           extracted_payload?: Json | null
           extraction_status?: Database["public"]["Enums"]["report_extraction_status"]
           extraction_summary?: Json | null
@@ -968,6 +1046,7 @@ export type Database = {
           committed_by?: string | null
           committed_to_db?: boolean
           created_at?: string
+          diff_status?: Database["public"]["Enums"]["report_diff_status"] | null
           extracted_payload?: Json | null
           extraction_status?: Database["public"]["Enums"]["report_extraction_status"]
           extraction_summary?: Json | null
@@ -1323,6 +1402,13 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "viewer"
+      diff_change_type: "update" | "add" | "missing" | "fund_level"
+      diff_status: "pending" | "approved" | "rejected" | "edited"
+      report_diff_status:
+        | "extracting"
+        | "pending_review"
+        | "approved"
+        | "rejected"
       report_extraction_status: "pending" | "success" | "error" | "needs_review"
     }
     CompositeTypes: {
@@ -1452,6 +1538,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "viewer"],
+      diff_change_type: ["update", "add", "missing", "fund_level"],
+      diff_status: ["pending", "approved", "rejected", "edited"],
+      report_diff_status: [
+        "extracting",
+        "pending_review",
+        "approved",
+        "rejected",
+      ],
       report_extraction_status: ["pending", "success", "error", "needs_review"],
     },
   },
