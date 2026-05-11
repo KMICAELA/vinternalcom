@@ -232,6 +232,7 @@ export function dedupeHoldings(holdings: ExtractedHolding[]): ExtractedHolding[]
       longE.fund_cost_usd = preferTruthyMax(longE.fund_cost_usd, shortE.fund_cost_usd);
       longE.fund_fmv_usd = preferTruthyMax(longE.fund_fmv_usd, shortE.fund_fmv_usd);
       longE.fund_proceeds_usd = preferTruthyMax(longE.fund_proceeds_usd, shortE.fund_proceeds_usd);
+      longE.fund_ownership_pct = preferTruthyMax(longE.fund_ownership_pct, shortE.fund_ownership_pct);
       if (shortE.investment_date && (!longE.investment_date || shortE.investment_date < longE.investment_date)) {
         longE.investment_date = shortE.investment_date;
       }
