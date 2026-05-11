@@ -80,62 +80,96 @@ export default function ConsolidatedPage() {
   }[]>([]);
   const [saving, setSaving] = useState(false);
 
-  // Load ledger + aggregate snapshot data
+  // Load ledger + aggregate snapshot data + history across quarters
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
     (async () => {
-      const [{ data: ledger }, { data: snaps }, { data: commits }] = await Promise.all([
+      const [
+        { data: ledger },
+        { data: allSnaps },
+        { data: commits },
+        { data: investors },
+        { data: quarters },
+        { data: flows },
+      ] = await Promise.all([
         supabase
           .from("twh_ledger_entries")
           .select("id, date, category, counterparty, description, amount_usd, reconciled")
           .order("date", { ascending: false }),
         supabase
           .from("fund_quarter_snapshots")
-          .select("fund_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd")
-          .eq("quarter_id", selected.id),
-        supabase.from("fund_commitments").select("fund_id, twh_commitment_usd, twh_ownership_pct"),
+          .select("fund_id, quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd, fund_total_contributions_usd, fund_total_distributions_usd, fund_total_nav_usd"),
+        supabase.from("fund_commitments").select("fund_id, twh_ownership_pct"),
+        supabase.from("investors").select("commitment_amount"),
+        supabase.from("quarters").select("id, label, quarter_end_date").order("quarter_end_date", { ascending: true }),
+        supabase.from("cash_flows").select("date, amount_usd").eq("scope", "twh_net"),
       ]);
 
       setEntries((ledger ?? []) as LedgerEntry[]);
 
       const pctMap = new Map((commits ?? []).map((c: any) => [c.fund_id, Number(c.twh_ownership_pct ?? 0)]));
-      let estimated = false;
-      const aggregate = (snaps ?? []).reduce(
-        (a, s: any) => {
-          const d = deriveTwhWithFallback(s, pctMap.get(s.fund_id) ?? 0);
-          if (d.estimated) estimated = true;
-          return {
-            contributions: a.contributions + d.contributions,
-            distributions: a.distributions + d.distributions,
-            nav: a.nav + d.nav,
-            commitment: a.commitment,
-            estimated: a.estimated,
-          };
-        },
-        { contributions: 0, distributions: 0, nav: 0, commitment: 0, estimated: false },
-      );
-      aggregate.commitment = (commits ?? []).reduce(
-        (s: number, c: any) => s + Number(c.twh_commitment_usd ?? 0),
+
+      // Total commitments from investors → TWH
+      const investorCommitment = (investors ?? []).reduce(
+        (s: number, i: any) => s + Number(i.commitment_amount ?? 0),
         0,
       );
-      aggregate.estimated = estimated;
-      setAgg(aggregate);
+
+      // Aggregate per quarter
+      type QAgg = { contributions: number; distributions: number; nav: number; estimated: boolean };
+      const byQuarter = new Map<string, QAgg>();
+      (allSnaps ?? []).forEach((s: any) => {
+        const d = deriveTwhWithFallback(s, pctMap.get(s.fund_id) ?? 0);
+        const cur = byQuarter.get(s.quarter_id) ?? { contributions: 0, distributions: 0, nav: 0, estimated: false };
+        cur.contributions += d.contributions;
+        cur.distributions += d.distributions;
+        cur.nav += d.nav;
+        if (d.estimated) cur.estimated = true;
+        byQuarter.set(s.quarter_id, cur);
+      });
+
+      const current = byQuarter.get(selected.id) ?? { contributions: 0, distributions: 0, nav: 0, estimated: false };
+      setAgg({
+        contributions: current.contributions,
+        distributions: current.distributions,
+        nav: current.nav,
+        commitment: investorCommitment,
+        estimated: current.estimated,
+      });
+
+      const allFlows = (flows ?? []).map((cf: any) => ({ date: cf.date, amount_usd: Number(cf.amount_usd) }));
+      const hist = (quarters ?? [])
+        .filter((q: any) => byQuarter.has(q.id))
+        .map((q: any) => {
+          const a = byQuarter.get(q.id)!;
+          const dpi = calcDpi(a.contributions, a.distributions);
+          const tvpi = calcTvpi(a.contributions, a.distributions, a.nav);
+          const flowsThruQ = allFlows.filter((cf) => cf.date <= q.quarter_end_date);
+          const irr = computeXirr(flowsThruQ, a.nav, q.quarter_end_date);
+          return { quarter: q, contrib: a.contributions, distrib: a.distributions, nav: a.nav, dpi, tvpi, irr };
+        });
+      setHistory(hist);
+
       setLoading(false);
     })();
   }, [selected, refreshKey]);
+
+  // Split entries: NAV (balance snapshots) vs cash flow
+  const navEntries = useMemo(() => entries.filter((e) => e.category === NAV_CAT), [entries]);
+  const cashFlowEntries = useMemo(() => entries.filter((e) => e.category !== NAV_CAT), [entries]);
 
   // Reconciliation: ledger-derived totals vs snapshot-derived totals
   const ledgerTotals = useMemo(() => {
     let contrib = 0;
     let distrib = 0;
-    for (const e of entries) {
+    for (const e of cashFlowEntries) {
       const amt = Math.abs(Number(e.amount_usd));
       if (OUTFLOW_CATS.has(e.category)) contrib += amt;
       else if (INFLOW_CATS.has(e.category)) distrib += amt;
     }
     return { contrib, distrib };
-  }, [entries]);
+  }, [cashFlowEntries]);
 
   const tvpi = calcTvpi(agg.contributions, agg.distributions, agg.nav);
   const dpi = calcDpi(agg.contributions, agg.distributions);
@@ -150,12 +184,14 @@ export default function ConsolidatedPage() {
       return;
     }
     setSaving(true);
-    // Sign by convention: outflows negative, inflows positive
-    const signedAmount = OUTFLOW_CATS.has(form.category) ? -Math.abs(amt) : Math.abs(amt);
+    // Sign convention: outflows negative, inflows positive, NAV stored as positive balance
+    const signedAmount = form.category === NAV_CAT
+      ? Math.abs(amt)
+      : OUTFLOW_CATS.has(form.category) ? -Math.abs(amt) : Math.abs(amt);
     const { error } = await supabase.from("twh_ledger_entries").insert({
       date: form.date,
       category: form.category,
-      counterparty: form.counterparty || null,
+      counterparty: null,
       description: form.description || null,
       amount_usd: signedAmount,
     });
@@ -169,7 +205,6 @@ export default function ConsolidatedPage() {
     setForm({
       date: new Date().toISOString().slice(0, 10),
       category: "Capital Call",
-      counterparty: "",
       description: "",
       amount_usd: "",
     });
