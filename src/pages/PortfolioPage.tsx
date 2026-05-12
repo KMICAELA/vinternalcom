@@ -402,11 +402,28 @@ export default function PortfolioPage() {
                   const twh_moic = m ? moic(m.twh_cost, m.twh_fmv, m.twh_proceeds) : null;
                   const inv_moic = m ? moic(m.inv_cost, m.inv_fmv, m.inv_proceeds) : null;
                   const isDirect = m?.is_direct;
+                  const isOpen = expanded.has(c.id);
+                  const detailFields = [
+                    { label: "What they do", value: c.what_they_do, accent: "" },
+                    { label: "Target market", value: c.target_market, accent: "" },
+                    { label: "Tailwinds", value: c.tailwinds, accent: "text-emerald-400" },
+                    { label: "Challenges", value: c.challenges, accent: "text-amber-400" },
+                  ].filter((f) => f.value && f.value.trim());
                   return (
-                    <TableRow key={c.id} className={c.id === focusCompanyId ? "bg-primary/10" : ""}>
-                      <TableCell className="font-medium text-foreground">{c.legal_name}</TableCell>
+                    <>
+                    <TableRow
+                      key={c.id}
+                      className={`cursor-pointer ${c.id === focusCompanyId ? "bg-primary/10" : ""}`}
+                      onClick={() => toggleExpand(c.id)}
+                    >
+                      <TableCell className="font-medium text-foreground">
+                        <div className="flex items-center gap-1.5">
+                          {isOpen ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                          <span>{c.legal_name}</span>
+                        </div>
+                      </TableCell>
                       <TableCell>{c.commercial_name || "—"}</TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {c.url ? (
                           <a
                             href={c.url.startsWith("http") ? c.url : `https://${c.url}`}
@@ -445,6 +462,40 @@ export default function PortfolioPage() {
                         {c.notes || "—"}
                       </TableCell>
                     </TableRow>
+                    {isOpen && (
+                      <TableRow key={`${c.id}-detail`} className="bg-muted/20 hover:bg-muted/20">
+                        <TableCell colSpan={18} className="p-5">
+                          {detailFields.length === 0 && !c.notes && !c.stage && !c.thesis_bucket ? (
+                            <div className="text-xs text-muted-foreground italic">— No commentary yet —</div>
+                          ) : (
+                            <div className="space-y-4">
+                              {(c.stage || c.thesis_bucket) && (
+                                <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                                  {c.stage && <div><span className="uppercase tracking-wider mr-1.5">Stage</span><span className="text-foreground/90">{c.stage}</span></div>}
+                                  {c.thesis_bucket && <div><span className="uppercase tracking-wider mr-1.5">Thesis</span><span className="text-foreground/90">{c.thesis_bucket}</span></div>}
+                                </div>
+                              )}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {detailFields.map((f) => (
+                                  <div key={f.label} className="space-y-1">
+                                    <div className={`text-[10px] uppercase tracking-wider font-medium ${f.accent || "text-muted-foreground"}`}>
+                                      {f.label}
+                                    </div>
+                                    <div className="text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">{f.value}</div>
+                                  </div>
+                                ))}
+                              </div>
+                              {c.notes && c.notes.trim() && (
+                                <div className="text-[11px] text-muted-foreground border-t border-border pt-3">
+                                  <span className="uppercase tracking-wider mr-2">Notes</span>{c.notes}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                    </>
                   );
                 })}
                 <TableRow className="bg-muted/40 font-medium hover:bg-muted/40">
