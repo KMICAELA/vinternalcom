@@ -60,6 +60,9 @@ export default function FundDetailPage() {
   );
   const [holdings, setHoldings] = useState<{ id: string; company_id: string; company: string; round: string | null; instrument: string | null; investment_date: string | null; cost: number | null; fmv: number | null; status: string }[]>([]);
 
+  const [cashflows, setCashflows] = useState<{ id: string; date: string; category: string; amount_usd: number; note: string | null }[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
+
   useEffect(() => {
     if (!id) return;
     setLoading(true);
@@ -69,7 +72,7 @@ export default function FundDetailPage() {
         supabase.from("fund_commitments").select("twh_commitment_usd, total_fund_commitment_usd, twh_ownership_pct").eq("fund_id", id).maybeSingle(),
         supabase.from("fund_quarter_snapshots").select("quarter_id, twh_contributions_usd, twh_distributions_usd, twh_nav_usd").eq("fund_id", id),
         supabase.from("quarters").select("id, label, quarter_end_date").order("quarter_end_date", { ascending: true }),
-        supabase.from("cash_flows").select("date, amount_usd").eq("scope", "twh_net").eq("fund_id", id),
+        supabase.from("cash_flows").select("id, date, category, amount_usd, note").eq("scope", "twh_net").eq("fund_id", id).order("date", { ascending: false }),
       ]);
 
       setFund((f as Fund) ?? null);
@@ -81,6 +84,11 @@ export default function FundDetailPage() {
         });
       }
 
+      const flowRows = (flows ?? []).map((cf: any) => ({
+        id: cf.id, date: cf.date, category: cf.category, amount_usd: Number(cf.amount_usd), note: cf.note ?? null,
+      }));
+      setCashflows(flowRows);
+
       const snapByQ = new Map<string, Snap>();
       (snaps ?? []).forEach((s: any) =>
         snapByQ.set(s.quarter_id, {
@@ -91,7 +99,7 @@ export default function FundDetailPage() {
         }),
       );
 
-      const allFlows: CashFlow[] = (flows ?? []).map((cf: any) => ({ date: cf.date, amount_usd: Number(cf.amount_usd) }));
+      const allFlows: CashFlow[] = flowRows.map((cf) => ({ date: cf.date, amount_usd: cf.amount_usd }));
 
       const rows: HistoryRow[] = (quarters ?? [])
         .filter((q: any) => snapByQ.has(q.id))
@@ -106,7 +114,7 @@ export default function FundDetailPage() {
       setHistory(rows);
       setLoading(false);
     })();
-  }, [id]);
+  }, [id, refreshKey]);
 
   // Load holdings for the currently-selected quarter (separate effect so the
   // section refreshes when the user changes the global quarter).
@@ -138,18 +146,24 @@ export default function FundDetailPage() {
   if (loading) return <div className="p-8 text-muted-foreground">Loading…</div>;
   if (!fund) return <div className="p-8 text-muted-foreground">Fund not found.</div>;
 
-  const navChart = history.map((r) => ({
+  // Charts use chronological order
+  const navChart = [...history].map((r) => ({
     label: r.quarter.label,
     NAV: r.nav,
-    Distributions: r.distrib,
     Contributions: r.contrib,
+    Distributions: r.distrib,
   }));
-  const ratioChart = history.map((r) => ({
+  const ratioChart = [...history].map((r) => ({
     label: r.quarter.label,
     TVPI: r.tvpi != null ? Number(r.tvpi.toFixed(4)) : null,
     DPI: r.dpi != null ? Number(r.dpi.toFixed(4)) : null,
+  }));
+  const irrChart = [...history].map((r) => ({
+    label: r.quarter.label,
     IRR: r.irr != null ? Number((r.irr * 100).toFixed(2)) : null,
   }));
+  // History table sorted most recent first
+  const historyDesc = [...history].sort((a, b) => b.quarter.quarter_end_date.localeCompare(a.quarter.quarter_end_date));
 
   return (
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
