@@ -325,7 +325,7 @@ export default function UnderlyingPortfolioPage() {
       </SelectTrigger>
       <SelectContent>
         <SelectItem value="all">{allLabel}</SelectItem>
-        {options.map((o) => (
+        {options.filter((o) => o && o.trim() !== "").map((o) => (
           <SelectItem key={o} value={o}>{o}</SelectItem>
         ))}
       </SelectContent>
