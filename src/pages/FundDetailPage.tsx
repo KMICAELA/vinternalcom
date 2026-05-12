@@ -195,12 +195,12 @@ export default function FundDetailPage() {
 
       {/* Charts */}
       {history.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="bg-card border-border p-4">
-            <div className="text-sm font-medium mb-3">NAV trajectory</div>
+            <div className="text-sm font-medium mb-3">NAV / Contributions / Distributions</div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={navChart}>
+                <BarChart data={navChart}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
                   <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => fmtUSD(v, { compact: true })} />
@@ -208,34 +208,59 @@ export default function FundDetailPage() {
                     contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
                     formatter={(v: any) => fmtUSD(Number(v), { compact: true })}
                   />
-                  <Line type="monotone" dataKey="NAV" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="Contributions" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={false} />
-                  <Line type="monotone" dataKey="Distributions" stroke="hsl(var(--chart-2, var(--accent)))" strokeWidth={1.5} dot={false} />
-                </LineChart>
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="NAV" fill="hsl(var(--primary))" />
+                  <Bar dataKey="Contributions" fill="hsl(var(--muted-foreground))" />
+                  <Bar dataKey="Distributions" fill="hsl(var(--accent))" />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
           <Card className="bg-card border-border p-4">
-            <div className="text-sm font-medium mb-3">TVPI / DPI / IRR over time</div>
+            <div className="text-sm font-medium mb-3">TVPI / DPI</div>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={ratioChart}>
+                <BarChart data={ratioChart}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
-                  <YAxis yAxisId="left" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${v.toFixed(2)}x`} />
-                  <YAxis yAxisId="right" orientation="right" stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${v}%`} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${Number(v).toFixed(2)}x`} />
                   <RTooltip
                     contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                    formatter={(v: any) => `${Number(v).toFixed(2)}x`}
                   />
-                  <Line yAxisId="left" type="monotone" dataKey="TVPI" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line yAxisId="left" type="monotone" dataKey="DPI" stroke="hsl(var(--muted-foreground))" strokeWidth={1.5} dot={false} />
-                  <Line yAxisId="right" type="monotone" dataKey="IRR" stroke="hsl(var(--accent))" strokeWidth={1.5} dot={{ r: 3 }} />
-                </LineChart>
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="TVPI" fill="hsl(var(--primary))" />
+                  <Bar dataKey="DPI" fill="hsl(var(--muted-foreground))" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+          <Card className="bg-card border-border p-4">
+            <div className="text-sm font-medium mb-3">Net IRR</div>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={irrChart}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" stroke="hsl(var(--muted-foreground))" fontSize={11} />
+                  <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickFormatter={(v) => `${v}%`} />
+                  <RTooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", fontSize: 12 }}
+                    formatter={(v: any) => `${Number(v).toFixed(2)}%`}
+                  />
+                  <Line type="monotone" dataKey="IRR" stroke="hsl(var(--accent))" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </Card>
         </div>
       )}
+
+      {/* Cashflow History */}
+      <CashflowHistorySection
+        fundId={fund.id}
+        cashflows={cashflows}
+        onChanged={() => setRefreshKey((k) => k + 1)}
+      />
 
       {/* History table */}
       <Card className="bg-card border-border overflow-hidden">
