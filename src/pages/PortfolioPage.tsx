@@ -410,7 +410,7 @@ export default function PortfolioPage() {
                     { label: "Challenges", value: c.challenges, accent: "text-amber-400" },
                   ].filter((f) => f.value && f.value.trim());
                   return (
-                    <>
+                    <Fragment key={c.id}>
                     <TableRow
                       key={c.id}
                       className={`cursor-pointer ${c.id === focusCompanyId ? "bg-primary/10" : ""}`}
@@ -495,7 +495,7 @@ export default function PortfolioPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                    </>
+                    </Fragment>
                   );
                 })}
                 <TableRow className="bg-muted/40 font-medium hover:bg-muted/40">
