@@ -77,6 +77,13 @@ export default function PortfolioPage() {
   const [fundFilter, setFundFilter] = useState<string>(ALL);
   const [industryFilter, setIndustryFilter] = useState<string>(ALL);
   const [typeFilter, setTypeFilter] = useState<string>(ALL);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggleExpand = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
 
   const [searchParams, setSearchParams] = useSearchParams();
   const focusCompanyId = searchParams.get("company");
