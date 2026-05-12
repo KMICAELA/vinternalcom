@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useSelectedQuarter } from "@/contexts/QuarterContext";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -13,8 +12,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
-import { ExternalLink, Search, Globe, X } from "lucide-react";
+import { Search, X, ExternalLink } from "lucide-react";
+import { fmtUSD, fmtMultiple } from "@/lib/format";
 
 type Company = {
   id: string;
@@ -22,17 +30,22 @@ type Company = {
   commercial_name: string | null;
   url: string | null;
   status: string | null;
-  stage: string | null;
-  thesis_bucket: string | null;
-  what_they_do: string | null;
-  target_market: string | null;
-  tailwinds: string | null;
-  challenges: string | null;
-  notes: string | null;
-  theme: string[] | null;
-  industry: string[] | null;
   region: string[] | null;
   type: string[] | null;
+  theme: string[] | null;
+  industry: string[] | null;
+  sub_industry: string[] | null;
+  notes: string | null;
+};
+
+type Metrics = {
+  twh_cost: number;
+  twh_fmv: number;
+  twh_proceeds: number;
+  inv_cost: number;
+  inv_fmv: number;
+  inv_proceeds: number;
+  is_direct: boolean;
 };
 
 const ALL = "__all__";
@@ -42,13 +55,16 @@ const DIRECT_LABEL = "1200VC";
 const INNOVATION_TYPES = ["Deep Tech", "Tech Based", "Tech Enabled"] as const;
 const TOP_N_INDUSTRIES = 10;
 
+const moic = (cost: number, fmv: number, proceeds: number) =>
+  cost > 0 ? (fmv + proceeds) / cost : null;
+
 export default function PortfolioPage() {
   const { selected: quarter } = useSelectedQuarter();
 
   const [companies, setCompanies] = useState<Company[]>([]);
-  const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
-  // companyId -> set of fund labels (fund.name) the company is held through; includes "1200VC" for directs
+  const [metrics, setMetrics] = useState<Map<string, Metrics>>(new Map());
   const [companyFunds, setCompanyFunds] = useState<Map<string, Set<string>>>(new Map());
+  const [activeIds, setActiveIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -58,14 +74,12 @@ export default function PortfolioPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const focusCompanyId = searchParams.get("company");
-  const focusedRef = useRef<HTMLDivElement | null>(null);
   const clearFocus = () => {
     const next = new URLSearchParams(searchParams);
     next.delete("company");
     setSearchParams(next, { replace: true });
   };
 
-  // Load companies + which are held in selected quarter + which funds touch them
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -74,17 +88,19 @@ export default function PortfolioPage() {
         await Promise.all([
           supabase.from("companies").select("*").order("legal_name"),
           supabase.from("funds").select("id, name, short_name"),
-          supabase.from("directs").select("id, company_id"),
+          supabase.from("directs").select("id, company_id, twh_cost_usd"),
           quarter
             ? supabase
                 .from("direct_quarter_snapshots")
-                .select("direct_id")
+                .select("direct_id, twh_fmv_usd, twh_proceeds_usd")
                 .eq("quarter_id", quarter.id)
             : Promise.resolve({ data: [], error: null }),
           quarter
             ? supabase
                 .from("underlying_holdings")
-                .select("company_id, fund_id")
+                .select(
+                  "company_id, fund_id, twh_cost_usd, twh_fmv_usd, twh_proceeds_usd, fund_cost_usd, fund_fmv_usd, fund_proceeds_usd",
+                )
                 .eq("quarter_id", quarter.id)
                 .is("removed_at", null)
             : Promise.resolve({ data: [], error: null }),
@@ -102,13 +118,19 @@ export default function PortfolioPage() {
       );
 
       const directIdToCompany = new Map<string, string>();
-      (directsRes.data ?? []).forEach((d: any) =>
-        directIdToCompany.set(d.id, d.company_id),
-      );
+      const directCostByCompany = new Map<string, number>();
+      (directsRes.data ?? []).forEach((d: any) => {
+        directIdToCompany.set(d.id, d.company_id);
+        directCostByCompany.set(
+          d.company_id,
+          (directCostByCompany.get(d.company_id) ?? 0) + (Number(d.twh_cost_usd) || 0),
+        );
+      });
 
       const ids = new Set<string>();
       const cFunds = new Map<string, Set<string>>();
-      const ensure = (cid: string) => {
+      const m = new Map<string, Metrics>();
+      const ensureFunds = (cid: string) => {
         let s = cFunds.get(cid);
         if (!s) {
           s = new Set<string>();
@@ -116,24 +138,56 @@ export default function PortfolioPage() {
         }
         return s;
       };
+      const ensureMetrics = (cid: string): Metrics => {
+        let v = m.get(cid);
+        if (!v) {
+          v = {
+            twh_cost: 0,
+            twh_fmv: 0,
+            twh_proceeds: 0,
+            inv_cost: 0,
+            inv_fmv: 0,
+            inv_proceeds: 0,
+            is_direct: false,
+          };
+          m.set(cid, v);
+        }
+        return v;
+      };
 
       (directSnapsRes.data ?? []).forEach((s: any) => {
         const cid = directIdToCompany.get(s.direct_id);
-        if (cid) {
-          ids.add(cid);
-          ensure(cid).add(DIRECT_LABEL);
-        }
+        if (!cid) return;
+        ids.add(cid);
+        ensureFunds(cid).add(DIRECT_LABEL);
+        const v = ensureMetrics(cid);
+        v.is_direct = true;
+        v.twh_fmv += Number(s.twh_fmv_usd) || 0;
+        v.twh_proceeds += Number(s.twh_proceeds_usd) || 0;
       });
+      // add direct cost (from directs table) only for companies that have a snapshot in this quarter
+      ids.forEach((cid) => {
+        const cost = directCostByCompany.get(cid);
+        if (cost) ensureMetrics(cid).twh_cost += cost;
+      });
+
       (underlyingRes.data ?? []).forEach((u: any) => {
-        if (u.company_id) {
-          ids.add(u.company_id);
-          const label = fundLabelById.get(u.fund_id);
-          if (label) ensure(u.company_id).add(label);
-        }
+        if (!u.company_id) return;
+        ids.add(u.company_id);
+        const label = fundLabelById.get(u.fund_id);
+        if (label) ensureFunds(u.company_id).add(label);
+        const v = ensureMetrics(u.company_id);
+        v.twh_cost += Number(u.twh_cost_usd) || 0;
+        v.twh_fmv += Number(u.twh_fmv_usd) || 0;
+        v.twh_proceeds += Number(u.twh_proceeds_usd) || 0;
+        v.inv_cost += Number(u.fund_cost_usd) || 0;
+        v.inv_fmv += Number(u.fund_fmv_usd) || 0;
+        v.inv_proceeds += Number(u.fund_proceeds_usd) || 0;
       });
 
       setActiveIds(ids);
       setCompanyFunds(cFunds);
+      setMetrics(m);
       setCompanies((companiesRes.data ?? []) as Company[]);
       setLoading(false);
     })();
@@ -142,26 +196,20 @@ export default function PortfolioPage() {
     };
   }, [quarter?.id]);
 
-  // Quarter-active companies only
   const activeCompanies = useMemo(
     () => companies.filter((c) => activeIds.has(c.id)),
     [companies, activeIds],
   );
 
-  // Fund options: every distinct label across active companies, sorted; "1200VC" pinned first if present
   const fundOptions = useMemo(() => {
     const s = new Set<string>();
-    activeCompanies.forEach((c) => {
-      const set = companyFunds.get(c.id);
-      set?.forEach((l) => s.add(l));
-    });
+    activeCompanies.forEach((c) => companyFunds.get(c.id)?.forEach((l) => s.add(l)));
     const all = Array.from(s);
     const direct = all.includes(DIRECT_LABEL) ? [DIRECT_LABEL] : [];
     const rest = all.filter((l) => l !== DIRECT_LABEL).sort();
     return [...direct, ...rest];
   }, [activeCompanies, companyFunds]);
 
-  // Industry: top-N + Other, mirrors Dashboard chart logic
   const { topIndustries, industrySet } = useMemo(() => {
     const counts = new Map<string, number>();
     activeCompanies.forEach((c) => {
@@ -181,47 +229,33 @@ export default function PortfolioPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return activeCompanies.filter((c) => {
-      // Fund
       if (fundFilter !== ALL) {
         const set = companyFunds.get(c.id);
         if (!set || !set.has(fundFilter)) return false;
       }
-      // Industry
       if (industryFilter !== ALL) {
         const inds = (c.industry ?? []).map((s) => s.trim()).filter(Boolean);
         if (industryFilter === OTHER) {
-          // No industry, OR all industries fall outside top-N
-          if (inds.length === 0) {
-            // empty industry shouldn't match "Other" — exclude
-            return false;
-          }
+          if (inds.length === 0) return false;
           if (inds.some((i) => industrySet.has(i))) return false;
-        } else {
-          if (!inds.includes(industryFilter)) return false;
-        }
+        } else if (!inds.includes(industryFilter)) return false;
       }
-      // Innovation Type
       if (typeFilter !== ALL) {
         const types = (c.type ?? []).map((s) => s.trim()).filter(Boolean);
         if (typeFilter === UNCLASSIFIED) {
           if (types.length > 0) return false;
-        } else {
-          if (!types.includes(typeFilter)) return false;
-        }
+        } else if (!types.includes(typeFilter)) return false;
       }
-      // Search
       if (!q) return true;
       const hay = [
         c.legal_name,
         c.commercial_name,
-        c.what_they_do,
-        c.target_market,
-        c.tailwinds,
-        c.challenges,
+        c.url,
+        c.status,
         c.notes,
-        c.thesis_bucket,
         ...(c.theme ?? []),
         ...(c.industry ?? []),
+        ...(c.sub_industry ?? []),
         ...(c.region ?? []),
         ...(c.type ?? []),
       ]
@@ -232,27 +266,37 @@ export default function PortfolioPage() {
     });
   }, [activeCompanies, search, fundFilter, industryFilter, typeFilter, companyFunds, industrySet]);
 
-  // If a focus company is requested via ?company=, narrow to just that company.
   const displayed = useMemo(() => {
     if (!focusCompanyId) return filtered;
     const match = companies.find((c) => c.id === focusCompanyId);
     return match ? [match] : filtered;
   }, [filtered, focusCompanyId, companies]);
 
-  useEffect(() => {
-    if (focusCompanyId && focusedRef.current) {
-      focusedRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
-  }, [focusCompanyId, displayed.length]);
+  // Totals
+  const totals = useMemo(() => {
+    const t = { twh_cost: 0, twh_fmv: 0, twh_proceeds: 0, inv_cost: 0, inv_fmv: 0, inv_proceeds: 0 };
+    displayed.forEach((c) => {
+      const m = metrics.get(c.id);
+      if (!m) return;
+      t.twh_cost += m.twh_cost;
+      t.twh_fmv += m.twh_fmv;
+      t.twh_proceeds += m.twh_proceeds;
+      t.inv_cost += m.inv_cost;
+      t.inv_fmv += m.inv_fmv;
+      t.inv_proceeds += m.inv_proceeds;
+    });
+    return t;
+  }, [displayed, metrics]);
+
+  const joinList = (arr?: string[] | null) => (arr && arr.length ? arr.join(", ") : "—");
 
   return (
-    <div className="max-w-[1400px] mx-auto px-6 py-6 space-y-4">
+    <div className="max-w-[1600px] mx-auto px-6 py-6 space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Portfolio</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Portfolio Inventory</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Company-by-company qualitative intelligence — what they do, who they serve, and the
-            tailwinds and challenges shaping their trajectory.
+            Company-by-company inventory — TWH and fund-level cost, FMV, proceeds, and MOIC.
           </p>
         </div>
         <div className="text-xs text-muted-foreground text-right">
@@ -277,44 +321,32 @@ export default function PortfolioPage() {
           <div className="relative md:col-span-2">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search by name, what they do, tailwinds, challenges…"
+              placeholder="Search by name, industry, region…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
             />
           </div>
           <Select value={fundFilter} onValueChange={setFundFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Fund" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Fund" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All funds</SelectItem>
-              {fundOptions.map((f) => (
-                <SelectItem key={f} value={f}>{f}</SelectItem>
-              ))}
+              {fundOptions.map((f) => (<SelectItem key={f} value={f}>{f}</SelectItem>))}
             </SelectContent>
           </Select>
           <Select value={industryFilter} onValueChange={setIndustryFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Industry" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Industry" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All industries</SelectItem>
-              {topIndustries.map((i) => (
-                <SelectItem key={i} value={i}>{i}</SelectItem>
-              ))}
+              {topIndustries.map((i) => (<SelectItem key={i} value={i}>{i}</SelectItem>))}
               <SelectItem value={OTHER}>Other</SelectItem>
             </SelectContent>
           </Select>
           <Select value={typeFilter} onValueChange={setTypeFilter}>
-            <SelectTrigger>
-              <SelectValue placeholder="Innovation type" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Innovation type" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>All types</SelectItem>
-              {INNOVATION_TYPES.map((t) => (
-                <SelectItem key={t} value={t}>{t}</SelectItem>
-              ))}
+              {INNOVATION_TYPES.map((t) => (<SelectItem key={t} value={t}>{t}</SelectItem>))}
               <SelectItem value={UNCLASSIFIED}>Unclassified</SelectItem>
             </SelectContent>
           </Select>
@@ -322,127 +354,103 @@ export default function PortfolioPage() {
       </Card>
 
       {loading ? (
-        <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">
-          Loading…
-        </Card>
+        <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">Loading…</Card>
       ) : displayed.length === 0 ? (
-        <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">
-          No companies match your filters.
-        </Card>
+        <Card className="p-12 bg-card border-border text-center text-sm text-muted-foreground">No companies match your filters.</Card>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {displayed.map((c) => (
-            <div key={c.id} ref={c.id === focusCompanyId ? focusedRef : undefined}>
-              <CompanyCard company={c} highlight={c.id === focusCompanyId} />
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function CompanyCard({ company: c, highlight = false }: { company: Company; highlight?: boolean }) {
-  const fields: Array<{ label: string; value: string | null; accent?: "emerald" | "amber" }> = [
-    { label: "What they do", value: c.what_they_do },
-    { label: "Target market", value: c.target_market },
-    { label: "Tailwinds", value: c.tailwinds, accent: "emerald" },
-    { label: "Challenges", value: c.challenges, accent: "amber" },
-  ];
-  const filled = fields.filter((f) => f.value && f.value.trim());
-  const hasAnyTag = (c.type?.length || c.region?.length || c.industry?.length);
-
-  return (
-    <Card className={`p-4 bg-card space-y-3 ${highlight ? "border-primary ring-1 ring-primary/40" : "border-border"}`}>
-      {/* Tight header: name + commercial + status + url all in one row */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="font-medium text-foreground truncate">
-              {c.commercial_name || c.legal_name}
-            </span>
-            {c.commercial_name && c.commercial_name !== c.legal_name && (
-              <span className="text-xs text-muted-foreground truncate">{c.legal_name}</span>
-            )}
-            {c.url && (
-              <a
-                href={c.url.startsWith("http") ? c.url : `https://${c.url}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-              >
-                <Globe className="h-3 w-3" />
-                {c.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            )}
+        <Card className="bg-card border-border overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/30 hover:bg-muted/30">
+                  <TableHead className="min-w-[180px]">Company</TableHead>
+                  <TableHead className="min-w-[140px]">Commercial</TableHead>
+                  <TableHead>URL</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Region</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Theme</TableHead>
+                  <TableHead className="min-w-[200px]">Company Industry</TableHead>
+                  <TableHead className="min-w-[200px]">Target Industry</TableHead>
+                  <TableHead className="text-right">TWH Cost</TableHead>
+                  <TableHead className="text-right">TWH FMV</TableHead>
+                  <TableHead className="text-right">TWH Proceeds</TableHead>
+                  <TableHead className="text-right">TWH MOIC</TableHead>
+                  <TableHead className="text-right">Inv. Cost</TableHead>
+                  <TableHead className="text-right">FMV</TableHead>
+                  <TableHead className="text-right">Proceeds</TableHead>
+                  <TableHead className="text-right">MOIC</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayed.map((c) => {
+                  const m = metrics.get(c.id);
+                  const twh_moic = m ? moic(m.twh_cost, m.twh_fmv, m.twh_proceeds) : null;
+                  const inv_moic = m ? moic(m.inv_cost, m.inv_fmv, m.inv_proceeds) : null;
+                  const isDirect = m?.is_direct;
+                  return (
+                    <TableRow key={c.id} className={c.id === focusCompanyId ? "bg-primary/10" : ""}>
+                      <TableCell className="font-medium text-foreground">{c.legal_name}</TableCell>
+                      <TableCell>{c.commercial_name || "—"}</TableCell>
+                      <TableCell>
+                        {c.url ? (
+                          <a
+                            href={c.url.startsWith("http") ? c.url : `https://${c.url}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                          >
+                            {c.url.replace(/^https?:\/\//, "").replace(/\/$/, "").slice(0, 28)}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        ) : "—"}
+                      </TableCell>
+                      <TableCell className="text-xs">{c.status || "—"}</TableCell>
+                      <TableCell className="text-xs">{joinList(c.region)}</TableCell>
+                      <TableCell className="text-xs">{joinList(c.type)}</TableCell>
+                      <TableCell className="text-xs">{joinList(c.theme)}</TableCell>
+                      <TableCell className="text-xs">{joinList(c.industry)}</TableCell>
+                      <TableCell className="text-xs">{joinList(c.sub_industry)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{m ? fmtUSD(m.twh_cost) : "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{m ? fmtUSD(m.twh_fmv) : "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{m ? fmtUSD(m.twh_proceeds) : "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">{fmtMultiple(twh_moic)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {isDirect ? "—" : m ? fmtUSD(m.inv_cost) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {isDirect ? "—" : m ? fmtUSD(m.inv_fmv) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {isDirect ? "—" : m ? fmtUSD(m.inv_proceeds) : "—"}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {isDirect ? "—" : fmtMultiple(inv_moic)}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground max-w-[240px] truncate" title={c.notes || ""}>
+                        {c.notes || "—"}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+                <TableRow className="bg-muted/40 font-medium hover:bg-muted/40">
+                  <TableCell colSpan={9} className="text-right">Total ({displayed.length})</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtUSD(totals.twh_cost)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtUSD(totals.twh_fmv)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtUSD(totals.twh_proceeds)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtMultiple(moic(totals.twh_cost, totals.twh_fmv, totals.twh_proceeds))}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtUSD(totals.inv_cost)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtUSD(totals.inv_fmv)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtUSD(totals.inv_proceeds)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmtMultiple(moic(totals.inv_cost, totals.inv_fmv, totals.inv_proceeds))}</TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableBody>
+            </Table>
           </div>
-        </div>
-        {c.status && (
-          <Badge variant="outline" className="text-[10px] shrink-0">{c.status}</Badge>
-        )}
-      </div>
-
-      {/* All taxonomy chips in a single row directly under header */}
-      {hasAnyTag ? (
-        <div className="flex flex-wrap gap-1.5">
-          {c.type?.map((t) => (
-            <Badge key={`t-${t}`} variant="secondary" className="text-[10px]">{t}</Badge>
-          ))}
-          {c.region?.map((r) => (
-            <Badge key={`r-${r}`} variant="outline" className="text-[10px]">{r}</Badge>
-          ))}
-          {c.industry?.slice(0, 3).map((i) => (
-            <Badge key={`i-${i}`} variant="outline" className="text-[10px] text-muted-foreground">
-              {i}
-            </Badge>
-          ))}
-        </div>
-      ) : null}
-
-      {/* Commentary: only render filled fields. Empty card → single muted line. */}
-      {filled.length === 0 ? (
-        <div className="text-xs text-muted-foreground italic">— No commentary yet —</div>
-      ) : (
-        <div className="space-y-3">
-          {filled.map((f) => (
-            <Field key={f.label} label={f.label} value={f.value} accent={f.accent} />
-          ))}
-        </div>
+        </Card>
       )}
-
-      {c.notes && c.notes.trim() && (
-        <div className="text-[11px] text-muted-foreground border-t border-border pt-2">
-          <span className="uppercase tracking-wider mr-2">Notes</span>
-          {c.notes}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-function Field({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: string | null;
-  accent?: "emerald" | "amber";
-}) {
-  if (!value) return null;
-  const accentClass =
-    accent === "emerald"
-      ? "text-emerald-400"
-      : accent === "amber"
-        ? "text-amber-400"
-        : "text-muted-foreground";
-  return (
-    <div className="space-y-1">
-      <div className={`text-[10px] uppercase tracking-wider font-medium ${accentClass}`}>
-        {label}
-      </div>
-      <div className="text-sm leading-relaxed text-foreground/90">{value}</div>
     </div>
   );
 }
