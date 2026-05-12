@@ -378,6 +378,33 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
       {groups.map((g) => {
         const moic = g.cost && g.cost > 0 && g.fmv != null ? g.fmv / g.cost : null;
         const isOpen = !!open[g.company_id];
+
+        // Single investment: flat row, no expand
+        if (g.items.length === 1) {
+          const h = g.items[0];
+          const m = h.cost && h.cost > 0 && h.fmv != null ? h.fmv / h.cost : null;
+          return (
+            <TableRow key={g.company_id} className="border-t-2 border-border/60 hover:bg-muted/30">
+              <TableCell className="font-semibold">
+                <Link
+                  to={`/portfolio?company=${g.company_id}`}
+                  className="hover:underline"
+                >
+                  {g.company}
+                </Link>
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">{h.round ?? "—"}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{h.instrument ?? "—"}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{h.investment_date ? fmtDate(h.investment_date) : "—"}</TableCell>
+              <TableCell className="text-right font-mono">{h.cost == null ? "—" : fmtUSD(h.cost, { compact: true })}</TableCell>
+              <TableCell className="text-right font-mono">{h.fmv == null ? "—" : fmtUSD(h.fmv, { compact: true })}</TableCell>
+              <TableCell className="text-right font-mono">{fmtMultiple(m)}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{g.status}</TableCell>
+            </TableRow>
+          );
+        }
+
+        // Multiple investments: expandable parent/child rows
         return (
           <Fragment key={g.company_id}>
             <TableRow
