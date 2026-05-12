@@ -377,22 +377,16 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
     <>
       {groups.map((g) => {
         const moic = g.cost && g.cost > 0 && g.fmv != null ? g.fmv / g.cost : null;
-        const multi = g.items.length > 1;
         const isOpen = !!open[g.company_id];
-        const single = !multi ? g.items[0] : null;
         return (
           <Fragment key={g.company_id}>
             <TableRow
-              className={`border-t-2 border-border/60 hover:bg-muted/30 ${multi ? "cursor-pointer" : ""}`}
-              onClick={multi ? () => setOpen((o) => ({ ...o, [g.company_id]: !o[g.company_id] })) : undefined}
+              className="border-t-2 border-border/60 hover:bg-muted/30 cursor-pointer"
+              onClick={() => setOpen((o) => ({ ...o, [g.company_id]: !o[g.company_id] }))}
             >
               <TableCell className="font-semibold">
                 <div className="flex items-center gap-1.5">
-                  {multi ? (
-                    <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
-                  ) : (
-                    <span className="inline-block w-3.5" />
-                  )}
+                  <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
                   <Link
                     to={`/portfolio?company=${g.company_id}`}
                     className="hover:underline"
@@ -400,18 +394,18 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
                   >
                     {g.company}
                   </Link>
-                  {multi && <span className="text-[10px] text-muted-foreground ml-1">({g.items.length})</span>}
+                  <span className="text-[10px] text-muted-foreground ml-1">({g.items.length})</span>
                 </div>
               </TableCell>
-              <TableCell className="text-xs text-muted-foreground">{single?.round ?? ""}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">{single?.instrument ?? ""}</TableCell>
-              <TableCell className="text-xs text-muted-foreground">{single?.investment_date ? fmtDate(single.investment_date) : ""}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">—</TableCell>
+              <TableCell className="text-xs text-muted-foreground">—</TableCell>
+              <TableCell className="text-xs text-muted-foreground">—</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.cost == null ? "—" : fmtUSD(g.cost, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{g.fmv == null ? "—" : fmtUSD(g.fmv, { compact: true })}</TableCell>
               <TableCell className="text-right font-mono font-semibold">{fmtMultiple(moic)}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{g.status}</TableCell>
             </TableRow>
-            {multi && isOpen && g.items.map((h) => {
+            {isOpen && g.items.map((h) => {
               const m = h.cost && h.cost > 0 && h.fmv != null ? h.fmv / h.cost : null;
               return (
                 <TableRow key={h.id} className="bg-muted/10 hover:bg-muted/20">
@@ -432,3 +426,156 @@ function GroupedHoldings({ holdings }: { holdings: Holding[] }) {
     </>
   );
 }
+
+// ---------- Cashflow History ----------
+
+const CASHFLOW_CATEGORIES = ["Capital Call", "Distribution", "Management Fee", "Expense", "Other"] as const;
+type CashflowRow = { id: string; date: string; category: string; amount_usd: number; note: string | null };
+
+function CashflowHistorySection({
+  fundId,
+  cashflows,
+  onChanged,
+}: {
+  fundId: string;
+  cashflows: CashflowRow[];
+  onChanged: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState<{ date: string; category: string; amount: string; note: string }>({
+    date: today, category: "Capital Call", amount: "", note: "",
+  });
+
+  const totalContrib = cashflows.filter((c) => c.amount_usd < 0).reduce((a, c) => a + -c.amount_usd, 0);
+  const totalDistrib = cashflows.filter((c) => c.amount_usd > 0).reduce((a, c) => a + c.amount_usd, 0);
+
+  const handleAdd = useCallback(async () => {
+    const amt = Number(form.amount);
+    if (!form.date || !amt || isNaN(amt)) {
+      toast({ title: "Invalid entry", description: "Date and amount are required.", variant: "destructive" });
+      return;
+    }
+    // Capital Call / Management Fee / Expense → outflow (negative). Distribution → inflow (positive). Other follows sign of input.
+    const outflow = ["Capital Call", "Management Fee", "Expense"].includes(form.category);
+    const signedAmt = outflow ? -Math.abs(amt) : form.category === "Distribution" ? Math.abs(amt) : amt;
+    setSaving(true);
+    const { error } = await supabase.from("cash_flows").insert({
+      fund_id: fundId,
+      scope: "twh_net",
+      date: form.date,
+      category: form.category,
+      amount_usd: signedAmt,
+      note: form.note || null,
+    });
+    setSaving(false);
+    if (error) {
+      toast({ title: "Failed to add", description: error.message, variant: "destructive" });
+      return;
+    }
+    setOpen(false);
+    setForm({ date: today, category: "Capital Call", amount: "", note: "" });
+    onChanged();
+  }, [form, fundId, onChanged, today]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    if (!confirm("Delete this cashflow entry?")) return;
+    const { error } = await supabase.from("cash_flows").delete().eq("id", id);
+    if (error) {
+      toast({ title: "Failed to delete", description: error.message, variant: "destructive" });
+      return;
+    }
+    onChanged();
+  }, [onChanged]);
+
+  return (
+    <Card className="bg-card border-border overflow-hidden">
+      <div className="p-4 border-b border-border flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold">Cashflow history</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            TWH capital calls and distributions for this fund. Feeds Net IRR &amp; TVPI.
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right text-xs text-muted-foreground">
+            <div>Contributions: <span className="font-mono text-foreground">{fmtUSD(totalContrib, { compact: true })}</span></div>
+            <div>Distributions: <span className="font-mono text-foreground">{fmtUSD(totalDistrib, { compact: true })}</span></div>
+          </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline"><Plus className="h-3.5 w-3.5 mr-1" /> Add entry</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader><DialogTitle>Add cashflow entry</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div>
+                  <Label>Date</Label>
+                  <Input type="date" value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))} />
+                </div>
+                <div>
+                  <Label>Category</Label>
+                  <Select value={form.category} onValueChange={(v) => setForm((f) => ({ ...f, category: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CASHFLOW_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label>Amount (USD)</Label>
+                  <Input type="number" step="0.01" placeholder="e.g. 100000" value={form.amount} onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))} />
+                  <p className="text-[11px] text-muted-foreground mt-1">
+                    Capital calls and fees are recorded as outflows automatically.
+                  </p>
+                </div>
+                <div>
+                  <Label>Note (optional)</Label>
+                  <Input value={form.note} onChange={(e) => setForm((f) => ({ ...f, note: e.target.value }))} />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
+                <Button onClick={handleAdd} disabled={saving}>{saving ? "Saving…" : "Add"}</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <TableHead>Date</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead className="text-right">Amount (USD)</TableHead>
+              <TableHead>Note</TableHead>
+              <TableHead className="w-10" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {cashflows.length === 0 ? (
+              <TableRow><TableCell colSpan={5} className="text-muted-foreground py-12 text-center">No cashflow entries yet. Add capital calls to compute Net IRR.</TableCell></TableRow>
+            ) : cashflows.map((cf) => (
+              <TableRow key={cf.id} className="table-row-hover">
+                <TableCell className="font-medium">{fmtDate(cf.date)}</TableCell>
+                <TableCell>{cf.category}</TableCell>
+                <TableCell className={`text-right font-mono ${cf.amount_usd < 0 ? "text-destructive" : ""}`}>
+                  {fmtUSD(cf.amount_usd, { compact: true })}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">{cf.note ?? ""}</TableCell>
+                <TableCell>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleDelete(cf.id)}>
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
+  );
+}
+
