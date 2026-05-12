@@ -21,7 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Search, X, ExternalLink } from "lucide-react";
+import { Search, X, ExternalLink, ChevronRight, ChevronDown } from "lucide-react";
 import { fmtUSD, fmtMultiple } from "@/lib/format";
 
 type Company = {
@@ -36,6 +36,12 @@ type Company = {
   industry: string[] | null;
   sub_industry: string[] | null;
   notes: string | null;
+  what_they_do: string | null;
+  target_market: string | null;
+  tailwinds: string | null;
+  challenges: string | null;
+  stage: string | null;
+  thesis_bucket: string | null;
 };
 
 type Metrics = {
