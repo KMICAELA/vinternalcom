@@ -288,7 +288,7 @@ export default function FundDetailPage() {
                   <TableCell colSpan={8} className="text-muted-foreground py-12 text-center">No quarterly data yet for this fund.</TableCell>
                 </TableRow>
               ) : (
-                history.map((r) => (
+                historyDesc.map((r) => (
                   <TableRow key={r.quarter.id} className="table-row-hover">
                     <TableCell className="font-medium">{r.quarter.label}</TableCell>
                     <TableCell className="text-muted-foreground">{fmtDate(r.quarter.quarter_end_date)}</TableCell>
